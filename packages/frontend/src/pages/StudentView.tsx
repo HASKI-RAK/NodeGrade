@@ -6,7 +6,7 @@ import {
   ServerEventPayload,
   WebSocketEvent
 } from '@haski/ta-lib'
-import { AlertColor, Backdrop, Box, Stack, Typography } from '@mui/material'
+import { AlertColor, Backdrop, Box, Container, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import useWebSocket, { ReadyState } from 'react-use-websocket'
@@ -100,6 +100,7 @@ export const StudentView = () => {
         nodeExecuting: function (): void | Promise<void> {},
         nodeExecuted: function (): void | Promise<void> {},
         questionImage: function (base64Image: string): void | Promise<void> {
+          console.log('Image received')
           setImage(base64Image)
         }
       }).then((handled) => {
@@ -144,13 +145,10 @@ export const StudentView = () => {
       >
         <CircularProgressWithLabel value={processingPercentage} />
       </Backdrop>
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh'
+      <Container
+        style={{
+          height: '100vh',
+          overflowY: 'scroll'
         }}
       >
         <Typography
@@ -165,7 +163,15 @@ export const StudentView = () => {
         >
           {connectionStatus}
         </Typography>
-        <Stack direction="column" spacing={2}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          padding={2}
+        >
           <TaskView
             question={question}
             questionImage={image}
@@ -173,8 +179,8 @@ export const StudentView = () => {
             outputs={memoizedOutputs}
             maxInputChars={maxInputChars}
           />
-        </Stack>
-      </Box>
+        </Box>
+      </Container>
       <Snackbar
         open={snackbar.open}
         handleClose={handleSnackbarClose}

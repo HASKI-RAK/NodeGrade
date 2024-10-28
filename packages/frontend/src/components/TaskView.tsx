@@ -87,7 +87,7 @@ const TaskView = ({
   }, [outputs])
 
   return (
-    <Stack spacing={2} margin={2}>
+    <Stack spacing={2} padding={2}>
       <Typography variant="h4">Aufgabe:</Typography>
       {questionImage && (
         <img
