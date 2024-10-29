@@ -3,15 +3,19 @@
 import dotenv from 'dotenv'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
+import cors from 'cors'
+import express from 'express'
 
 import prisma from './client'
 import addListeners from './ServerEventListener'
 import Logger from './utils/Logger'
 // Init
+const app = express()
 const log = Logger.getInstance().log
-export const server = createServer()
+export const server = createServer(app)
+
 export type serverType = ReturnType<typeof createServer>
-const wss = new WebSocketServer({ noServer: true })
+const wss = new WebSocketServer({ server })
 export type wssType = WebSocketServer
 
 dotenv.config()
@@ -22,6 +26,14 @@ log.info(
   process.env.DATABASE_URL,
   process.env.MODEL_WORKER_URL,
   process.env.SIMILARITY_WORKER_URL
+)
+
+// Use CORS middleware
+app.use(
+  cors({
+    // allow all origins
+    origin: '*'
+  })
 )
 
 // Add listeners

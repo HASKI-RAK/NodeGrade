@@ -1,6 +1,9 @@
 import { IncomingMessage, ServerResponse } from 'http'
 
-import { extractLtiLaunchRequest } from '../handlers/handleLti'
+import {
+  extractBasicLtiLaunchRequest,
+  extractLtiLaunchRequest
+} from '../handlers/handleLti'
 import { handlers } from '../handlers/RequestHandlers'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
@@ -77,11 +80,16 @@ export const handleRestRequestWithFormData = (
     const payload = Buffer.concat(requestBody).toString()
     // parse form data
     const parsedPayload = new URLSearchParams(payload)
-    const ltiLaunchRequest = extractLtiLaunchRequest(parsedPayload)
+    const ltiLaunchRequest = extractLtiLaunchRequest(parsedPayload) ?? undefined
     if (!ltiLaunchRequest) {
-      response.writeHead(400)
-      response.end('Invalid LTI Launch Request at conversion')
-      return
+      const ltiBasicLaunchRequest =
+        extractBasicLtiLaunchRequest(parsedPayload) ?? undefined
+      const restRequest: RestRequest<typeof ltiBasicLaunchRequest> = {
+        method,
+        route,
+        payload: ltiLaunchRequest
+      }
+      handleRestRequest(request, response, restRequest, handlers)
     }
     const restRequest: RestRequest<typeof ltiLaunchRequest> = {
       method,

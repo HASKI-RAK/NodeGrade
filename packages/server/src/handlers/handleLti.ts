@@ -5,6 +5,7 @@ import {
   isOpenIdConfigJson,
   isPayloadLtiLaunchValid,
   isSuccessfulToolRegistrationResponse,
+  LtiBasicLaunchRequest,
   LtiLaunchRequest,
   ToolRegistrationRequest
 } from '@haski/lti'
@@ -109,6 +110,123 @@ export const extractLtiLaunchRequest = (
     if (isPayloadLtiLaunchValid(payload)) {
       return payload
     }
+  }
+
+  return null
+}
+
+export const extractBasicLtiLaunchRequest = (
+  params: URLSearchParams
+): LtiBasicLaunchRequest | null => {
+  const user_id = parseInt(params.get('user_id') || '')
+  const lis_person_sourcedid = params.get('lis_person_sourcedid') || undefined
+  const roles = params.get('roles') || ''
+  const context_id = parseInt(params.get('context_id') || '')
+  const context_label = params.get('context_label') || ''
+  const context_title = params.get('context_title') || ''
+  const lti_message_type = params.get('lti_message_type') || ''
+  const resource_link_title = params.get('resource_link_title') || ''
+  const resource_link_description = params.get('resource_link_description') || undefined
+  const resource_link_id = parseInt(params.get('resource_link_id') || '')
+  const context_type = params.get('context_type') || ''
+  const lis_course_section_sourcedid =
+    params.get('lis_course_section_sourcedid') || undefined
+
+  // eslint-disable-next-line immutable/no-let
+  let lis_result_sourcedid
+  try {
+    lis_result_sourcedid = params.get('lis_result_sourcedid')
+      ? JSON.parse(params.get('lis_result_sourcedid') || '')
+      : undefined
+  } catch {
+    return null // Invalid JSON format
+  }
+
+  const lis_outcome_service_url = params.get('lis_outcome_service_url') || ''
+  const lis_person_name_given = params.get('lis_person_name_given') || ''
+  const lis_person_name_family = params.get('lis_person_name_family') || ''
+  const lis_person_name_full = params.get('lis_person_name_full') || ''
+  const ext_user_username = params.get('ext_user_username') || ''
+  const lis_person_contact_email_primary =
+    params.get('lis_person_contact_email_primary') || ''
+  const launch_presentation_locale = params.get('launch_presentation_locale') || ''
+  const ext_lms = params.get('ext_lms') || ''
+  const tool_consumer_info_product_family_code =
+    params.get('tool_consumer_info_product_family_code') || ''
+  const tool_consumer_info_version = params.get('tool_consumer_info_version') || ''
+  const oauth_callback = params.get('oauth_callback') || ''
+  const lti_version = params.get('lti_version') || ''
+  const tool_consumer_instance_guid = params.get('tool_consumer_instance_guid') || ''
+  const tool_consumer_instance_name = params.get('tool_consumer_instance_name') || ''
+  const tool_consumer_instance_description =
+    params.get('tool_consumer_instance_description') || ''
+  const launch_presentation_document_target =
+    params.get('launch_presentation_document_target') || ''
+  const launch_presentation_return_url =
+    params.get('launch_presentation_return_url') || ''
+
+  if (
+    !isNaN(user_id) &&
+    roles &&
+    !isNaN(context_id) &&
+    context_label &&
+    context_title &&
+    lti_message_type &&
+    resource_link_title &&
+    !isNaN(resource_link_id) &&
+    context_type &&
+    lis_result_sourcedid &&
+    lis_outcome_service_url &&
+    lis_person_name_given &&
+    lis_person_name_family &&
+    lis_person_name_full &&
+    ext_user_username &&
+    lis_person_contact_email_primary &&
+    launch_presentation_locale &&
+    ext_lms &&
+    tool_consumer_info_product_family_code &&
+    tool_consumer_info_version &&
+    oauth_callback &&
+    lti_version &&
+    tool_consumer_instance_guid &&
+    tool_consumer_instance_name &&
+    tool_consumer_instance_description &&
+    launch_presentation_document_target &&
+    launch_presentation_return_url
+  ) {
+    const payload: LtiBasicLaunchRequest = {
+      user_id,
+      lis_person_sourcedid,
+      roles,
+      context_id,
+      context_label,
+      context_title,
+      lti_message_type,
+      resource_link_title,
+      resource_link_description,
+      resource_link_id,
+      context_type,
+      lis_course_section_sourcedid,
+      lis_result_sourcedid,
+      lis_outcome_service_url,
+      lis_person_name_given,
+      lis_person_name_family,
+      lis_person_name_full,
+      ext_user_username,
+      lis_person_contact_email_primary,
+      launch_presentation_locale,
+      ext_lms,
+      tool_consumer_info_product_family_code,
+      tool_consumer_info_version,
+      oauth_callback,
+      lti_version,
+      tool_consumer_instance_guid,
+      tool_consumer_instance_name,
+      tool_consumer_instance_description,
+      launch_presentation_document_target,
+      launch_presentation_return_url
+    }
+    return payload
   }
 
   return null

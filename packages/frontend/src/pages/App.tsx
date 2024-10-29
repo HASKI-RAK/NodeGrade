@@ -19,6 +19,11 @@ import Editor from '@/pages/Editor'
 import { LtiRegister } from './lti/LtiRegister'
 import StudentView from './StudentView'
 
+const LogRouteAccess = () => {
+  console.log('Current route: ', window.location.pathname)
+  return null
+}
+
 const ColorModeContext = createContext({ toggleColorMode: () => {} })
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -42,10 +47,17 @@ const router = createBrowserRouter(
       />
       <Route path="lti/register" element={<LtiRegister />} />
       {/* ... etc. */}
-      <Route path="*" element={<div>Not found</div>} />
+      <Route path="lti/login" element={<LogRouteAccess />} />
+      <Route path="lti/deeplink" element={<LogRouteAccess />} />
+      <Route
+        path="*"
+        element={
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          <LogRouteAccess />
+        }
+      />
       {/* <Route path="dashboard" element={<Dashboard />} /> */}
       {/* ... etc. */}
-      <Route path="*" element={<div>Not found</div>} />
     </Route>
   )
 )

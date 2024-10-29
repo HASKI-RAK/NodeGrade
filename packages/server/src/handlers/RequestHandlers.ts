@@ -17,12 +17,20 @@ import { log } from '../server'
 import { RestHandlerMap } from '../utils/rest'
 import { isPayloadClientBenchmarkValid } from '../utils/typeGuards'
 import { handleLtiToolRegistration, ToolRegistrationRequest } from './handleLti'
-import { isPayloadLtiLaunchValid, LtiLaunchRequest } from '@haski/lti'
+import {
+  isPayloadLtiLaunchValid,
+  LtiBasicLaunchRequest,
+  LtiLaunchRequest
+} from '@haski/lti'
 
 // Define your REST handlers
 // always sanity check the payload before using it
 export const handlers: RestHandlerMap<
-  ClientBenchmarkPostPayload | ToolRegistrationRequest | LtiLaunchRequest | undefined
+  | ClientBenchmarkPostPayload
+  | ToolRegistrationRequest
+  | LtiLaunchRequest
+  | LtiBasicLaunchRequest
+  | undefined
 > = {
   POST: {
     '/v1/benchmark': async (_, response, payload) => {
@@ -70,8 +78,29 @@ export const handlers: RestHandlerMap<
         response.end()
       })
     },
+    '/v1/lti/basiclogin': async (_, response, payload) => {
+      try {
+        // visit with get request openID configuration endpoint to retreieve registration endpoint:
+        // const launch_response = await launchTool(id_token, state)
+        // log.debug('Launch response: ', launch_response)
+        // response.writeHead(launch_response.status)
+        // response.end(launch_response.statusText)
+
+        // redirect to the tool frontend
+        response.writeHead(302, {
+          Location: 'http://localhost:5173/ws/editor/lol/1/2'
+        })
+        response.end()
+      } catch (e) {
+        response.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        })
+        response.end('Invalid Basic Tool Launch Request')
+      }
+    },
     '/v1/lti/login': async (_, response, payload) => {
-      assertIs(payload, isPayloadLtiLaunchValid)
+      // assertIs(payload, isPayloadLtiLaunchValid)
       try {
         // visit with get request openID configuration endpoint to retreieve registration endpoint:
         // const launch_response = await launchTool(id_token, state)

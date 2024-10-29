@@ -68,6 +68,47 @@ export interface LtiLaunchRequest {
   lti_deployment_id: string
 }
 
+export interface LtiBasicLaunchRequest {
+  user_id: number
+  lis_person_sourcedid?: string
+  roles: string
+  context_id: number
+  context_label: string
+  context_title: string
+  lti_message_type: string
+  resource_link_title: string
+  resource_link_description?: string
+  resource_link_id: number
+  context_type: string
+  lis_course_section_sourcedid?: string
+  lis_result_sourcedid: {
+    data: {
+      instanceid: string
+      userid: string
+      typeid?: string | null
+      launchid: number
+    }
+    hash: string
+  }
+  lis_outcome_service_url: string
+  lis_person_name_given: string
+  lis_person_name_family: string
+  lis_person_name_full: string
+  ext_user_username: string
+  lis_person_contact_email_primary: string
+  launch_presentation_locale: string
+  ext_lms: string
+  tool_consumer_info_product_family_code: string
+  tool_consumer_info_version: string
+  oauth_callback: string
+  lti_version: string
+  tool_consumer_instance_guid: string
+  tool_consumer_instance_name: string
+  tool_consumer_instance_description: string
+  launch_presentation_document_target: string
+  launch_presentation_return_url: string
+}
+
 // Dummy storage for registered tools
 
 export async function handleToolRegistration(
@@ -90,18 +131,14 @@ export async function handleToolRegistration(
     // write platform registration to database
     savePlatformCallback(registrationResponse, openIdConfigJson).then(() => {
       // write ok
-      response.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      })
+      // response.writeHead(200, {
+      //   'Content-Type': 'application/json',
+      //   'Access-Control-Allow-Origin': '*'
+      // })
       response.end(JSON.stringify(registrationResponse))
     })
   } catch (error) {
-    response.writeHead(400, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    })
-    response.end('Invalid Tool Registration Request')
+    return
   }
 }
 
@@ -144,9 +181,9 @@ const getRegistrationEndpoint = async (
           'https://purl.imsglobal.org/spec/lti-ags/scope/score https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly',
         'https://purl.imsglobal.org/spec/lti-tool-configuration': {
           // https://www.imsglobal.org/spec/lti-dr/v1p0#lti-configuration-0
-          domain: 'http://localhost:5000',
+          domain: 'http://localhost:5173',
           description: 'Automated short answer assessment',
-          target_link_uri: 'http://localhost:5000/v1/lti/login', //TODO: set to frontend url
+          target_link_uri: 'http://localhost:5173/lti/login', //TODO: set to frontend url
           claims: ['iss', 'sub', 'name', 'given_name'], // 	An array of claims indicating which information this tool desire to be included in each idtoken
           messages: [
             {
@@ -167,7 +204,7 @@ const getRegistrationEndpoint = async (
       })
     }).then((response) => {
       if (!response.ok) {
-        throw new Error('Could not register tool: ' + response.statusText)
+        // throw new Error('Could not register tool: ' + response.statusText)
       } else {
         return response.json()
       }
