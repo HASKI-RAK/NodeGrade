@@ -12,7 +12,7 @@ import { WebSocket } from 'ws'
 
 import prisma from './client'
 import { runLgraph, sendQuestion } from './Graph'
-import { log } from './server'
+import { log, xAPI } from './server'
 import { prismaGraphCreateOrUpdate } from './utils/prismaOperations'
 
 export function runGraph(
@@ -36,6 +36,39 @@ export function runGraph(
     })
   }).then(() => {
     log.debug('Finished running graph')
+    try {
+      xAPI.sendStatement({
+        statement: {
+          actor: {
+            name: 'User',
+            mbox: 'mailto:test@test.org'
+          },
+          verb: {
+            id: 'https://wiki.haski.app/variables/services.answered',
+            display: {
+              en: 'answered'
+            }
+          },
+          object: {
+            id: 'https://wiki.haski.app/functions/TextField',
+            definition: {
+              name: {
+                en: 'TextField'
+              },
+              extensions: {
+                'https://ta.haski.app/variables/services.user_id': payload.user_id,
+                'https://ta.haski.app/variables/services.answered': payload.answer,
+                'https://ta.haski.app/variables/services.timestamp': payload.timestamp,
+                'https://ta.haski.app/variables/services.domain': payload.domain
+              }
+            }
+          },
+          timestamp: new Date().toISOString()
+        }
+      })
+    } catch (error) {
+      log.error('Error sending xAPI statement: ', error)
+    }
     sendWs(ws, {
       eventName: 'graphFinished',
       payload: lgraph.serialize<SerializedGraph>()

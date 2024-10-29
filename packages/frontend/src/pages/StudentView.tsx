@@ -39,6 +39,7 @@ export const StudentView = () => {
   const [image, setImage] = useState<string>('')
   const [maxInputChars, setMaxInputChars] = useState<number>(300)
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
+  const searchParams = new URLSearchParams(window.location.search)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
   const [socketUrl] = useState(
     getConfig().WS + `ws/student/${domain}/${courseId}/${elementId}`
@@ -120,6 +121,9 @@ export const StudentView = () => {
       eventName: 'runGraph',
       payload: {
         answer: answer,
+        user_id: searchParams.get('user_id') ?? undefined,
+        timestamp: searchParams.get('timestamp') ?? undefined,
+        domain: domain,
         graph: lgraph.serialize<SerializedGraph>()
       }
     })

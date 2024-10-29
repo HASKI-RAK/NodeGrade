@@ -1,10 +1,11 @@
 /* eslint-disable immutable/no-mutation */
 // import dotenv
+import XAPI from '@xapi/xapi'
+import cors from 'cors'
 import dotenv from 'dotenv'
+import express from 'express'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
-import cors from 'cors'
-import express from 'express'
 
 import prisma from './client'
 import addListeners from './ServerEventListener'
@@ -15,7 +16,7 @@ const log = Logger.getInstance().log
 export const server = createServer(app)
 
 export type serverType = ReturnType<typeof createServer>
-const wss = new WebSocketServer({ server })
+const wss = new WebSocketServer({ noServer: true })
 export type wssType = WebSocketServer
 
 dotenv.config()
@@ -25,8 +26,20 @@ log.info(
   process.env.NODE_ENV,
   process.env.DATABASE_URL,
   process.env.MODEL_WORKER_URL,
-  process.env.SIMILARITY_WORKER_URL
+  process.env.SIMILARITY_WORKER_URL,
+  process.env.XAPI_ENDPOINT,
+  process.env.XAPI_USERNAME,
+  process.env.XAPI_PASSWORD
 )
+// XAPI
+export const xAPI = new XAPI({
+  endpoint: process.env.XAPI_ENDPOINT ?? '',
+  auth: XAPI.toBasicAuth(
+    process.env.XAPI_USERNAME ?? '',
+    process.env.XAPI_PASSWORD ?? ''
+  ),
+  version: '1.0.3'
+})
 
 // Use CORS middleware
 app.use(

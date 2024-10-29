@@ -44,6 +44,9 @@ const addListeners = async (wss: wssType, server: serverType) => {
             log.warn('Unhandled event: ', parsed.eventName)
           }
         })
+        .catch((e) => {
+          log.error('Error handling event: ', e)
+        })
         .finally(() => {
           const timeItEndMessage = Date.now()
           log.info(

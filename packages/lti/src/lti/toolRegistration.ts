@@ -72,6 +72,7 @@ export interface LtiBasicLaunchRequest {
   user_id: number
   lis_person_sourcedid?: string
   roles: string
+  custom_activityname?: string // custom parameter specified in the LMS under "Custom Parameters". This is the name of the graph to load
   context_id: number
   context_label: string
   context_title: string

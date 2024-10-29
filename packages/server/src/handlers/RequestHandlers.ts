@@ -13,7 +13,7 @@ import { SampleSolutionNode } from '@haski/ta-lib/nodes/SampleSolutionNode'
 
 import prisma from '../client'
 import { addOnNodeAdded, runLgraph } from '../Graph'
-import { log } from '../server'
+import { log, xAPI } from '../server'
 import { RestHandlerMap } from '../utils/rest'
 import { isPayloadClientBenchmarkValid } from '../utils/typeGuards'
 import { handleLtiToolRegistration, ToolRegistrationRequest } from './handleLti'
@@ -22,6 +22,7 @@ import {
   LtiBasicLaunchRequest,
   LtiLaunchRequest
 } from '@haski/lti'
+import XAPI from '@xapi/xapi'
 
 // Define your REST handlers
 // always sanity check the payload before using it
@@ -78,29 +79,69 @@ export const handlers: RestHandlerMap<
         response.end()
       })
     },
-    '/v1/lti/basiclogin': async (_, response, payload) => {
+    '/v1/lti/basiclogin': async (_, response, p) => {
+      // assertIs(payload, isBasicLtiLaunchValid)
+      const payload = p as LtiBasicLaunchRequest
       try {
         // visit with get request openID configuration endpoint to retreieve registration endpoint:
         // const launch_response = await launchTool(id_token, state)
         // log.debug('Launch response: ', launch_response)
         // response.writeHead(launch_response.status)
         // response.end(launch_response.statusText)
-
+        log.debug('Basic LTI Launch Request with payload: ', payload)
+        const timestamp = new Date().toISOString()
+        const roles = payload.roles.split(',')
+        xAPI.sendStatement({
+          statement: {
+            actor: {
+              name: 'User',
+              mbox: 'mailto:' + payload.lis_person_contact_email_primary
+            },
+            verb: XAPI.Verbs.INITIALIZED,
+            object: {
+              id: 'https://ta.haski.app/lti/basiclogin',
+              definition: {
+                name: {
+                  en: 'LTI Basic Login'
+                },
+                description: {
+                  en: payload.lti_message_type
+                },
+                moreInfo: payload.launch_presentation_return_url,
+                extensions: {
+                  'https://ta.haski.app/lti/basiclogin': {
+                    payload: payload
+                  }
+                }
+              }
+            },
+            timestamp: timestamp
+          }
+        })
+        const isEditor = roles.includes('Instructor') || roles.includes('Administrator')
         // redirect to the tool frontend
         response.writeHead(302, {
-          Location: 'http://localhost:5173/ws/editor/lol/1/2'
+          Location:
+            (process.env.FRONTEND_URL ?? 'http://localhost:5173').trim() +
+            '/ws/' +
+            (isEditor ? 'editor' : 'student') +
+            '/' +
+            payload.custom_activityname +
+            '/1/1?user_id=' +
+            payload.user_id +
+            '&timestamp=' +
+            timestamp
         })
-        response.end()
       } catch (e) {
-        response.writeHead(400, {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        })
-        response.end('Invalid Basic Tool Launch Request')
+        // response.writeHead(400, {
+        //   'Content-Type': 'application/json',
+        //   'Access-Control-Allow-Origin': '*'
+        // })
+        log.error('Invalid Tool Launch Request')
       }
     },
     '/v1/lti/login': async (_, response, payload) => {
-      // assertIs(payload, isPayloadLtiLaunchValid)
+      assertIs(payload, isPayloadLtiLaunchValid)
       try {
         // visit with get request openID configuration endpoint to retreieve registration endpoint:
         // const launch_response = await launchTool(id_token, state)
@@ -118,20 +159,26 @@ export const handlers: RestHandlerMap<
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         })
-        response.end('Invalid Tool Launch Request')
       }
     }
   },
   GET: {
     '/v1/graphs': async (_, response) => {
       // getting all available graphs
-      const graphs = await prisma.graph.findMany()
-      response.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      })
-      response.write(JSON.stringify(graphs))
-      response.end()
+      try {
+        const graphs = await prisma.graph.findMany()
+        response.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        })
+        response.write(JSON.stringify(graphs))
+      } catch (e) {
+        // response.writeHead(500, {
+        //   'Content-Type': 'application/json',
+        //   'Access-Control-Allow-Origin': '*'
+        // })
+        log.error('Error while fetching graphs')
+      }
     },
     '/v1/lti/register': async (request, response) =>
       handleLtiToolRegistration(request, response),
@@ -149,7 +196,6 @@ export const handlers: RestHandlerMap<
         'Access-Control-Allow-Origin': '*'
       })
       response.write(JSON.stringify(jwks))
-      response.end()
     },
     '/policy': async (_, response) => {
       response.writeHead(200, {
@@ -157,7 +203,6 @@ export const handlers: RestHandlerMap<
         'Access-Control-Allow-Origin': '*'
       })
       response.write(JSON.stringify({ policy: 'here could be your policy' }))
-      response.end()
     }
   }
 }

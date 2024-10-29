@@ -50,6 +50,9 @@ export type ClientEventPayload = {
   // runs a graph
   runGraph: {
     answer: string
+    user_id?: string // user id from the LTI launch (LMS) //TODO schauen was passiert wenn ohne diese geschickt wird
+    timestamp?: string // timestamp from the LTI launch (LMS)
+    domain?: string // custom_activityname from the LTI launch (LMS settings per activity)
     graph: SerializedGraph
   }
 }

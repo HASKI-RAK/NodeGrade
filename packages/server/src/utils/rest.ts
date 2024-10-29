@@ -5,6 +5,7 @@ import {
   extractLtiLaunchRequest
 } from '../handlers/handleLti'
 import { handlers } from '../handlers/RequestHandlers'
+import { log } from '../server'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
 export type RestRequestHandler<T> = (
@@ -37,7 +38,13 @@ export const handleRestRequest = <T>(
   if (methodHandlers) {
     const handler = methodHandlers[route]
     if (handler) {
-      handler(request, response, payload)
+      try {
+        handler(request, response, payload)
+      } catch (e) {
+        log.error(e)
+      } finally {
+        response.end() // only call end here
+      }
     } else {
       response.writeHead(404)
       response.end('Not Found')
@@ -87,7 +94,7 @@ export const handleRestRequestWithFormData = (
       const restRequest: RestRequest<typeof ltiBasicLaunchRequest> = {
         method,
         route,
-        payload: ltiLaunchRequest
+        payload: ltiBasicLaunchRequest
       }
       handleRestRequest(request, response, restRequest, handlers)
     }

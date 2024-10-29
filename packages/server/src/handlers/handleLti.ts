@@ -121,6 +121,7 @@ export const extractBasicLtiLaunchRequest = (
   const user_id = parseInt(params.get('user_id') || '')
   const lis_person_sourcedid = params.get('lis_person_sourcedid') || undefined
   const roles = params.get('roles') || ''
+  const custom_activityname = params.get('custom_activityname') || undefined
   const context_id = parseInt(params.get('context_id') || '')
   const context_label = params.get('context_label') || ''
   const context_title = params.get('context_title') || ''
@@ -198,6 +199,7 @@ export const extractBasicLtiLaunchRequest = (
       user_id,
       lis_person_sourcedid,
       roles,
+      custom_activityname,
       context_id,
       context_label,
       context_title,

@@ -83,6 +83,8 @@ export const Editor = () => {
   const [outputs, setOutputs] = useState<
     Record<string, ServerEventPayload['output']> | undefined
   >(undefined)
+  // get search params:
+  const searchParams = new URLSearchParams(window.location.search)
   const memoizedOutputs = useMemo(() => outputs, [outputs])
 
   const path = window.location.pathname
@@ -223,6 +225,9 @@ export const Editor = () => {
       eventName: 'runGraph',
       payload: {
         answer: answer,
+        user_id: searchParams.get('user_id') ?? undefined,
+        timestamp: searchParams.get('timestamp') ?? undefined,
+        domain: path.slice(1), // custom_activityname from the LTI launch (LMS settings per activity)
         graph: lgraph.serialize<SerializedGraph>()
       }
     })

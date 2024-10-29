@@ -3,6 +3,6 @@ export function assertIs<T>(
   typeGuard: (value: unknown) => value is T
 ): asserts value is T {
   if (!typeGuard(value)) {
-    throw new Error('Type guard failed')
+    throw new Error('Type guard failed for value: ' + value)
   }
 }
