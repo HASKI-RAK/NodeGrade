@@ -1,4 +1,4 @@
-# @haski/task-evaluation
+# NodeGrade (automatic short answer grading tool)
 
 ## Overview
 
@@ -10,7 +10,7 @@ Following articles have been published concerning this project:
 
 ---
 
-This mono repository, named `@haski/task-evaluation`, is designed to encompass a server, a frontend Progressive Web Application (PWA) developed in React, and a shared library package.
+This mono repository, named `NodeGrade`, is designed to encompass a server, a frontend Progressive Web Application (PWA) developed in React, and a shared library package.
 Created and maintained by David Fischer.
 
 ![Thumbnail](.github/thumbnail.png)
@@ -27,7 +27,7 @@ Created and maintained by David Fischer.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/HASKI-RAK/HASKI-task-evaluation.git
+   git clone https://github.com/HASKI-RAK/NodeGrade.git
    ```
 
 2. Install dependencies:
@@ -110,3 +110,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Credits
 
 Porter Stemmer by Martin Porter 1980, used under the MIT License. Implementation from [James Aylett](https://tartarus.org/martin/PorterStemmer/js.txt) under the [copyright](https://tartarus.org/copyright). License noted in script.
+
+### Tags
+NodeGrade, ASAG, ASAG-F, automatic short answer grading, automatic short answer grading with feedback, freeform text grading, TAAB, task based automatic assessment
