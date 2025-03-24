@@ -11,4 +11,5 @@ export type InOut =
   | 'message'
   | '[number]'
   | '[string]'
+  | 'image' // Base64 encoded image string: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'
   | '*'

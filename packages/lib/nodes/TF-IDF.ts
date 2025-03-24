@@ -48,7 +48,7 @@ export class TFIDF extends LGraphNode {
 
     // Calculate TF (Term Frequency)
     words.forEach((word) => {
-      wordFrequencies.set(word, (wordFrequencies.get(word) || 0) + 1)
+      wordFrequencies.set(word, (wordFrequencies.get(word) ?? 0) + 1)
     })
 
     // Calculate IDF (Inverse Document Frequency)
@@ -56,7 +56,7 @@ export class TFIDF extends LGraphNode {
     corpus.forEach((doc) => {
       const uniqueWords = new Set(doc.toLowerCase().match(/\w+/g))
       uniqueWords.forEach((word) => {
-        idfValues.set(word, (idfValues.get(word) || 0) + 1)
+        idfValues.set(word, (idfValues.get(word) ?? 0) + 1)
       })
     })
 
@@ -64,7 +64,7 @@ export class TFIDF extends LGraphNode {
     const tfIdfRecord: TfIdfRecord = {}
     wordFrequencies.forEach((freq, word) => {
       const tf = freq / wordCount
-      const idf = Math.log(corpus.length / (1 + (idfValues.get(word) || 0)))
+      const idf = Math.log(corpus.length / (1 + (idfValues.get(word) ?? 0)))
       const tfIdf = tf * idf
       tfIdfRecord[word] = [tf, idf, tfIdf]
     })

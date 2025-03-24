@@ -1,3 +1,4 @@
+/* eslint-disable simple-import-sort/imports */
 import {
   createTheme,
   CssBaseline,
@@ -15,9 +16,15 @@ import {
 
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Editor from '@/pages/Editor'
+import { LtiRegister } from './lti/LtiRegister'
+import StudentView from './StudentView'
+
+const LogRouteAccess = () => {
+  console.log('Current route: ', window.location.pathname)
+  return null
+}
 
 const ColorModeContext = createContext({ toggleColorMode: () => {} })
-
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route>
@@ -30,9 +37,27 @@ const router = createBrowserRouter(
           </ErrorBoundary>
         }
       />
+      <Route
+        path="ws/student/:domain/:courseId/:elementId"
+        element={
+          <ErrorBoundary>
+            <StudentView />
+          </ErrorBoundary>
+        }
+      />
+      <Route path="lti/register" element={<LtiRegister />} />
+      {/* ... etc. */}
+      <Route path="lti/login" element={<LogRouteAccess />} />
+      <Route path="lti/deeplink" element={<LogRouteAccess />} />
+      <Route
+        path="*"
+        element={
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          <LogRouteAccess />
+        }
+      />
       {/* <Route path="dashboard" element={<Dashboard />} /> */}
       {/* ... etc. */}
-      <Route path="*" element={<div>Not found</div>} />
     </Route>
   )
 )
@@ -56,7 +81,7 @@ export const App = () => {
     () =>
       createTheme({
         palette: {
-          mode: 'dark'
+          mode: 'light'
         }
       }),
     [mode, prefersDarkMode]

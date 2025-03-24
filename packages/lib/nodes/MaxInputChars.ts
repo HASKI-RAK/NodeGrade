@@ -14,7 +14,7 @@ export class MaxInputChars extends LGraphNode {
   constructor() {
     super()
     this.addIn('number')
-    this.properties = { value: 300 }
+    this.properties = { value: 700 }
     this.title = 'max input chars'
   }
 

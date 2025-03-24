@@ -1,0 +1,10 @@
+{
+  "redirect_urls": [
+    "http://localhost:5173/ws/editor/lol/1/2",
+    "http://localhost:5000",
+    "http://localhost:5000/v1/lti/register",
+    "http://localhost:5173",
+    "http://localhost:5173/lti/register"
+  ],
+  "initiate_login_uri": "http://localhost:5173/lti/login"
+}

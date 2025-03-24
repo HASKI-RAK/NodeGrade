@@ -33,7 +33,7 @@ export class StringsToArray extends LGraphNode {
       output.push(this.getInputData(1))
     }
     this.properties.value = output
-    console.log(this.properties.value)
+    // console.log(this.properties.value)
     this.setOutputData(0, output)
   }
 }

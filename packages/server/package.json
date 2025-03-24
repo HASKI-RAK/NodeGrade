@@ -28,6 +28,8 @@
   },
   "homepage": "https://github.com/theUpsider/ta-app#readme",
   "devDependencies": {
+    "@types/cors": "^2",
+    "@types/express": "^4",
     "@types/jest": "^27.4.0",
     "@types/node": "^20.8.10",
     "@types/ws": "^8.5.8",
@@ -39,10 +41,15 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
+    "@haski/lti": "workspace:*",
     "@haski/ta-lib": "workspace:*",
-    "@prisma/client": "^5.5.2",
+    "@prisma/client": "^5.17.0",
+    "@xapi/xapi": "^3.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "pg-promise": "^11.5.4",
-    "prisma": "^5.5.2",
+    "prisma": "^5.17.0",
     "tslog": "^4.9.2",
     "ws": "^8.14.2"
   }

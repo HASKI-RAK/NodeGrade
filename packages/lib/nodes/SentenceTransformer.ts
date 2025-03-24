@@ -35,7 +35,7 @@ export class SentenceTransformer extends LGraphNode {
     this.ws = _ws
   }
 
-  init(_env: Record<string, unknown>): void {
+  async init(_env: Record<string, unknown>) {
     this.env = _env
   }
 
@@ -46,7 +46,8 @@ export class SentenceTransformer extends LGraphNode {
     // fetch from server
     console.log(this.env.SIMILARITY_WORKER_URL)
     const url =
-      (this.env.SIMILARITY_WORKER_URL ?? 'http://localhost:8002') + '/sentence_embedding'
+      (this.env.SIMILARITY_WORKER_URL ?? 'http://193.174.195.36:8002') +
+      '/sentence_embedding'
     console.log('URL: ', url)
 
     const response_one = await fetch(url, {

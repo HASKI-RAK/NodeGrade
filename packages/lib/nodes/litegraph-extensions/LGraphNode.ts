@@ -115,21 +115,25 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
   static mapLinkTypeToColor(
     type: InOut
   ): { color_off: string; color_on: string } | undefined {
-    const colorCodes = {
+    const colorCodes: Record<InOut, { color_off: string; color_on: string }> = {
       boolean: { color_off: '#4400FF60', color_on: '#1900FF' },
       number: { color_off: '#FF000060', color_on: '#FF0000' },
       string: { color_off: '#00FF0060', color_on: '#00FF00' },
       message: { color_off: '#D9FF0060', color_on: '#D9FF00' },
       '[number]': { color_off: '#00FFFF60', color_on: '#00FFFF' },
       '[string]': { color_off: '#FF00FF60', color_on: '#FF00FF' },
-      '*': { color_off: '#FFFFFF60', color_on: '#FFFFFF' }
+      '*': { color_off: '#FFFFFF60', color_on: '#FFFFFF' },
+      image: {
+        color_off: '#FFA50060',
+        color_on: '#FFA500'
+      }
     }
 
     return colorCodes[type]
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setWebSocket?(_ws: WebSocket): void
-  init?(env: Record<string, unknown>): void
+  init?(env: Record<string, unknown>): Promise<void>
 }
 
 export default LGraphNode

@@ -1,3 +1,4 @@
+/* eslint-disable immutable/no-this */
 /* eslint-disable immutable/no-mutation */
 import { IWidget, widgetTypes } from 'litegraph.js'
 

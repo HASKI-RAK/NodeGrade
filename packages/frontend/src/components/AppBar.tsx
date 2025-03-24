@@ -3,6 +3,7 @@ import { DownloadForOffline, UploadFile } from '@mui/icons-material'
 import MenuIcon from '@mui/icons-material/Menu'
 import ReplayIcon from '@mui/icons-material/Replay'
 import SaveIcon from '@mui/icons-material/Save'
+import TelegramIcon from '@mui/icons-material/Telegram'
 import {
   FormControl,
   IconButton,
@@ -30,6 +31,7 @@ interface AppBarProps extends MuiAppBarProps {
   handleDownloadGraph?: () => void
   handleUploadGraph?: () => void
   handleWorkflowChange?: (workflow: string) => void
+  handlePublishGraph?: () => void
 }
 
 const AppBarStyled = styled(MuiAppBar, {
@@ -60,10 +62,11 @@ export const AppBar = (props: AppBarProps) => {
   }
 
   useEffect(() => {
-    fetch((getConfig().API ?? 'http://localhost:5000/') + 'v1/graphs')
+    fetch(getConfig().API + 'v1/graphs')
       .then((res) => res.json())
       .then((graphs: Array<GraphSchema>) => {
         setWorkflows(graphs)
+        console.log('graphs', graphs)
         // set the selected workflow
         setSelectedWorkflow(
           graphs.find((graph) => graph.path === props.currentPath) || graphs[0]
@@ -137,6 +140,17 @@ export const AppBar = (props: AppBarProps) => {
             color="inherit"
           >
             <SaveIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Publish to students">
+          <IconButton
+            onClick={props.handlePublishGraph}
+            aria-label="publish"
+            aria-controls="menu-appbar"
+            aria-haspopup="true"
+            color="inherit"
+          >
+            <TelegramIcon />
           </IconButton>
         </Tooltip>
         <Tooltip title="Task assessment preview">

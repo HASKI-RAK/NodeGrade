@@ -1,4 +1,5 @@
 node_modules
+node_modules_old
 .DS_Store
 dist
 dist-ssr
@@ -19,3 +20,6 @@ models/.flaskenv
 models/*.pkl
 package.tgz
 models/RunOne.json
+.editorconfig
+**/migrations/.editorconfig
+packages/server/prisma/migrations/**/migration.sql

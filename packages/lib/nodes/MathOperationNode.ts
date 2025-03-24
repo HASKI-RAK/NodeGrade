@@ -8,6 +8,7 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  */
 export class MathOperationNode extends LGraphNode {
   properties: {
+    value?: number
     operation: string
     valueOne: number | undefined
     valueTwo: number | undefined
@@ -80,6 +81,8 @@ export class MathOperationNode extends LGraphNode {
       default:
         break
     }
+    // console.log('MathOperationNode', number)
+    this.properties.value = number // for debugging
 
     this.setOutputData(0, number)
   }

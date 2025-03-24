@@ -28,12 +28,13 @@ export type ServerEventPayload = {
   }
   //feedback: string // string from the feedback node
   //successPercentage: number // can be used for cosine similarity and is indicated by a progress bar in the frontend. used by successPercentageNode
-  maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 300
+  maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 700
   nodeError: {
     nodeId: number
     error: string
   }
   question: string // question from the question node
+  questionImage: string // image from the question node
   processingPercentageUpdate: number // displays in the frontend as a progress bar from 0 to 100. Server calculates the percentage of the graph that has been processed
 }
 
@@ -49,6 +50,9 @@ export type ClientEventPayload = {
   // runs a graph
   runGraph: {
     answer: string
+    user_id?: string // user id from the LTI launch (LMS) //TODO schauen was passiert wenn ohne diese geschickt wird
+    timestamp?: string // timestamp from the LTI launch (LMS)
+    domain?: string // custom_activityname from the LTI launch (LMS settings per activity)
     graph: SerializedGraph
   }
 }

@@ -2,7 +2,9 @@ import { LGraph } from '@haski/ta-lib'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { DefaultArgs } from '@prisma/client/runtime/library'
 
-import { log } from '../server'
+import Logger from './Logger'
+
+const log = Logger.getInstance().log
 
 export async function prismaGraphCreateOrUpdate(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

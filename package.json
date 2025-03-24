@@ -1,6 +1,7 @@
 {
   "name": "@haski/task-evaluation",
   "version": "1.0.0",
+  "private": true,
   "author": {
     "name": "David Fischer"
   },
@@ -9,11 +10,12 @@
   ],
   "scripts": {
     "dev": "yarn workspaces foreach -i --parallel --verbose --all run dev",
+    "setup": "yarn workspace @haski/ta-server setup",
     "lint": "yarn workspaces foreach --parallel --all run lint",
     "test": "yarn workspaces foreach --parallel --all run jest",
     "build": "yarn workspaces foreach --parallel --all run build"
   },
   "pre-commit": "lint",
   "license": "MIT",
-  "packageManager": "yarn@4.3.1"
+  "packageManager": "yarn@4.5.0"
 }

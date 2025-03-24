@@ -33,8 +33,8 @@ export class ConcatString extends LGraphNode {
   async onExecute() {
     const input1 = this.getInputData(0)
     const input2 = this.getInputData(1)
-    console.log(input1, input2)
-    console.log(this.properties.space)
+    // console.log(input1, input2)
+    // console.log(this.properties.space)
     this.properties.value = this.properties.space
       ? `${input1} ${input2}`
       : `${input1}${input2}`

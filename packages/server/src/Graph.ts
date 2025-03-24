@@ -1,5 +1,6 @@
 /* eslint-disable immutable/no-mutation */
 import { LGraph, LGraphNode, LiteGraph, QuestionNode, sendWs } from '@haski/ta-lib'
+import { ImageNode } from '@haski/ta-lib/nodes/ImageNode'
 import { WebSocket } from 'ws'
 
 import prisma from './client'
@@ -30,13 +31,15 @@ export async function setupGraphFromPath(
   // This is persisted even trough network serialization
   // eslint-disable-next-line immutable/no-mutation
   addOnNodeAdded(lgraph, ws)
-
   if (loaded_graph) {
     lgraph.configure(JSON.parse(loaded_graph.graph))
-    log.debug('Loaded graph from DB for route: ', pathname)
+    const execorder = lgraph.computeExecutionOrder<LGraphNode[]>(false, true)
+    for (const [, node] of execorder.entries()) await node.init?.(process.env)
+
     sendWs(ws, { eventName: 'graphFinished', payload: lgraph.serialize() })
 
     sendQuestion(lgraph, ws)
+    sendImages(ws, lgraph)
     return lgraph
   } else {
     // ? test graph
@@ -54,11 +57,11 @@ export function addOnNodeAdded(
 ) {
   lgraph.onNodeAdded = function (node: LGraphNode) {
     if (!benchmark && ws) node.setWebSocket?.(ws) // register websocket if node uses it
-    node.init?.(process.env)
+
     const onExecute = node.onExecute
     // eslint-disable-next-line immutable/no-mutation
     node.onExecute = async function () {
-      log.trace(`Executing node: ${node.title}`)
+      log.debug(`Executing node: ${node.title}`)
       // tell client that we are executing this node
       if (!benchmark && ws) sendWs(ws, { eventName: 'nodeExecuting', payload: node.id })
 
@@ -86,7 +89,7 @@ export function addOnNodeAdded(
         }
       })
       if (!benchmark && ws) {
-        log.trace(`Executed node: ${node.title}`)
+        log.debug(`Executed node: ${node.title}`)
         sendWs(ws, { eventName: 'nodeExecuted', payload: node.id })
       }
     }
@@ -97,6 +100,7 @@ export function sendQuestion(lgraph: LGraph, ws: WebSocket) {
   const question = lgraph.findNodesByClass(QuestionNode).pop()
   if (question) {
     // send question
+    log.debug('Sending question: ', question.properties.value)
     sendWs(ws, {
       eventName: 'question',
       payload: question.properties.value
@@ -104,7 +108,19 @@ export function sendQuestion(lgraph: LGraph, ws: WebSocket) {
   }
 }
 
-// TODO: Remove this function
+export const sendImages = (ws: WebSocket, lgraph: LGraph) => {
+  const images = lgraph.findNodesByClass(ImageNode)
+
+  for (const image of images) {
+    if (!image.properties.imageUrl) continue
+    log.debug('Sending image: ', image.properties_info)
+    sendWs(ws, {
+      eventName: 'questionImage',
+      payload: image.properties.imageUrl
+    })
+  }
+}
+
 function testGraph(lgraph: LGraph, ws: WebSocket) {
   lgraph.configure(demoGraphJson)
   sendWs(ws, { eventName: 'graphFinished', payload: lgraph.serialize() })
@@ -124,13 +140,14 @@ export async function runLgraph(
   onlyOnExecute = false
 ) {
   const execorder = lgraph.computeExecutionOrder<LGraphNode[]>(onlyOnExecute, true)
-  execorder.forEach(async (node, index) => {
+  for (const [index, node] of execorder.entries()) {
     try {
       await node.onExecute?.()
       updateProggresCb?.(index / execorder.length)
     } catch (error) {
-      log.error(error)
+      // log.warn(error)
       // TODO reset node green states
     }
-  })
+  }
+  return lgraph
 }

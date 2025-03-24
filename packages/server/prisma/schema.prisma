@@ -22,3 +22,43 @@ model Settings {
   path     String @unique
   modelUrl String // openAI conform model url
 }
+
+// LTI Platform Registration
+model LtiPlatform {
+  id          Int     @id @default(autoincrement())
+  clientId    String  @unique
+  clientRegistration LtiClientRegistration? // one to one
+  // from openid configuration:
+  issuer      String
+  jwksUri     String
+  authorizationEndpoint String
+  registrationEndpoint String
+  scopesSupported String[] // "https://purl.imsglobal.org/spec/lti-ags/scope/score",
+  responseTypesSupported String[] // i.e. "code","id_token","token id_token"
+  subjectTypesSupported String[] // i.e. "public","pairwise"
+  idTokenSigningAlgValuesSupported String[] // i.e. "RS256"
+  claimsSupported String[] // i.e. "sub","name","given_name","family_name","middle_name","nickname","preferred_username","profile","picture","website","email","email_verified
+  productFamilyCode String // "moodle",
+  version String // "4.0.4+ (Build: 20221104)",
+  variables String[] // i.e."basic-lti-launch-request","Context.id","Context.title","Context.label",
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LtiClientRegistration {
+  id                      Int      @id @default(autoincrement())
+  clientId                String   @unique
+  responseTypes           String[]
+  jwksUri                 String
+  initiateLoginUri        String
+  grantTypes              String[]
+  redirectUris            String[]
+  applicationType         String
+  tokenEndpointAuthMethod String
+  clientName              String
+  logoUri                 String?
+  scope                   String
+  ltiToolConfiguration    Json
+  LtiPlatform             LtiPlatform @relation(fields: [ltiPlatformId], references: [id])
+  ltiPlatformId           Int      @unique
+}

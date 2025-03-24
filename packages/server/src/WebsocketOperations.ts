@@ -3,6 +3,7 @@ import {
   AnswerInputNode,
   ClientEventPayload,
   LGraph,
+  OutputNode,
   sendWs,
   SerializedGraph
 } from '@haski/ta-lib'
@@ -12,7 +13,7 @@ import { WebSocket } from 'ws'
 
 import prisma from './client'
 import { runLgraph, sendQuestion } from './Graph'
-import { log } from './server'
+import { log, xAPI } from './server'
 import { prismaGraphCreateOrUpdate } from './utils/prismaOperations'
 
 export function runGraph(
@@ -25,7 +26,8 @@ export function runGraph(
   lgraph.configure(payload.graph)
   // set answer for nodes
   lgraph.findNodesByClass<AnswerInputNode>(AnswerInputNode).forEach((node) => {
-    node.properties.value = payload.answer
+    //TODO: Make this extendible only take the first 700 characters
+    node.properties.value = payload.answer.substring(0, 700)
   })
   // RUN GRAPH ITERATION
   runLgraph(lgraph, (percentage) => {
@@ -36,6 +38,46 @@ export function runGraph(
     })
   }).then(() => {
     log.debug('Finished running graph')
+    const resultNodes = lgraph.findNodesByClass<OutputNode>(OutputNode)
+    log.debug(
+      'Output nodes: ',
+      resultNodes.map((node) => node.properties)
+    )
+    const outputs = resultNodes.map((node) => node.properties)
+    try {
+      xAPI.sendStatement({
+        statement: {
+          actor: {
+            name: 'User',
+            mbox: 'mailto:test@test.org'
+          },
+          verb: {
+            id: 'https://wiki.haski.app/variables/services.answered',
+            display: {
+              en: 'answered'
+            }
+          },
+          object: {
+            id: 'https://wiki.haski.app/functions/TextField',
+            definition: {
+              name: {
+                en: 'TextField'
+              },
+              extensions: {
+                'https://ta.haski.app/variables/services.user_id': payload.user_id,
+                'https://ta.haski.app/variables/services.answered': payload.answer,
+                'https://ta.haski.app/variables/services.timestamp': payload.timestamp,
+                'https://ta.haski.app/variables/services.domain': payload.domain,
+                'https://ta.haski.app/variables/services.outputs': outputs
+              }
+            }
+          },
+          timestamp: new Date().toISOString()
+        }
+      })
+    } catch (error) {
+      log.error('Error sending xAPI statement: ', error)
+    }
     sendWs(ws, {
       eventName: 'graphFinished',
       payload: lgraph.serialize<SerializedGraph>()
@@ -54,6 +96,7 @@ export async function saveGraph(
   log.debug('event: saveGraph')
   lgraph.configure(payload.graph)
   const name = payload.name ?? parse(request.url ?? '', true).pathname
+  log.trace('Saving graph with name: ', name)
   await prismaGraphCreateOrUpdate(prisma, name, lgraph)
   sendWs(ws, {
     eventName: 'graphSaved',

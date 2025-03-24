@@ -71,7 +71,7 @@ export class OutputNode extends LGraphNode {
         value: this.properties.value
       }
     }
-    console.log('output', output)
+    // console.log('output', output)
     this.ws?.send(JSON.stringify(output))
   }
 
