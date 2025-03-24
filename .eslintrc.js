@@ -39,13 +39,21 @@ module.exports = {
     'jsx-a11y/accessible-emoji': 'off',
     'react/prop-types': 'off',
     '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_'
+      }
+    ],
+    '@typescript-eslint/no-explicit-any': 'warn',
     'simple-import-sort/imports': 'warn',
     'simple-import-sort/exports': 'error',
     // no trailing semicolon
     semi: ['error', 'never'],
     // no trailing comma
     'comma-dangle': ['warn', 'never'],
-    'immutable/no-let': 2,
+    'immutable/no-let': 1,
     'immutable/no-this': 2,
     'immutable/no-mutation': 2,
     'jsx-a11y/anchor-is-valid': [

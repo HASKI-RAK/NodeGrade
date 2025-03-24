@@ -5,8 +5,10 @@
     "src/utils/RunOne.json",
     "tests/WebsocketOperations.test.ts",
     "__mocks__/client.ts",
-    "src/client.ts"
-, "../lti/src/lti/toolRegistration.test.ts"  ],
+    "src/client.ts",
+    "singleton.ts",
+    "../lti/src/lti/toolRegistration.test.ts"
+  ],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
 
