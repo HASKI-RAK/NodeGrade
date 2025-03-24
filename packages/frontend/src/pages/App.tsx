@@ -81,7 +81,7 @@ export const App = () => {
     () =>
       createTheme({
         palette: {
-          mode: 'dark'
+          mode: 'light'
         }
       }),
     [mode, prefersDarkMode]

@@ -1,0 +1,32 @@
+# NOTE: docker build . -t ta-frontend -f ./packages/frontend/Dockerfile.dev
+# build context should be the workspaces root directory
+
+FROM node:20-bullseye
+WORKDIR /app
+
+# Install necessary tools
+RUN corepack enable
+RUN yarn set version 4.5.0
+RUN apt-get update && apt-get install -y tini
+
+# Create directories for volumes
+RUN mkdir -p /app/packages/frontend /app/packages/lib
+
+# Copy package files first for better caching
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY ./packages/frontend/package.json ./packages/frontend/
+COPY ./packages/lib/package.json ./packages/lib/
+
+# Install dependencies
+RUN yarn install
+
+# Copy source files
+COPY ./packages/frontend ./packages/frontend
+COPY ./packages/lib ./packages/lib
+
+WORKDIR /app/packages/frontend
+
+EXPOSE 80
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["yarn", "dev", "--host"]

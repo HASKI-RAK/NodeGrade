@@ -19,6 +19,7 @@ const addListeners = async (wss: wssType, server: serverType) => {
    */
   wss.on('connection', async function connection(ws: WebSocket, request) {
     const timeItStart = Date.now()
+    log.trace('Handling websocket connection')
     ws.on('error', (err) => {
       log.error('Websocket error: ', err)
     }) // TODO: Expand error handling
@@ -62,48 +63,60 @@ const addListeners = async (wss: wssType, server: serverType) => {
   /**
    ** Handle REST requests on http server
    */
-  server.on('request', (request, response) => {
-    const { pathname } = parse(request.url ?? '', true)
-    const method = request.method as HttpMethod
-    const route = pathname ?? '/'
-
-    if (request.method === 'POST' || request.method === 'PUT') {
-      // Parse the request body as needed
-      //switch based on content type
-      switch (request.headers['content-type']) {
-        case 'application/json':
-          handleRestRequestWithPayload(request, method, route, response)
-          break
-        case 'application/x-www-form-urlencoded':
-          handleRestRequestWithFormData(request, method, route, response)
-          break
-        case 'multipart/form-data':
-          handleRestRequestWithFormData(request, method, route, response)
-          break
-        default:
-          response.writeHead(400)
-          response.end('Invalid content type')
-          break
+  server.on('request', async (request, response) => {
+    try {
+      const { pathname } = parse(request.url ?? '', true)
+      const method = request.method as HttpMethod
+      const route = pathname ?? '/'
+      log.trace('Handling request for ', route)
+      if (request.method === 'POST' || request.method === 'PUT') {
+        // Parse the request body as needed
+        //switch based on content type
+        switch (request.headers['content-type']) {
+          case 'application/json':
+            log.trace('Handling request with application/json')
+            // // test await sleep(1000):
+            // await new Promise((resolve) => setTimeout(resolve, 5000))
+            // response.setHeader('Content-Type', 'application/json')
+            // response.write('{"message": "Hello, World!"}')
+            // return
+            await handleRestRequestWithPayload(request, method, route, response)
+            log.trace('Request With Payload handled')
+            break
+          case 'application/x-www-form-urlencoded':
+            handleRestRequestWithFormData(request, method, route, response)
+            break
+          case 'multipart/form-data':
+            handleRestRequestWithFormData(request, method, route, response)
+            break
+          default:
+            response.writeHead(400)
+            response.end('Invalid content type')
+            break
+        }
+      } else if (request.method === 'GET' || request.method === 'DELETE') {
+        const restRequest: RestRequest<undefined> = {
+          method,
+          route
+        }
+        await handleRestRequest(request, response, restRequest, handlers)
       }
-    } else if (request.method === 'GET' || request.method === 'DELETE') {
-      const restRequest: RestRequest<undefined> = {
-        method,
-        route
+      // Handle options request
+      else if (request.method === 'OPTIONS') {
+        response.setHeader('Access-Control-Allow-Origin', '*')
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        response.writeHead(200)
+      } else {
+        // cors
+        response.setHeader('Access-Control-Allow-Origin', '*')
+        response.writeHead(405)
+        response.write('Method not allowed')
       }
-      handleRestRequest(request, response, restRequest, handlers)
-    }
-    // Handle options request
-    else if (request.method === 'OPTIONS') {
-      response.setHeader('Access-Control-Allow-Origin', '*')
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
-      response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-      response.writeHead(200)
-      response.end()
-    } else {
-      // cors
-      response.setHeader('Access-Control-Allow-Origin', '*')
-      response.writeHead(405)
-      response.write('Method not allowed')
+    } catch (error) {
+      log.error('Error handling request: ', error)
+    } finally {
+      log.trace('Request handled')
       response.end()
     }
   })
@@ -115,7 +128,8 @@ const addListeners = async (wss: wssType, server: serverType) => {
     // Announce that we are going to handle this request
     log.trace('Handling request for ', pathname)
 
-    if (pathname?.startsWith('/ws')) {
+    // if the path is /ws/* and it doest not contain /v1/benchmark
+    if (pathname?.startsWith('/ws') && !pathname.includes('/v1/benchmark')) {
       //TODO: check path
       wss.handleUpgrade(request, socket, head, function done(ws) {
         wss.emit('connection', ws, request)

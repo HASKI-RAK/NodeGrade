@@ -61,7 +61,7 @@ export function addOnNodeAdded(
     const onExecute = node.onExecute
     // eslint-disable-next-line immutable/no-mutation
     node.onExecute = async function () {
-      log.trace(`Executing node: ${node.title}`)
+      log.debug(`Executing node: ${node.title}`)
       // tell client that we are executing this node
       if (!benchmark && ws) sendWs(ws, { eventName: 'nodeExecuting', payload: node.id })
 
@@ -89,7 +89,7 @@ export function addOnNodeAdded(
         }
       })
       if (!benchmark && ws) {
-        log.trace(`Executed node: ${node.title}`)
+        log.debug(`Executed node: ${node.title}`)
         sendWs(ws, { eventName: 'nodeExecuted', payload: node.id })
       }
     }
@@ -145,8 +145,9 @@ export async function runLgraph(
       await node.onExecute?.()
       updateProggresCb?.(index / execorder.length)
     } catch (error) {
-      log.error(error)
+      // log.warn(error)
       // TODO reset node green states
     }
   }
+  return lgraph
 }

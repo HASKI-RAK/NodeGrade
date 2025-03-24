@@ -232,7 +232,7 @@ export class LLMNode extends LGraphNode {
 
     // TODO: sanity check input
     const required_input = JSON.stringify(input)
-    console.log(required_input)
+    // console.log(required_input)
     // fetch from server
     console.log(this.env.MODEL_WORKER_URL)
     const response = await fetch(
@@ -255,9 +255,10 @@ export class LLMNode extends LGraphNode {
     // get response
     const data = await response.json()
     const choices = data.choices
-    console.log(choices)
+    // console.log(choices)
     //send output to the output
-    console.log(choices[0].message.content)
+    // console.log(choices[0].message.content)
+    this.properties.value = choices[0].message.content
     this.setOutputData(0, choices[0].message.content)
   }
 

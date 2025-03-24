@@ -1,5 +1,5 @@
 import { ServerEventPayload } from '@haski/ta-lib'
-import { Button, FormControl, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Button, FormControl, Stack, TextField, Typography } from '@mui/material'
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
 import { styled } from '@mui/material/styles'
 import { memo, useEffect, useState } from 'react'
@@ -11,13 +11,9 @@ interface MyThemeComponentProps {
 /**
  * based on value of successPercentage, the color of the progress bar changes
  */
-const BorderLinearProgress = styled(LinearProgress, {
-  overridesResolver: (props, styles) => [
-    styles.root,
-    props.color === 'primary' && styles.primary,
-    props.color === 'secondary' && styles.secondary
-  ]
-})<MyThemeComponentProps>(({ theme }) => ({
+const BorderLinearProgress = styled(LinearProgress)<
+  MyThemeComponentProps & { value: number }
+>(({ theme, value }) => ({
   height: 10,
   borderRadius: 5,
   [`&.${linearProgressClasses.colorPrimary}`]: {
@@ -25,7 +21,7 @@ const BorderLinearProgress = styled(LinearProgress, {
   },
   [`& .${linearProgressClasses.bar}`]: {
     borderRadius: 5,
-    backgroundColor: theme.palette.mode === 'light' ? '#1a90ff' : '#308fe8'
+    backgroundColor: value >= 70 ? '#388E3C' : '#308fe8'
   }
 }))
 
@@ -34,7 +30,7 @@ const TaskView = ({
   outputs,
   question,
   questionImage,
-  maxInputChars = 300
+  maxInputChars = 700
 }: {
   onSubmit: (answer: string) => void
   outputs?: Record<string, ServerEventPayload['output']>
@@ -44,7 +40,6 @@ const TaskView = ({
 }) => {
   const [error, setError] = useState<string | null>(null)
   const [answer, setAnswer] = useState<string>('')
-
   const handleSetAnswer = (event: React.ChangeEvent<HTMLInputElement>) => {
     validateAnswer()
     setAnswer(event.target.value)
@@ -81,6 +76,7 @@ const TaskView = ({
   useEffect(() => {
     console.log('Task view rendered with output: ', outputs ?? 'no output')
     document.addEventListener('keydown', keyDownHandlerCtrlEnter)
+
     return () => {
       document.removeEventListener('keydown', keyDownHandlerCtrlEnter)
     }
@@ -88,6 +84,7 @@ const TaskView = ({
 
   return (
     <Stack spacing={2} padding={2}>
+      <span id="rewardId" />
       <Typography variant="h4">Aufgabe:</Typography>
       {questionImage && (
         <img
@@ -129,6 +126,10 @@ const TaskView = ({
               <Button variant="contained" type="submit" onClick={() => handleSubmit()}>
                 Absenden
               </Button>
+              <Typography variant="caption">
+                Hinweis: Die Auswertung kann bis zu zwei Minuten dauern. Bitte die Seite
+                nicht neu laden.
+              </Typography>
             </Stack>
             {/* Map over all outputs and display them */}
             {outputs &&
@@ -164,6 +165,7 @@ const TaskView = ({
                     }
                     return (
                       <>
+                        {out.value >= 70 && <Alert severity="success">Bestanden!</Alert>}
                         <Typography variant="h6">
                           {out.label}: {out.value}
                         </Typography>
@@ -194,6 +196,13 @@ const TaskView = ({
                     )
                 }
               })}
+            {/* {outputs &&
+              Object.values(outputs).map((out) => {
+                if (out.type === 'score') {
+                  if (typeof out.value !== 'number') return null
+                  if (out.value >= 70) return <div key={out.label} />
+                }
+              })} */}
           </Stack>
         </FormControl>
       </form>

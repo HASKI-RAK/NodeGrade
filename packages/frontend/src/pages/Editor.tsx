@@ -89,7 +89,7 @@ export const Editor = () => {
 
   const path = window.location.pathname
   const [selectedGraph, setSelectedGraph] = useState<string>(path)
-  const [maxInputChars, setMaxInputChars] = useState<number>(300)
+  const [maxInputChars, setMaxInputChars] = useState<number>(700)
   const [image, setImage] = useState<string | undefined>()
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
@@ -148,6 +148,18 @@ export const Editor = () => {
       payload: {
         graph: lgraph.serialize<SerializedGraph>(),
         name // when no name is given, use the current location.pathname
+      }
+    })
+  }
+
+  const handlePublishGraph = () => {
+    //name based on the current location.pathname, just exchange editor with student
+    const name = path.replace('editor', 'student')
+    sendJsonMessage<ClientPayload>({
+      eventName: 'saveGraph',
+      payload: {
+        graph: lgraph.serialize<SerializedGraph>(),
+        name
       }
     })
   }
@@ -304,6 +316,7 @@ export const Editor = () => {
           handleDownloadGraph={handleDownloadGraph}
           handleUploadGraph={handleUploadGraph}
           handleWorkflowChange={handleWorkflowChange}
+          handlePublishGraph={handlePublishGraph}
         />
         <Main open={open}>
           <Button

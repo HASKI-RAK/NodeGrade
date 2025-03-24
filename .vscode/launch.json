@@ -23,9 +23,13 @@
       "type": "node",
       "cwd": "${workspaceFolder}/packages/server",
       "request": "launch",
-
-      "runtimeArgs": ["-r", "ts-node/register"],
-      "args": ["${workspaceFolder}/packages/server/src/server.ts"]
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "args": [
+        "${workspaceFolder}/packages/server/src/server.ts"
+      ]
     },
     // args: "./scientsbank.xlsx","--run_name", "llm_only_wizzard_uncensored_full_v2" ,"--path" ,"/ws/editor/haski.de/2/4"
     {

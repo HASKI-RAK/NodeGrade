@@ -31,7 +31,7 @@ export class ConcatObject extends LGraphNode {
   //name of the function to call when executing
   async onExecute() {
     this.properties.value = [this.getInputData(0), this.getInputData(1)].flat(Infinity)
-    console.log(this.properties.value)
+    // console.log(this.properties.value)
     this.setOutputData(0, this.properties.value)
   }
 }

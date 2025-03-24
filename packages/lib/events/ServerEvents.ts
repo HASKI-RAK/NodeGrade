@@ -28,7 +28,7 @@ export type ServerEventPayload = {
   }
   //feedback: string // string from the feedback node
   //successPercentage: number // can be used for cosine similarity and is indicated by a progress bar in the frontend. used by successPercentageNode
-  maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 300
+  maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 700
   nodeError: {
     nodeId: number
     error: string

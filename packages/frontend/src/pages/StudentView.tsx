@@ -37,7 +37,7 @@ export const StudentView = () => {
   >(undefined)
   const memoizedOutputs = useMemo(() => outputs, [outputs])
   const [image, setImage] = useState<string>('')
-  const [maxInputChars, setMaxInputChars] = useState<number>(300)
+  const [maxInputChars, setMaxInputChars] = useState<number>(700)
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const searchParams = new URLSearchParams(window.location.search)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])

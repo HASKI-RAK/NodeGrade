@@ -13,7 +13,7 @@ import Logger from './utils/Logger'
 // Init
 const app = express()
 const log = Logger.getInstance().log
-export const server = createServer(app)
+export const server = createServer()
 
 export type serverType = ReturnType<typeof createServer>
 const wss = new WebSocketServer({ noServer: true })
@@ -48,10 +48,16 @@ app.use(
     origin: '*'
   })
 )
+// server.on('request', async (request, response) => {
+//   await new Promise((resolve) => {
+//     setTimeout(resolve, 1000)
+//   })
+//   response.writeHead(200, { 'Content-Type': 'text/plain' })
+//   response.end('okay')
+// })
 
 // Add listeners
 addListeners(wss, server)
-
 /**
  * ! Entry point
  * @async

@@ -56,7 +56,7 @@ export class StringArrayToString extends LGraphNode {
     if (input !== null) {
       this.properties.value = input.join(this.properties.separator)
     }
-    console.log(this.properties.value)
+    // console.log(this.properties.value)
 
     this.setOutputData(0, this.properties.value)
   }

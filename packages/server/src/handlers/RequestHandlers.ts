@@ -15,7 +15,7 @@ import prisma from '../client'
 import { addOnNodeAdded, runLgraph } from '../Graph'
 import { log, xAPI } from '../server'
 import { RestHandlerMap } from '../utils/rest'
-import { isPayloadClientBenchmarkValid } from '../utils/typeGuards'
+import { isClientBenchmarkPostPayload } from '../utils/typeGuards'
 import { handleLtiToolRegistration, ToolRegistrationRequest } from './handleLti'
 import {
   isPayloadLtiLaunchValid,
@@ -35,49 +35,89 @@ export const handlers: RestHandlerMap<
 > = {
   POST: {
     '/v1/benchmark': async (_, response, payload) => {
-      assertIs(payload, isPayloadClientBenchmarkValid)
-      const benchmarkPayload = payload
-      const { path, data } = benchmarkPayload
+      log.trace('Handling benchmark request')
+      assertIs(payload, isClientBenchmarkPostPayload)
+      try {
+        log.trace('Benchmark payload: ', payload)
+        const benchmarkPayload = payload
+        const { path, data } = benchmarkPayload
 
-      const graph = await prisma.graph.findFirst({
-        where: {
-          path
+        const graph = await prisma.graph.findFirst({
+          where: {
+            path
+          }
+        })
+        // log.trace('Benchmark graph: ', graph)
+
+        if (!graph) {
+          log.error('Graph not found')
+          if (!response.headersSent) {
+            response.writeHead(404, { 'Content-Type': 'application/json' })
+            response.end(JSON.stringify({ error: 'Graph not found' }))
+          }
+          return
         }
-      })
 
-      if (!graph) {
-        response.writeHead(404)
-        response.end()
-        return
-      }
+        const lgraph = new LiteGraph.LGraph()
+        addOnNodeAdded(lgraph, undefined, true)
+        lgraph.configure(JSON.parse(graph.graph))
 
-      const lgraph = new LiteGraph.LGraph()
-      addOnNodeAdded(lgraph, undefined, true)
-      lgraph.configure(JSON.parse(graph.graph))
+        // Fill in the answer and question
+        lgraph.findNodesByClass(QuestionNode).forEach((node) => {
+          node.properties.value = data.question
+        })
+        lgraph.findNodesByClass(SampleSolutionNode).forEach((node) => {
+          node.properties.value = data.realAnswer
+        })
 
-      // Fill in the answer and question
-      lgraph.findNodesByClass(AnswerInputNode).forEach((node) => {
-        node.properties.value = data.answer
-      })
-      lgraph.findNodesByClass(QuestionNode).forEach((node) => {
-        node.properties.value = data.question
-      })
-      lgraph.findNodesByClass(SampleSolutionNode).forEach((node) => {
-        node.properties.value = data.realAnswer
-      })
+        lgraph.findNodesByClass(AnswerInputNode).forEach((node) => {
+          node.properties.value = data.answer
+        })
 
-      // Run the graph
-      runLgraph(lgraph).then(() => {
-        const output: ServerBenchmarkPostPayload = lgraph
+        // log.trace('Benchmark graph configured: ', lgraph)
+        // Run the graph
+        const result = await runLgraph(lgraph)
+        if (!result) {
+          log.error('No result')
+          if (!response.headersSent) {
+            log.error('No result')
+          }
+          return
+        }
+
+        // // Output all LLMNodes results
+        // const llmNodes = result.findNodesByClass(LLMNode)
+        // for (const node of llmNodes) {
+        //   log.debug('LLMNode result: ', node.properties.value)
+        // }
+
+        // // Output all LLMNodes results
+        // const mathop = result.findNodesByClass(MathOperationNode)
+        // for (const node of mathop) {
+        //   log.debug('semantic result: ', node.properties.value)
+        // }
+
+        // log.trace('Benchmark result after running graph: ', result)
+
+        const output: ServerBenchmarkPostPayload = result
           .findNodesByClass(OutputNode)
           .map((node) => {
             return node.properties.value
           })
-        log.debug('Benchmark post response: ', output)
-        response.writeHead(200, { 'Content-Type': 'application/json' })
-        response.write(JSON.stringify(output))
-        response.end()
-      })
+        // log.debug('Benchmark result: ', output)
+
+        if (!response.headersSent) {
+          response.writeHead(200, { 'Content-Type': 'application/json' })
+          response.end(JSON.stringify(output))
+        }
+      } catch (error) {
+        // Handle error and send response
+        log.error('Error while processing benchmark: ', error)
+        // if (!response.headersSent) {
+        //   response.writeHead(500, { 'Content-Type': 'application/json' })
+        //   response.end(JSON.stringify({ error: 'Internal Server Error' }))
+        // }
+      }
     },
     '/v1/lti/basiclogin': async (_, response, p) => {
       // assertIs(payload, isBasicLtiLaunchValid)
@@ -133,12 +173,10 @@ export const handlers: RestHandlerMap<
             timestamp
         })
       } catch (e) {
-        // response.writeHead(400, {
-        //   'Content-Type': 'application/json',
-        //   'Access-Control-Allow-Origin': '*'
-        // })
         log.error('Invalid Tool Launch Request')
       }
+      log.debug('Redirecting to: ', response.getHeader('Location'))
+      response.end()
     },
     '/v1/lti/login': async (_, response, payload) => {
       assertIs(payload, isPayloadLtiLaunchValid)
@@ -163,21 +201,24 @@ export const handlers: RestHandlerMap<
     }
   },
   GET: {
-    '/v1/graphs': async (_, response) => {
-      // getting all available graphs
+    '/v1/graphs': async (request, response) => {
       try {
+        // Wait for the database query to complete
         const graphs = await prisma.graph.findMany()
+
+        // Set proper headers
         response.writeHead(200, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         })
-        response.write(JSON.stringify(graphs))
-      } catch (e) {
-        // response.writeHead(500, {
-        //   'Content-Type': 'application/json',
-        //   'Access-Control-Allow-Origin': '*'
-        // })
-        log.error('Error while fetching graphs')
+
+        // Send the response
+        response.end(JSON.stringify(graphs))
+      } catch (error) {
+        // Log the error
+        log.error('Error while fetching graphs: ', error)
+
+        response.end(JSON.stringify({ error: 'Internal server error' }))
       }
     },
     '/v1/lti/register': async (request, response) =>

@@ -12,7 +12,7 @@ export type RestRequestHandler<T> = (
   request: IncomingMessage,
   response: ServerResponse,
   payload?: T
-) => void | Promise<void>
+) => Promise<void>
 
 export type RestHandlerMap<T> = {
   [K in HttpMethod]?: {
@@ -26,52 +26,49 @@ export type RestRequest<T> = {
   payload?: T
 }
 
-export const handleRestRequest = <T>(
+export const handleRestRequest = async <T>(
   request: IncomingMessage,
   response: ServerResponse,
   restRequest: RestRequest<T>,
   handlers: RestHandlerMap<T>
-): void => {
+): Promise<void> => {
   const { method, route, payload } = restRequest
   const methodHandlers = handlers[method]
 
   if (methodHandlers) {
     const handler = methodHandlers[route]
     if (handler) {
-      try {
-        handler(request, response, payload)
-      } catch (e) {
-        log.error(e)
-      } finally {
-        response.end() // only call end here
-      }
+      log.trace('Handling request:', restRequest)
+      await handler(request, response, payload)
+      log.trace('Request handled:', restRequest)
     } else {
-      response.writeHead(404)
-      response.end('Not Found')
+      log.error('Route not found:', restRequest)
     }
   } else {
-    response.writeHead(405)
-    response.end('Method Not Allowed')
+    log.error('Method not allowed:', restRequest)
   }
 }
-export function handleRestRequestWithPayload(
+
+export async function handleRestRequestWithPayload(
   request: IncomingMessage,
   method: HttpMethod,
   route: string,
-  response: import('http').ServerResponse<import('http').IncomingMessage> & {
-    req: import('http').IncomingMessage
-  }
+  response: ServerResponse
 ) {
   const requestBody: Buffer[] = []
   request.on('data', (chunk) => requestBody.push(chunk))
-  request.on('end', () => {
-    const payload = JSON.parse(Buffer.concat(requestBody).toString())
-    const restRequest: RestRequest<typeof payload> = {
-      method,
-      route,
-      payload
-    }
-    handleRestRequest(request, response, restRequest, handlers)
+  await new Promise<void>((resolve) => {
+    request.on('end', async () => {
+      const payload = JSON.parse(Buffer.concat(requestBody).toString())
+      log.trace('Payload:', payload)
+      const restRequest: RestRequest<typeof payload> = {
+        method,
+        route,
+        payload
+      }
+      await handleRestRequest(request, response, restRequest, handlers)
+      resolve()
+    })
   })
 }
 
@@ -83,7 +80,7 @@ export const handleRestRequestWithFormData = (
 ) => {
   const requestBody: Buffer[] = []
   request.on('data', (chunk) => requestBody.push(chunk))
-  request.on('end', () => {
+  request.on('end', async () => {
     const payload = Buffer.concat(requestBody).toString()
     // parse form data
     const parsedPayload = new URLSearchParams(payload)
@@ -105,6 +102,6 @@ export const handleRestRequestWithFormData = (
     }
     console.log('payload', payload)
     console.log('restRequest', restRequest)
-    handleRestRequest(request, response, restRequest, handlers)
+    await handleRestRequest(request, response, restRequest, handlers)
   })
 }

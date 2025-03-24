@@ -3,6 +3,7 @@ import {
   AnswerInputNode,
   ClientEventPayload,
   LGraph,
+  OutputNode,
   sendWs,
   SerializedGraph
 } from '@haski/ta-lib'
@@ -25,7 +26,8 @@ export function runGraph(
   lgraph.configure(payload.graph)
   // set answer for nodes
   lgraph.findNodesByClass<AnswerInputNode>(AnswerInputNode).forEach((node) => {
-    node.properties.value = payload.answer
+    //TODO: Make this extendible only take the first 700 characters
+    node.properties.value = payload.answer.substring(0, 700)
   })
   // RUN GRAPH ITERATION
   runLgraph(lgraph, (percentage) => {
@@ -36,6 +38,12 @@ export function runGraph(
     })
   }).then(() => {
     log.debug('Finished running graph')
+    const resultNodes = lgraph.findNodesByClass<OutputNode>(OutputNode)
+    log.debug(
+      'Output nodes: ',
+      resultNodes.map((node) => node.properties)
+    )
+    const outputs = resultNodes.map((node) => node.properties)
     try {
       xAPI.sendStatement({
         statement: {
@@ -59,7 +67,8 @@ export function runGraph(
                 'https://ta.haski.app/variables/services.user_id': payload.user_id,
                 'https://ta.haski.app/variables/services.answered': payload.answer,
                 'https://ta.haski.app/variables/services.timestamp': payload.timestamp,
-                'https://ta.haski.app/variables/services.domain': payload.domain
+                'https://ta.haski.app/variables/services.domain': payload.domain,
+                'https://ta.haski.app/variables/services.outputs': outputs
               }
             }
           },
@@ -87,6 +96,7 @@ export async function saveGraph(
   log.debug('event: saveGraph')
   lgraph.configure(payload.graph)
   const name = payload.name ?? parse(request.url ?? '', true).pathname
+  log.trace('Saving graph with name: ', name)
   await prismaGraphCreateOrUpdate(prisma, name, lgraph)
   sendWs(ws, {
     eventName: 'graphSaved',
