@@ -119,10 +119,7 @@ export async function handleToolRegistration(
     toolRegistrationData: SuccessfulToolRegistrationResponse,
     openIdConfigJson: unknown
   ) => Promise<void>
-): Promise<{
-  registrationResponse: SuccessfulToolRegistrationResponse
-  openIdConfigJson: OpenIdConfigJson
-}> {
+) {
   try {
     const params = new URLSearchParams(request.url?.split('?')[1])
     const openid_configuration = params.get('openid_configuration') // https://www.imsglobal.org/spec/lti-dr/v1p0#openid-configuration

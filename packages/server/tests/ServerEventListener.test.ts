@@ -2,6 +2,7 @@ import { WebSocket } from 'ws'
 import { IncomingMessage, ServerResponse } from 'http'
 import { EventEmitter } from 'events'
 import addListeners from '../src/ServerEventListener'
+import { GraphSchema } from '@haski/ta-lib'
 
 // Mock modules
 jest.mock('ws', () => {
@@ -171,6 +172,18 @@ describe('ServerEventListener', () => {
     await addListeners(mockWss, mockServer)
     const requestHandler = mockServer.listeners('request')[0]
 
+    // Create mock response data
+    const mockGraphs: GraphSchema[] = [
+      { id: 1, path: '/test1', graph: '{}' },
+      { id: 2, path: '/test2', graph: '{}' }
+    ]
+
+    // Mock response.end to capture the response data
+    mockResponse.end = jest.fn().mockImplementation((data: string) => {
+      expect(JSON.parse(data)).toEqual(mockGraphs)
+      return mockResponse
+    })
+
     // Act
     await requestHandler(mockRequest, mockResponse)
 
@@ -184,6 +197,10 @@ describe('ServerEventListener', () => {
       }),
       expect.any(Object)
     )
+    expect(mockResponse.writeHead).toHaveBeenCalledWith(200, {
+      'Content-Type': 'application/json'
+    })
+    expect(mockResponse.end).toHaveBeenCalled()
   })
 
   it('should handle HTTP POST requests with JSON content type', async () => {

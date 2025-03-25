@@ -10,11 +10,13 @@ jest.mock('../../src/client', () => ({
   default: {
     graph: {
       findFirst: jest.fn().mockResolvedValue({
+        id: 1,
+        path: '/test-graph',
         graph: JSON.stringify({ nodes: [] })
       }),
-      findMany: jest.fn().mockResolvedValue([
-        { id: 1, name: 'Test Graph', path: '/test' }
-      ])
+      findMany: jest
+        .fn()
+        .mockResolvedValue([{ id: 1, name: 'Test Graph', path: '/test' }])
     }
   }
 }))
@@ -22,9 +24,9 @@ jest.mock('../../src/client', () => ({
 jest.mock('../../src/Graph', () => ({
   addOnNodeAdded: jest.fn(),
   runLgraph: jest.fn().mockResolvedValue({
-    findNodesByClass: jest.fn().mockReturnValue([
-      { properties: { value: 'test output' } }
-    ])
+    findNodesByClass: jest
+      .fn()
+      .mockReturnValue([{ properties: { value: 'test output' } }])
   })
 }))
 
@@ -52,11 +54,13 @@ jest.mock('@haski/ta-lib', () => {
       }))
     }
   }
-}))
+})
 
-jest.mock('../../src/handlers/handleLti', () => ({
-  handleLtiToolRegistration: jest.fn().mockResolvedValue({})
-}));
+jest.mock('@haski/lti', () => ({
+  isPayloadLtiLaunchValid: jest.fn(),
+  handleLtiToolRegistration: jest.fn(),
+  LtiBasicLaunchRequest: jest.fn()
+}))
 
 describe('Request Handlers', () => {
   let mockRequest: IncomingMessage
@@ -76,6 +80,7 @@ describe('Request Handlers', () => {
       headers: {}
     } as unknown as IncomingMessage
 
+    // Update mock implementation
     mockResponse = {
       writeHead: jest.fn().mockImplementation((status, headers) => {
         responseStatus = status
@@ -106,41 +111,33 @@ describe('Request Handlers', () => {
 
   describe('GET handlers', () => {
     it('should handle GET /v1/graphs request', async () => {
-      // Act
       await handlers.GET!['/v1/graphs'](mockRequest, mockResponse)
 
-      // Assert
+      const expectedResponse = [{ id: 1, name: 'Test Graph', path: '/test' }]
+
       expect(responseStatus).toBe(200)
       expect(responseHeaders['Content-Type']).toBe('application/json')
-      
-      const parsedResponse = JSON.parse(responseData)
-      expect(parsedResponse).toBeInstanceOf(Array)
-      expect(parsedResponse.length).toBe(1)
-      expect(parsedResponse[0]).toHaveProperty('id', 1)
-      expect(parsedResponse[0]).toHaveProperty('name', 'Test Graph')
+      expect(responseHeaders['Access-Control-Allow-Origin']).toBe('*')
+      expect(responseData).toBe(JSON.stringify(expectedResponse))
     })
 
     it('should handle GET /.well-known/jwks request', async () => {
-      // Act
       await handlers.GET!['/.well-known/jwks'](mockRequest, mockResponse)
 
-      // Assert
       expect(responseStatus).toBe(200)
       expect(responseHeaders['Content-Type']).toBe('application/json')
-      
+
       const parsedResponse = JSON.parse(responseData)
       expect(parsedResponse).toHaveProperty('kty', 'RSA')
       expect(parsedResponse).toHaveProperty('alg', 'RS256')
     })
 
     it('should handle GET /policy request', async () => {
-      // Act
       await handlers.GET!['/policy'](mockRequest, mockResponse)
 
-      // Assert
       expect(responseStatus).toBe(200)
       expect(responseHeaders['Content-Type']).toBe('application/json')
-      
+
       const parsedResponse = JSON.parse(responseData)
       expect(parsedResponse).toHaveProperty('policy')
     })
@@ -148,9 +145,17 @@ describe('Request Handlers', () => {
 
   describe('POST handlers', () => {
     it('should handle POST /v1/benchmark request with valid payload', async () => {
-      // Arrange
+      // Mock isClientBenchmarkPostPayload to return true
       jest.spyOn(typeGuards, 'isClientBenchmarkPostPayload').mockReturnValue(true)
-      
+
+      // Mock the graph lookup to return a valid graph
+      const prismaClient = require('../../src/client').default
+      prismaClient.graph.findFirst.mockResolvedValue({
+        id: 1,
+        path: '/test-graph',
+        graph: JSON.stringify({ nodes: [] })
+      })
+
       const payload: ClientBenchmarkPostPayload = {
         path: '/test-graph',
         data: {
@@ -160,188 +165,104 @@ describe('Request Handlers', () => {
         }
       }
 
-      // Act
       await handlers.POST!['/v1/benchmark'](mockRequest, mockResponse, payload)
 
-      // Assert
       expect(responseStatus).toBe(200)
       expect(responseHeaders['Content-Type']).toBe('application/json')
-      
-      const parsedResponse = JSON.parse(responseData)
-      expect(parsedResponse).toEqual(['test output'])
+      expect(responseData).toBe(JSON.stringify(['test output']))
     })
 
     it('should handle POST /v1/benchmark request with invalid payload', async () => {
-      // Arrange
-      const mockAssertIs = require('@haski/ta-lib').assertIs as jest.Mock
-      mockAssertIs.mockImplementation(() => {
-        throw new Error('Invalid payload')
-      })
-      
-      const invalidPayload = { invalid: 'data' }
+      jest.spyOn(typeGuards, 'isClientBenchmarkPostPayload').mockReturnValue(false)
 
-      // Act & Assert
-      await expect(async () => {
-        await handlers.POST!['/v1/benchmark'](mockRequest, mockResponse, invalidPayload as any)
-      }).not.toThrow()
-      
+      const invalidPayload = { invalid: 'data' }
+      await handlers.POST!['/v1/benchmark'](
+        mockRequest,
+        mockResponse,
+        invalidPayload as any
+      )
+
       expect(require('../../src/server').log.error).toHaveBeenCalled()
     })
 
-    it('should handle POST /v1/lti/basiclogin request', async () => {
-      // Arrange
-      const mockPayload: LtiBasicLaunchRequest = {
+    describe('LTI handlers', () => {
+      const baseLtiPayload: LtiBasicLaunchRequest = {
         lti_message_type: 'basic-lti-launch-request',
         lti_version: 'LTI-1p0',
         resource_link_id: 123,
         user_id: 456,
-        roles: 'Instructor',
-        context_id: 123, // Changed from string to number
-        context_label: 'Test Context',
+        context_id: 789,
+        context_label: 'TEST101',
         context_title: 'Test Course',
+        context_type: 'CourseSection',
         resource_link_title: 'Test Assignment',
         lis_person_name_given: 'John',
         lis_person_name_family: 'Doe',
         lis_person_name_full: 'John Doe',
-        lis_person_contact_email_primary: 'test@example.com',
-        launch_presentation_locale: 'en',
-        launch_presentation_return_url: 'http://example.com/return',
-        tool_consumer_info_product_family_code: 'Test LMS',
+        lis_person_contact_email_primary: 'john.doe@example.com',
+        launch_presentation_locale: 'en-US',
+        custom_activityname: 'test-activity',
+        lis_result_sourcedid: {
+          data: {
+            instanceid: 'test-instance',
+            userid: 'test-user',
+            typeid: null,
+            launchid: 123
+          },
+          hash: 'test-hash'
+        },
+        lis_outcome_service_url: 'https://example.com/outcomes',
+        ext_user_username: 'jdoe',
+        ext_lms: 'test-lms',
+        tool_consumer_info_product_family_code: 'canvas',
         tool_consumer_info_version: '1.0',
-        tool_consumer_instance_guid: 'test-guid',
-        tool_consumer_instance_name: 'Test Institution',
+        tool_consumer_instance_guid: 'example.com',
+        tool_consumer_instance_name: 'Example University',
         tool_consumer_instance_description: 'Test Institution Description',
-        custom_activityname: 'test-activity'
+        launch_presentation_document_target: 'iframe',
+        launch_presentation_return_url: 'http://example.com/return',
+        oauth_callback: 'about:blank',
+        roles: 'Instructor'
       }
 
-      // Act
-      await handlers.POST!['/v1/lti/basiclogin'](mockRequest, mockResponse, mockPayload as any)
+      it('should handle POST /v1/lti/basiclogin for instructor role', async () => {
+        const payload = { ...baseLtiPayload, roles: 'Instructor' }
+        await handlers.POST!['/v1/lti/basiclogin'](mockRequest, mockResponse, payload)
 
-      // Assert
-      expect(mockResponse.writeHead).toHaveBeenCalledWith(302, expect.any(Object))
-      expect(responseHeaders.Location).toContain('/ws/editor/')
-      expect(responseHeaders.Location).toContain('test-activity')
+        expect(responseStatus).toBe(302)
+        const location = responseHeaders.Location as string
+        expect(location).toContain('/ws/editor/')
+        expect(location).toContain('test-activity')
+        expect(location).toContain('user_id=456')
+      })
+
+      it('should handle POST /v1/lti/basiclogin for student role', async () => {
+        const payload = { ...baseLtiPayload, roles: 'Learner' }
+        await handlers.POST!['/v1/lti/basiclogin'](mockRequest, mockResponse, payload)
+
+        expect(responseStatus).toBe(302)
+        const location = responseHeaders.Location as string
+        expect(location).toContain('/ws/student/')
+        expect(location).toContain('test-activity')
+        expect(location).toContain('user_id=456')
+      })
+
+      it('should handle errors in POST /v1/lti/basiclogin', async () => {
+        const xAPIMock = require('../../src/server').xAPI.sendStatement as jest.Mock
+        xAPIMock.mockImplementation(() => {
+          throw new Error('XAPI Error')
+        })
+
+        await handlers.POST!['/v1/lti/basiclogin'](
+          mockRequest,
+          mockResponse,
+          baseLtiPayload
+        )
+
+        expect(require('../../src/server').log.error).toHaveBeenCalledWith(
+          'Invalid Tool Launch Request'
+        )
+      })
     })
-
-    it('should handle POST /v1/lti/basiclogin request for student role', async () => {
-      // Arrange
-      const mockPayload: LtiBasicLaunchRequest = {
-        lti_message_type: 'basic-lti-launch-request',
-        lti_version: 'LTI-1p0',
-        resource_link_id: 123,
-        user_id: 456,
-        roles: 'Learner',
-        context_id: 123, // Changed from string to number
-        context_label: 'Test Context',
-        context_title: 'Test Course',
-        resource_link_title: 'Test Assignment',
-        lis_person_name_given: 'John',
-        lis_person_name_family: 'Doe',
-        lis_person_name_full: 'John Doe',
-        lis_person_contact_email_primary: 'test@example.com',
-        launch_presentation_locale: 'en',
-        launch_presentation_return_url: 'http://example.com/return',
-        tool_consumer_info_product_family_code: 'Test LMS',
-        tool_consumer_info_version: '1.0',
-        tool_consumer_instance_guid: 'test-guid',
-        tool_consumer_instance_name: 'Test Institution',
-        tool_consumer_instance_description: 'Test Institution Description',
-        custom_activityname: 'test-activity'
-      }
-
-      // Act
-      await handlers.POST!['/v1/lti/basiclogin'](mockRequest, mockResponse, mockPayload as any)
-
-      // Assert
-      expect(mockResponse.writeHead).toHaveBeenCalledWith(302, expect.any(Object))
-      expect(responseHeaders.Location).toContain('/ws/student/')
-      expect(responseHeaders.Location).toContain('test-activity')
-    })
-  })
-})
-
-describe('handleLtiRequest', () => {
-  it('should handle basic LTI launch request for instructor', async () => {
-    const mockPayload: LtiBasicLaunchRequest = {
-      lti_message_type: 'basic-lti-launch-request',
-      lti_version: 'LTI-1p0',
-      resource_link_id: 123,
-      user_id: 456,
-      roles: 'Instructor',
-      context_id: 789,
-      context_label: 'TEST101',
-      context_title: 'Test Course',
-      context_type: 'CourseSection',
-      resource_link_title: 'Test Assignment',
-      lis_person_name_given: 'John',
-      lis_person_name_family: 'Doe',
-      lis_person_name_full: 'John Doe',
-      lis_person_contact_email_primary: 'john.doe@example.com',
-      launch_presentation_locale: 'en-US',
-      custom_activityname: 'Test Activity',
-      lis_result_sourcedid: {
-        data: {
-          instanceid: 'test-instance',
-          userid: 'test-user',
-          typeid: null,
-          launchid: 123
-        },
-        hash: 'test-hash'
-      },
-      lis_outcome_service_url: 'https://example.com/outcomes',
-      ext_user_username: 'jdoe',
-      ext_lms: 'test-lms',
-      tool_consumer_info_product_family_code: 'canvas',
-      tool_consumer_info_version: '1.0',
-      tool_consumer_instance_guid: 'example.com',
-      tool_consumer_instance_name: 'Example University',
-      tool_consumer_instance_description: 'Test Institution Description',
-      launch_presentation_document_target: 'iframe',
-      launch_presentation_return_url: 'http://example.com/return',
-      oauth_callback: 'about:blank'
-    }
-    // ...existing code...
-  })
-
-  it('should handle basic LTI launch request for student', async () => {
-    const mockPayload: LtiBasicLaunchRequest = {
-      lti_message_type: 'basic-lti-launch-request',
-      lti_version: 'LTI-1p0',
-      resource_link_id: 123,
-      user_id: 456,
-      roles: 'Learner',
-      context_id: 789,
-      context_label: 'TEST101',
-      context_title: 'Test Course',
-      context_type: 'CourseSection',
-      resource_link_title: 'Test Assignment',
-      lis_person_name_given: 'John',
-      lis_person_name_family: 'Doe',
-      lis_person_name_full: 'John Doe',
-      lis_person_contact_email_primary: 'john.doe@example.com',
-      launch_presentation_locale: 'en-US',
-      custom_activityname: 'Test Activity',
-      lis_result_sourcedid: {
-        data: {
-          instanceid: 'test-instance',
-          userid: 'test-user',
-          typeid: null,
-          launchid: 123
-        },
-        hash: 'test-hash'
-      },
-      lis_outcome_service_url: 'https://example.com/outcomes',
-      ext_user_username: 'jdoe',
-      ext_lms: 'test-lms',
-      tool_consumer_info_product_family_code: 'canvas',
-      tool_consumer_info_version: '1.0',
-      tool_consumer_instance_guid: 'example.com',
-      tool_consumer_instance_name: 'Example University',
-      tool_consumer_instance_description: 'Test Institution Description',
-      launch_presentation_document_target: 'iframe',
-      launch_presentation_return_url: 'http://example.com/return',
-      oauth_callback: 'about:blank'
-    }
-    // ...existing code...
   })
 })

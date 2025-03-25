@@ -9,7 +9,8 @@ We are using windows powershell. Keep in mind that you cant use operators like `
 
 ## Tests
 
-We are using Jest and yarn. Run `yarn test --testPathPattern "<relevant term>"`. Always change directory before running tests, for example `cd ./packages/server; yarn test`.
+- We are using Jest and yarn. Run `yarn test --testPathPattern "<relevant term>"`. Always change directory before running tests, for example `cd ./packages/server; yarn test`.
+- Sometimes not the tests are the issue, but the implementation. When you think that the tests should work, take a look at the implementation to find the bug.
 
 ## Alyways do the following
 

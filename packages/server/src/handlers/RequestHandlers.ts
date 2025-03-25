@@ -212,12 +212,25 @@ export const handlers: RestHandlerMap<
           'Access-Control-Allow-Origin': '*'
         })
 
-        // Send the response
-        response.end(JSON.stringify(graphs))
+        // Send the response with proper GraphSchema format
+        response.end(
+          JSON.stringify(
+            graphs.map((g) => ({
+              id: g.id,
+              path: g.path,
+              graph: g.graph
+            }))
+          )
+        )
       } catch (error) {
         // Log the error
         log.error('Error while fetching graphs: ', error)
 
+        // Send proper error response
+        response.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        })
         response.end(JSON.stringify({ error: 'Internal server error' }))
       }
     },
