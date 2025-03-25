@@ -86,7 +86,7 @@ export interface LtiBasicLaunchRequest {
     data: {
       instanceid: string
       userid: string
-      typeid?: string | null
+      typeid: string | null
       launchid: number
     }
     hash: string
@@ -119,7 +119,10 @@ export async function handleToolRegistration(
     toolRegistrationData: SuccessfulToolRegistrationResponse,
     openIdConfigJson: unknown
   ) => Promise<void>
-) {
+): Promise<{
+  registrationResponse: SuccessfulToolRegistrationResponse
+  openIdConfigJson: OpenIdConfigJson
+}> {
   try {
     const params = new URLSearchParams(request.url?.split('?')[1])
     const openid_configuration = params.get('openid_configuration') // https://www.imsglobal.org/spec/lti-dr/v1p0#openid-configuration
@@ -129,17 +132,13 @@ export async function handleToolRegistration(
       openid_configuration,
       registration_token
     )
+
     // write platform registration to database
     savePlatformCallback(registrationResponse, openIdConfigJson).then(() => {
-      // write ok
-      // response.writeHead(200, {
-      //   'Content-Type': 'application/json',
-      //   'Access-Control-Allow-Origin': '*'
-      // })
       response.end(JSON.stringify(registrationResponse))
     })
   } catch (error) {
-    return
+    throw new Error('Could not register tool: ' + error)
   }
 }
 

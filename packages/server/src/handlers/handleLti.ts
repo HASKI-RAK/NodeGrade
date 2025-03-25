@@ -7,15 +7,40 @@ import {
   isSuccessfulToolRegistrationResponse,
   LtiBasicLaunchRequest,
   LtiLaunchRequest,
+  SuccessfulToolRegistrationResponse,
   ToolRegistrationRequest
 } from '@haski/lti'
 import { IncomingMessage, ServerResponse } from 'http'
 import { log } from '../server'
 
+// Extend IncomingMessage to include body
+interface ExtendedIncomingMessage extends IncomingMessage {
+  body?: any
+}
+
 export const handleLtiToolRegistration = async (
-  request: IncomingMessage,
+  request: ExtendedIncomingMessage,
   response: ServerResponse<IncomingMessage>
-) => handleToolRegistration(request, response, savePlatformCallback)
+) => {
+  try {
+    // Check if it's a student launch request before handling registration
+    if (request.body?.roles === 'Learner' && request.body?.custom_activityname) {
+      response.writeHead(302, {
+        Location: `/ws/student/${request.body.custom_activityname}`
+      })
+      response.end()
+      return
+    }
+
+    // Handle tool registration if not a student launch
+    const result = await handleToolRegistration(request, response, savePlatformCallback)
+    return
+  } catch (error) {
+    log.error('Error in handleLtiToolRegistration:', error)
+    response.writeHead(500, { 'Content-Type': 'application/json' })
+    response.end(JSON.stringify({ error: 'Registration failed' }))
+  }
+}
 
 const savePlatformCallback = async (
   toolRegistrationResponse: unknown,
@@ -116,67 +141,101 @@ export const extractLtiLaunchRequest = (
 }
 
 export const extractBasicLtiLaunchRequest = (
-  params: URLSearchParams
+  params: URLSearchParams | Record<string, any>
 ): LtiBasicLaunchRequest | null => {
-  const user_id = parseInt(params.get('user_id') ?? '')
-  const lis_person_sourcedid = params.get('lis_person_sourcedid') ?? undefined
-  const roles = params.get('roles') ?? ''
-  const custom_activityname = params.get('custom_activityname') ?? undefined
-  const context_id = parseInt(params.get('context_id') ?? '')
-  const context_label = params.get('context_label') ?? ''
-  const context_title = params.get('context_title') ?? ''
-  const lti_message_type = params.get('lti_message_type') ?? ''
-  const resource_link_title = params.get('resource_link_title') ?? ''
-  const resource_link_description = params.get('resource_link_description') ?? undefined
-  const resource_link_id = parseInt(params.get('resource_link_id') ?? '')
-  const context_type = params.get('context_type') ?? ''
-  const lis_course_section_sourcedid =
-    params.get('lis_course_section_sourcedid') ?? undefined
+  // Handle both URLSearchParams and direct object input
+  const getValue = (key: string) => {
+    let value
+    if (params instanceof URLSearchParams) {
+      value = params.get(key)
+      if (value === null) return undefined
 
-  // eslint-disable-next-line immutable/no-let
-  let lis_result_sourcedid
-  try {
-    lis_result_sourcedid = params.get('lis_result_sourcedid')
-      ? JSON.parse(params.get('lis_result_sourcedid') ?? '')
-      : undefined
-  } catch {
-    return null // Invalid JSON format
+      // Special handling for version format
+      if (key === 'tool_consumer_info_version' && value === '1') {
+        return '1.0'
+      }
+
+      // Try to parse JSON string values
+      try {
+        if (value.startsWith('{') || value.startsWith('[')) {
+          return JSON.parse(value)
+        }
+      } catch {
+        // If JSON parsing fails, return the original value
+      }
+      return value
+    }
+
+    value = params[key]
+    // Handle direct object input similarly
+    if (key === 'tool_consumer_info_version' && value === '1') {
+      return '1.0'
+    }
+    return value
   }
 
-  const lis_outcome_service_url = params.get('lis_outcome_service_url') ?? ''
-  const lis_person_name_given = params.get('lis_person_name_given') ?? ''
-  const lis_person_name_family = params.get('lis_person_name_family') ?? ''
-  const lis_person_name_full = params.get('lis_person_name_full') ?? ''
-  const ext_user_username = params.get('ext_user_username') ?? ''
-  const lis_person_contact_email_primary =
-    params.get('lis_person_contact_email_primary') ?? ''
-  const launch_presentation_locale = params.get('launch_presentation_locale') ?? ''
-  const ext_lms = params.get('ext_lms') ?? ''
-  const tool_consumer_info_product_family_code =
-    params.get('tool_consumer_info_product_family_code') ?? ''
-  const tool_consumer_info_version = params.get('tool_consumer_info_version') ?? ''
-  const oauth_callback = params.get('oauth_callback') ?? ''
-  const lti_version = params.get('lti_version') ?? ''
-  const tool_consumer_instance_guid = params.get('tool_consumer_instance_guid') ?? ''
-  const tool_consumer_instance_name = params.get('tool_consumer_instance_name') ?? ''
-  const tool_consumer_instance_description =
-    params.get('tool_consumer_instance_description') ?? ''
-  const launch_presentation_document_target =
-    params.get('launch_presentation_document_target') ?? ''
-  const launch_presentation_return_url =
-    params.get('launch_presentation_return_url') ?? ''
+  // Extract and validate all fields
+  const user_id = parseInt(String(getValue('user_id') ?? ''))
+  const lis_person_sourcedid = getValue('lis_person_sourcedid')
+  const roles = String(getValue('roles') ?? '')
+  const custom_activityname = getValue('custom_activityname')
+  const context_id = parseInt(String(getValue('context_id') ?? ''))
+  const context_label = String(getValue('context_label') ?? '')
+  const context_title = String(getValue('context_title') ?? '')
+  const lti_message_type = String(getValue('lti_message_type') ?? '')
+  const resource_link_title = String(getValue('resource_link_title') ?? '')
+  const resource_link_description = getValue('resource_link_description')
+  const resource_link_id = parseInt(String(getValue('resource_link_id') ?? ''))
+  const context_type = String(getValue('context_type') ?? '')
+  const lis_course_section_sourcedid = getValue('lis_course_section_sourcedid')
+  const lis_result_sourcedid = getValue('lis_result_sourcedid')
+  const lis_outcome_service_url = String(getValue('lis_outcome_service_url') ?? '')
+  const lis_person_name_given = String(getValue('lis_person_name_given') ?? '')
+  const lis_person_name_family = String(getValue('lis_person_name_family') ?? '')
+  const lis_person_name_full = String(getValue('lis_person_name_full') ?? '')
+  const ext_user_username = String(getValue('ext_user_username') ?? '')
+  const lis_person_contact_email_primary = String(
+    getValue('lis_person_contact_email_primary') ?? ''
+  )
+  const launch_presentation_locale = String(getValue('launch_presentation_locale') ?? '')
+  const ext_lms = String(getValue('ext_lms') ?? '')
+  const tool_consumer_info_product_family_code = String(
+    getValue('tool_consumer_info_product_family_code') ?? ''
+  )
+  const tool_consumer_info_version = String(getValue('tool_consumer_info_version') ?? '')
+  const oauth_callback = String(getValue('oauth_callback') ?? '')
+  const lti_version = String(getValue('lti_version') ?? '')
+  const tool_consumer_instance_guid = String(
+    getValue('tool_consumer_instance_guid') ?? ''
+  )
+  const tool_consumer_instance_name = String(
+    getValue('tool_consumer_instance_name') ?? ''
+  )
+  const tool_consumer_instance_description = String(
+    getValue('tool_consumer_instance_description') ?? ''
+  )
+  const launch_presentation_document_target = String(
+    getValue('launch_presentation_document_target') ?? ''
+  )
+  const launch_presentation_return_url = String(
+    getValue('launch_presentation_return_url') ?? ''
+  )
 
+  // Validate all required fields
   if (
     !isNaN(user_id) &&
     roles &&
     !isNaN(context_id) &&
     context_label &&
     context_title &&
-    lti_message_type &&
+    lti_message_type === 'basic-lti-launch-request' &&
     resource_link_title &&
     !isNaN(resource_link_id) &&
     context_type &&
     lis_result_sourcedid &&
+    typeof lis_result_sourcedid === 'object' &&
+    lis_result_sourcedid.data &&
+    lis_result_sourcedid.hash &&
     lis_outcome_service_url &&
     lis_person_name_given &&
     lis_person_name_family &&
@@ -195,7 +254,7 @@ export const extractBasicLtiLaunchRequest = (
     launch_presentation_document_target &&
     launch_presentation_return_url
   ) {
-    const payload: LtiBasicLaunchRequest = {
+    return {
       user_id,
       lis_person_sourcedid,
       roles,
@@ -228,7 +287,6 @@ export const extractBasicLtiLaunchRequest = (
       launch_presentation_document_target,
       launch_presentation_return_url
     }
-    return payload
   }
 
   return null

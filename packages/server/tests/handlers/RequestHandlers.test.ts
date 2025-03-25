@@ -279,12 +279,26 @@ describe('handleLtiRequest', () => {
       lis_person_contact_email_primary: 'john.doe@example.com',
       launch_presentation_locale: 'en-US',
       custom_activityname: 'Test Activity',
-      lis_result_sourcedid: 'course-v1:123+456+789',
+      lis_result_sourcedid: {
+        data: {
+          instanceid: 'test-instance',
+          userid: 'test-user',
+          typeid: null,
+          launchid: 123
+        },
+        hash: 'test-hash'
+      },
       lis_outcome_service_url: 'https://example.com/outcomes',
       ext_user_username: 'jdoe',
+      ext_lms: 'test-lms',
+      tool_consumer_info_product_family_code: 'canvas',
+      tool_consumer_info_version: '1.0',
       tool_consumer_instance_guid: 'example.com',
       tool_consumer_instance_name: 'Example University',
-      tool_consumer_info_product_family_code: 'canvas'
+      tool_consumer_instance_description: 'Test Institution Description',
+      launch_presentation_document_target: 'iframe',
+      launch_presentation_return_url: 'http://example.com/return',
+      oauth_callback: 'about:blank'
     }
     // ...existing code...
   })
@@ -307,12 +321,26 @@ describe('handleLtiRequest', () => {
       lis_person_contact_email_primary: 'john.doe@example.com',
       launch_presentation_locale: 'en-US',
       custom_activityname: 'Test Activity',
-      lis_result_sourcedid: 'course-v1:123+456+789',
+      lis_result_sourcedid: {
+        data: {
+          instanceid: 'test-instance',
+          userid: 'test-user',
+          typeid: null,
+          launchid: 123
+        },
+        hash: 'test-hash'
+      },
       lis_outcome_service_url: 'https://example.com/outcomes',
       ext_user_username: 'jdoe',
+      ext_lms: 'test-lms',
+      tool_consumer_info_product_family_code: 'canvas',
+      tool_consumer_info_version: '1.0',
       tool_consumer_instance_guid: 'example.com',
       tool_consumer_instance_name: 'Example University',
-      tool_consumer_info_product_family_code: 'canvas'
+      tool_consumer_instance_description: 'Test Institution Description',
+      launch_presentation_document_target: 'iframe',
+      launch_presentation_return_url: 'http://example.com/return',
+      oauth_callback: 'about:blank'
     }
     // ...existing code...
   })
