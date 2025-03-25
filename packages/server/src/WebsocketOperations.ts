@@ -16,11 +16,11 @@ import { runLgraph, sendQuestion } from './Graph'
 import { log, xAPI } from './server'
 import { prismaGraphCreateOrUpdate } from './utils/prismaOperations'
 
-export function runGraph(
+export async function runGraph(
   payload: ClientEventPayload['runGraph'],
   ws: WebSocket,
   lgraph: LGraph
-): void {
+): Promise<void> {
   log.debug('event: runGraph')
   const timeItStart = Date.now()
   lgraph.configure(payload.graph)
@@ -29,14 +29,15 @@ export function runGraph(
     //TODO: Make this extendible only take the first 700 characters
     node.properties.value = payload.answer.substring(0, 700)
   })
-  // RUN GRAPH ITERATION
-  runLgraph(lgraph, (percentage) => {
-    // only send every 10%
-    sendWs(ws, {
-      eventName: 'processingPercentageUpdate',
-      payload: Number(percentage.toFixed(2)) * 100
+  try {
+    // RUN GRAPH ITERATION
+    await runLgraph(lgraph, (percentage) => {
+      // only send every 10%
+      sendWs(ws, {
+        eventName: 'processingPercentageUpdate',
+        payload: Number(percentage.toFixed(2)) * 100
+      })
     })
-  }).then(() => {
     log.debug('Finished running graph')
     const resultNodes = lgraph.findNodesByClass<OutputNode>(OutputNode)
     log.debug(
@@ -82,7 +83,9 @@ export function runGraph(
       eventName: 'graphFinished',
       payload: lgraph.serialize<SerializedGraph>()
     })
-  })
+  } catch (error) {
+    log.error('Error running graph: ', error)
+  }
   const timeItEnd = Date.now()
   log.info('Time it took to run graph: ', timeItEnd - timeItStart)
 }

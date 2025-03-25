@@ -235,6 +235,17 @@ describe('WebsocketOperations', () => {
 
       expect(log.info).toHaveBeenCalledWith('Time it took to run graph: ', 1000)
     })
+
+    it('should handle graph execution errors gracefully', async () => {
+      ;(runLgraph as jest.Mock).mockRejectedValueOnce(new Error('Graph execution failed'))
+
+      await runGraph(mockPayload, mockWs, mockLgraph)
+
+      // Wait for promises to resolve
+      await new Promise(process.nextTick)
+
+      expect(log.error).toHaveBeenCalledWith('Error running graph: ', expect.any(Error))
+    })
   })
 
   describe('saveGraph', () => {

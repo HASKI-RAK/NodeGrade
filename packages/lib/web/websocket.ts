@@ -40,7 +40,7 @@ export type EventHandlerMap<S extends ServerEventPayload | ClientEventPayload> =
         })
  * ```
  */
-export const handleWsRequest = <S extends ServerEventPayload | ClientEventPayload>(
+export const handleWsRequest = async <S extends ServerEventPayload | ClientEventPayload>(
   WsEvent: WebSocketEvent<S>,
   handlers: EventHandlerMap<S>
 ): Promise<boolean> => {
@@ -55,5 +55,5 @@ export const handleWsRequest = <S extends ServerEventPayload | ClientEventPayloa
       return true
     } else return false
   }
-  return handleEvent<keyof S>(WsEvent.eventName, WsEvent.payload)
+  return await handleEvent<keyof S>(WsEvent.eventName, WsEvent.payload)
 }

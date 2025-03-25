@@ -33,8 +33,8 @@ const addListeners = async (wss: wssType, server: serverType) => {
       const parsed: WebSocketEvent<ClientEventPayload> = JSON.parse(message.toString())
 
       handleWsRequest<ClientEventPayload>(parsed, {
-        runGraph: (payload) => runGraph(payload, ws, lgraph),
-        saveGraph: async (payload) => saveGraph(payload, lgraph, request, ws),
+        runGraph: async (payload) => await runGraph(payload, ws, lgraph),
+        saveGraph: async (payload) => await saveGraph(payload, lgraph, request, ws),
         loadGraph(payload) {
           log.debug('Loading graph from path: ', payload)
           setupGraphFromPath(ws, payload)
