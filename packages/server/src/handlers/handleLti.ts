@@ -292,4 +292,4 @@ export const extractBasicLtiLaunchRequest = (
   return null
 }
 
-export type { ToolRegistrationRequest }
+export type { LtiBasicLaunchRequest, LtiLaunchRequest, ToolRegistrationRequest }

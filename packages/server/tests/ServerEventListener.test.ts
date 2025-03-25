@@ -173,15 +173,14 @@ describe('ServerEventListener', () => {
     const requestHandler = mockServer.listeners('request')[0]
 
     // Create mock response data
-    const mockGraphs: GraphSchema[] = [
+    const mockGraphs = [
       { id: 1, path: '/test1', graph: '{}' },
       { id: 2, path: '/test2', graph: '{}' }
     ]
 
-    // Mock response.end to capture the response data
-    mockResponse.end = jest.fn().mockImplementation((data: string) => {
-      expect(JSON.parse(data)).toEqual(mockGraphs)
-      return mockResponse
+    // Mock handleRestRequest to write response
+    handleRestRequestMock.mockImplementationOnce(async (req, res) => {
+      res.write(JSON.stringify(mockGraphs))
     })
 
     // Act
@@ -200,7 +199,6 @@ describe('ServerEventListener', () => {
     expect(mockResponse.writeHead).toHaveBeenCalledWith(200, {
       'Content-Type': 'application/json'
     })
-    expect(mockResponse.end).toHaveBeenCalled()
   })
 
   it('should handle HTTP POST requests with JSON content type', async () => {

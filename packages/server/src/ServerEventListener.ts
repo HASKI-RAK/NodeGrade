@@ -99,6 +99,7 @@ const addListeners = async (wss: wssType, server: serverType) => {
           method,
           route
         }
+        response.writeHead(200, { 'Content-Type': 'application/json' })
         await handleRestRequest(request, response, restRequest, handlers)
       }
       // Handle options request
@@ -117,7 +118,9 @@ const addListeners = async (wss: wssType, server: serverType) => {
       log.error('Error handling request: ', error)
     } finally {
       log.trace('Request handled')
-      response.end()
+      if (!response.writableEnded) {
+        response.end()
+      }
     }
   })
   /**

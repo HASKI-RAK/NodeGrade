@@ -5,7 +5,7 @@ The frontend and backend use rest and websockets to communicate.
 
 ## Console
 
-We are using windows powershell. Keep in mind that you cant use operators like `&&` or `||` in powershell. Use `;` instead. Before running the first command, check the current directory with `ls`.
+We are using windows powershell. Keep in mind that you cant use operators like `&&` or `||` in powershell. Use `;` instead. Before running the first console command, check the current directory with `pwd; ls`!
 
 ## Tests
 
