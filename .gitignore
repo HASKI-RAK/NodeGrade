@@ -23,3 +23,4 @@ models/RunOne.json
 .editorconfig
 **/migrations/.editorconfig
 packages/server/prisma/migrations/**/migration.sql
+packages/server/prisma/migrations/migration_lock.toml
