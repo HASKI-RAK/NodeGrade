@@ -29,8 +29,33 @@ class Logger {
    * Sets the minimum log level at runtime
    * @param level - The minimum log level to display ("silly" | "trace" | "debug" | "info" | "warn" | "error" | "fatal")
    */
-  public setMinLevel(level: 'silly' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'): void {
-    this.log.settings.minLevel = level as unknown as number; // Cast to number to resolve type mismatch
+  public setMinLevel(
+    level: 'silly' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+  ): void {
+    this.log.settings.minLevel = levelToNumber(level)
+  }
+}
+
+function levelToNumber(
+  level: 'silly' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+): number {
+  switch (level) {
+    case 'silly':
+      return 0
+    case 'trace':
+      return 1
+    case 'debug':
+      return 2
+    case 'info':
+      return 3
+    case 'warn':
+      return 4
+    case 'error':
+      return 5
+    case 'fatal':
+      return 6
+    default:
+      throw new Error('Invalid log level')
   }
 }
 
