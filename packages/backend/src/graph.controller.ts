@@ -1,18 +1,18 @@
 import { Controller, Get, Res, HttpStatus } from '@nestjs/common';
 import { Response } from 'express';
 import { Logger } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { GraphService } from './graph.service';
 
-@Controller('graphs')
+@Controller('v1/graphs')
 export class GraphController {
   private readonly logger = new Logger(GraphController.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly graphService: GraphService) {}
 
   @Get()
   async findAllGraphs(@Res() response: Response): Promise<void> {
     try {
-      const graphs = await this.prisma.graph.findMany();
+      const graphs = await this.graphService.findAllGraphs();
 
       response.status(HttpStatus.OK).json(
         graphs.map((g) => ({

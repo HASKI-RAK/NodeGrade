@@ -1,29 +1,27 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GraphController } from './graph.controller';
-import { PrismaService } from './prisma.service';
+import { GraphService } from './graph.service';
 import { HttpStatus } from '@nestjs/common';
 
 describe('GraphController', () => {
   let graphController: GraphController;
-  let prismaService: PrismaService;
+  let graphService: GraphService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [GraphController],
       providers: [
         {
-          provide: PrismaService,
+          provide: GraphService,
           useValue: {
-            graph: {
-              findMany: jest.fn(),
-            },
+            findAllGraphs: jest.fn(),
           },
         },
       ],
     }).compile();
 
     graphController = module.get<GraphController>(GraphController);
-    prismaService = module.get<PrismaService>(PrismaService);
+    graphService = module.get<GraphService>(GraphService);
   });
 
   describe('findAllGraphs', () => {
@@ -33,7 +31,7 @@ describe('GraphController', () => {
         { id: 2, path: '/path2', graph: 'graph2' },
       ];
 
-      jest.spyOn(prismaService.graph, 'findMany').mockResolvedValue(mockGraphs);
+      jest.spyOn(graphService, 'findAllGraphs').mockResolvedValue(mockGraphs);
 
       const responseMock = {
         status: jest.fn().mockReturnThis(),
@@ -54,8 +52,8 @@ describe('GraphController', () => {
 
     it('should handle errors gracefully', async () => {
       jest
-        .spyOn(prismaService.graph, 'findMany')
-        .mockRejectedValue(new Error('Database error'));
+        .spyOn(graphService, 'findAllGraphs')
+        .mockRejectedValue(new Error('Service error'));
 
       const responseMock = {
         status: jest.fn().mockReturnThis(),
