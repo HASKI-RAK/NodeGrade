@@ -29,16 +29,17 @@
   "homepage": "https://github.com/theUpsider/ta-app#readme",
   "devDependencies": {
     "@types/cors": "^2",
-    "@types/express": "^4",
+    "@types/express": "^5.0.1",
     "@types/jest": "^27.4.0",
-    "@types/node": "^20.8.10",
+    "@types/node": "^22.13.13",
+    "@types/socket.io": "^3.0.2",
     "@types/ws": "^8.5.8",
     "jest": "^29.0.0",
     "jest-mock-extended": "2.0.4",
     "ts-jest": "^29.1.2",
-    "ts-node": "^10.9.1",
+    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.8.2"
   },
   "dependencies": {
     "@haski/lti": "workspace:*",
@@ -47,9 +48,10 @@
     "@xapi/xapi": "^3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.1",
+    "express": "^4.21.2",
     "pg-promise": "^11.5.4",
     "prisma": "^5.17.0",
+    "socket.io": "^4.8.1",
     "tslog": "^4.9.2",
     "ws": "^8.14.2"
   }

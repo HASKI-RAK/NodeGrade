@@ -4,8 +4,8 @@ This is a monorepo with multiple packages. We have a frontend, a backend, a shar
 The frontend and backend use rest and websockets to communicate.
 
 ## Console
-
-We are using windows powershell. Keep in mind that you cant use operators like `&&` or `||` in powershell. Use `;` instead. Before running the first console command, check the current directory with `pwd; ls`!
+Check the current os with `uname`.
+If we are using windows powershell, keep in mind that you cant use operators like `&&` or `||` in powershell. Use `;` instead. Before running the first console command, check the current directory with `pwd; ls`!
 
 ## Tests
 
