@@ -4,6 +4,7 @@ This is a monorepo with multiple packages. We have a frontend, a backend, a shar
 The frontend and backend use rest and websockets to communicate.
 
 ## Console
+
 Check the current os with `uname`.
 If we are using windows powershell, keep in mind that you cant use operators like `&&` or `||` in powershell. Use `;` instead. Before running the first console command, check the current directory with `pwd; ls`!
 
@@ -17,3 +18,4 @@ If we are using windows powershell, keep in mind that you cant use operators lik
 Before starting to work, briefly summarize your task in one short sentence!
 After implementing a feature, run the tests. If they fail, try to fix them based on the Test failures.
 Only focus on the task given to you, do not modify unrelated code.
+If you are not sure about something, ask for help. Do not hesitate to ask for clarification or help if you are stuck.

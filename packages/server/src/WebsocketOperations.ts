@@ -46,36 +46,36 @@ export async function runGraph(
     )
     const outputs = resultNodes.map((node) => node.properties)
     try {
-      xAPI.sendStatement({
-        statement: {
-          actor: {
-            name: 'User',
-            mbox: 'mailto:test@test.org'
-          },
-          verb: {
-            id: 'https://wiki.haski.app/variables/services.answered',
-            display: {
-              en: 'answered'
-            }
-          },
-          object: {
-            id: 'https://wiki.haski.app/functions/TextField',
-            definition: {
-              name: {
-                en: 'TextField'
-              },
-              extensions: {
-                'https://ta.haski.app/variables/services.user_id': payload.user_id,
-                'https://ta.haski.app/variables/services.answered': payload.answer,
-                'https://ta.haski.app/variables/services.timestamp': payload.timestamp,
-                'https://ta.haski.app/variables/services.domain': payload.domain,
-                'https://ta.haski.app/variables/services.outputs': outputs
-              }
-            }
-          },
-          timestamp: new Date().toISOString()
-        }
-      })
+      // xAPI.sendStatement({
+      //   statement: {
+      //     actor: {
+      //       name: 'User',
+      //       mbox: 'mailto:test@test.org'
+      //     },
+      //     verb: {
+      //       id: 'https://wiki.haski.app/variables/services.answered',
+      //       display: {
+      //         en: 'answered'
+      //       }
+      //     },
+      //     object: {
+      //       id: 'https://wiki.haski.app/functions/TextField',
+      //       definition: {
+      //         name: {
+      //           en: 'TextField'
+      //         },
+      //         extensions: {
+      //           'https://ta.haski.app/variables/services.user_id': payload.user_id,
+      //           'https://ta.haski.app/variables/services.answered': payload.answer,
+      //           'https://ta.haski.app/variables/services.timestamp': payload.timestamp,
+      //           'https://ta.haski.app/variables/services.domain': payload.domain,
+      //           'https://ta.haski.app/variables/services.outputs': outputs
+      //         }
+      //       }
+      //     },
+      //     timestamp: new Date().toISOString()
+      //   }
+      // })
     } catch (error) {
       log.error('Error sending xAPI statement: ', error)
     }

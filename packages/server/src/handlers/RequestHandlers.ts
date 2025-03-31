@@ -131,33 +131,33 @@ export const handlers: RestHandlerMap<
         log.debug('Basic LTI Launch Request with payload: ', payload)
         const timestamp = new Date().toISOString()
         const roles = payload.roles.split(',')
-        xAPI.sendStatement({
-          statement: {
-            actor: {
-              name: 'User',
-              mbox: 'mailto:' + payload.lis_person_contact_email_primary
-            },
-            verb: XAPI.Verbs.INITIALIZED,
-            object: {
-              id: 'https://ta.haski.app/lti/basiclogin',
-              definition: {
-                name: {
-                  en: 'LTI Basic Login'
-                },
-                description: {
-                  en: payload.lti_message_type
-                },
-                moreInfo: payload.launch_presentation_return_url,
-                extensions: {
-                  'https://ta.haski.app/lti/basiclogin': {
-                    payload: payload
-                  }
-                }
-              }
-            },
-            timestamp: timestamp
-          }
-        })
+        // xAPI.sendStatement({
+        //   statement: {
+        //     actor: {
+        //       name: 'User',
+        //       mbox: 'mailto:' + payload.lis_person_contact_email_primary
+        //     },
+        //     verb: XAPI.Verbs.INITIALIZED,
+        //     object: {
+        //       id: 'https://ta.haski.app/lti/basiclogin',
+        //       definition: {
+        //         name: {
+        //           en: 'LTI Basic Login'
+        //         },
+        //         description: {
+        //           en: payload.lti_message_type
+        //         },
+        //         moreInfo: payload.launch_presentation_return_url,
+        //         extensions: {
+        //           'https://ta.haski.app/lti/basiclogin': {
+        //             payload: payload
+        //           }
+        //         }
+        //       }
+        //     },
+        //     timestamp: timestamp
+        //   }
+        // })
         const isEditor = roles.includes('Instructor') || roles.includes('Administrator')
         // redirect to the tool frontend
         response.writeHead(302, {
