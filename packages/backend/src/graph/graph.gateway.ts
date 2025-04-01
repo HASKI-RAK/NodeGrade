@@ -1,11 +1,5 @@
 import { WebSocket } from 'ws';
-import {
-  AnswerInputNode,
-  ClientEventPayload,
-  LGraph,
-  OutputNode,
-  SerializedGraph,
-} from '@haski/ta-lib';
+import { ClientEventPayload } from '@haski/ta-lib';
 import { Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
@@ -16,6 +10,8 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { GraphHandlerService } from './graph-handler.service';
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -27,6 +23,8 @@ export class GraphGateway
   private readonly logger = new Logger(GraphGateway.name);
   @WebSocketServer()
   io: Server;
+
+  constructor(private readonly graphHandlerService: GraphHandlerService) {}
 
   afterInit() {
     this.logger.log('Initialized');
@@ -45,55 +43,11 @@ export class GraphGateway
 
   @SubscribeMessage('runGraph')
   async handleRunGraph(client: any, payload: ClientEventPayload['runGraph']) {
-    this.logger.log(`RunGraph event received from client id: ${client.id}`);
-    const lgraph = new LGraph();
-    lgraph.configure(payload.graph);
-
-    lgraph
-      .findNodesByClass<AnswerInputNode>(AnswerInputNode)
-      .forEach((node) => {
-        node.properties.value = payload.answer.substring(0, 700);
-      });
-
-    try {
-      await runLgraph(lgraph, (percentage) => {
-        client.emit('processingPercentageUpdate', {
-          eventName: 'processingPercentageUpdate',
-          payload: Number(percentage.toFixed(2)) * 100,
-        });
-      });
-
-      const resultNodes = lgraph.findNodesByClass<OutputNode>(OutputNode);
-      const outputs = resultNodes.map((node) => node.properties);
-
-      client.emit('graphFinished', {
-        eventName: 'graphFinished',
-        payload: lgraph.serialize<SerializedGraph>(),
-      });
-    } catch (error) {
-      this.logger.error('Error running graph: ', error);
-    }
+    await this.graphHandlerService.handleRunGraph(client, payload);
   }
 
   @SubscribeMessage('saveGraph')
   async handleSaveGraph(client: any, payload: ClientEventPayload['saveGraph']) {
-    this.logger.log(`SaveGraph event received from client id: ${client.id}`);
-    const lgraph = new LGraph();
-    lgraph.configure(payload.graph);
-
-    const name = payload.name || 'UnnamedGraph';
-    this.logger.debug(`Saving graph with name: ${name}`);
-
-    try {
-      await prismaGraphCreateOrUpdate(prisma, name, lgraph);
-      client.emit('graphSaved', {
-        eventName: 'graphSaved',
-        payload: lgraph.serialize<SerializedGraph>(),
-      });
-
-      sendQuestion(lgraph, client);
-    } catch (error) {
-      this.logger.error('Error saving graph: ', error);
-    }
+    await this.graphHandlerService.handleSaveGraph(client, payload);
   }
 }
