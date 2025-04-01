@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { GraphGateway } from './graph/graph.gateway';
+import { GraphModule } from './graph/graph.module';
 
 @Module({
-  imports: [],
+  imports: [GraphModule],
   controllers: [AppController],
-  providers: [AppService, GraphGateway],
+  providers: [AppService],
 })
 export class AppModule {}

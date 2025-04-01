@@ -126,28 +126,3 @@ function testGraph(lgraph: LGraph, ws: WebSocket) {
   sendWs(ws, { eventName: 'graphFinished', payload: lgraph.serialize() })
   return lgraph
 }
-
-/**
- * Run the graph in order
- * first compute the execution order
- * then run each node
- * @async
- * @param lgraph - graph to run
- */
-export async function runLgraph(
-  lgraph: LGraph,
-  updateProggresCb?: (progress: number) => void,
-  onlyOnExecute = false
-) {
-  const execorder = lgraph.computeExecutionOrder<LGraphNode[]>(onlyOnExecute, true)
-  for (const [index, node] of execorder.entries()) {
-    try {
-      await node.onExecute?.()
-      updateProggresCb?.(index / execorder.length)
-    } catch (error) {
-      // log.warn(error)
-      // TODO reset node green states
-    }
-  }
-  return lgraph
-}
