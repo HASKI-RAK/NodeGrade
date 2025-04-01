@@ -3201,6 +3201,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@nestjs/platform-socket.io@npm:^11.0.12":
+  version: 11.0.12
+  resolution: "@nestjs/platform-socket.io@npm:11.0.12"
+  dependencies:
+    socket.io: "npm:4.8.1"
+    tslib: "npm:2.8.1"
+  peerDependencies:
+    "@nestjs/common": ^11.0.0
+    "@nestjs/websockets": ^11.0.0
+    rxjs: ^7.1.0
+  checksum: 10c0/0899bf39a990e5c430dddc32bfc4157ec71fa1924ec8eecd30139fab850cc684d93e33f1849fd35e1b77c79b4b1e7c175110f8b9182e5baf6246798b63a5d4fb
+  languageName: node
+  linkType: hard
+
 "@nestjs/schematics@npm:^11.0.0, @nestjs/schematics@npm:^11.0.1":
   version: 11.0.2
   resolution: "@nestjs/schematics@npm:11.0.2"
@@ -3232,6 +3246,26 @@ __metadata:
     "@nestjs/platform-express":
       optional: true
   checksum: 10c0/d39d9800e8d93c6d90cc1b3f10eba745daf0bc7317143ae3737d7481cd42c98bd83ae23ca0f9d305f0e6de5759fc3d4d40e6dfde2c3eb5afd7fd09b403caecb6
+  languageName: node
+  linkType: hard
+
+"@nestjs/websockets@npm:^11.0.12":
+  version: 11.0.12
+  resolution: "@nestjs/websockets@npm:11.0.12"
+  dependencies:
+    iterare: "npm:1.2.1"
+    object-hash: "npm:3.0.0"
+    tslib: "npm:2.8.1"
+  peerDependencies:
+    "@nestjs/common": ^11.0.0
+    "@nestjs/core": ^11.0.0
+    "@nestjs/platform-socket.io": ^11.0.0
+    reflect-metadata: ^0.1.12 || ^0.2.0
+    rxjs: ^7.1.0
+  peerDependenciesMeta:
+    "@nestjs/platform-socket.io":
+      optional: true
+  checksum: 10c0/446496df78f7d3567e698f1bc220fc0e2a8a487b278c0541fb0c8d82dc72c2328bdf03965ffa1c08b9d0a93167eaddf58e8320b3e4e890de47bdcbc6057cec8a
   languageName: node
   linkType: hard
 
@@ -5431,8 +5465,10 @@ __metadata:
     "@nestjs/common": "npm:^11.0.1"
     "@nestjs/core": "npm:^11.0.1"
     "@nestjs/platform-express": "npm:^11.0.1"
+    "@nestjs/platform-socket.io": "npm:^11.0.12"
     "@nestjs/schematics": "npm:^11.0.0"
     "@nestjs/testing": "npm:^11.0.1"
+    "@nestjs/websockets": "npm:^11.0.12"
     "@prisma/client": "npm:^6.5.0"
     "@swc/cli": "npm:^0.6.0"
     "@swc/core": "npm:^1.10.7"
@@ -10575,6 +10611,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"object-hash@npm:3.0.0":
+  version: 3.0.0
+  resolution: "object-hash@npm:3.0.0"
+  checksum: 10c0/a06844537107b960c1c8b96cd2ac8592a265186bfa0f6ccafe0d34eabdb526f6fa81da1f37c43df7ed13b12a4ae3457a16071603bcd39d8beddb5f08c37b0f47
+  languageName: node
+  linkType: hard
+
 "object-inspect@npm:^1.13.1":
   version: 1.13.2
   resolution: "object-inspect@npm:1.13.2"
@@ -12238,7 +12281,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"socket.io@npm:*, socket.io@npm:^4.8.1":
+"socket.io@npm:*, socket.io@npm:4.8.1, socket.io@npm:^4.8.1":
   version: 4.8.1
   resolution: "socket.io@npm:4.8.1"
   dependencies:
