@@ -2,8 +2,6 @@
 
 import { IncomingMessage, ServerResponse } from 'http'
 
-import config from '../config.json'
-
 export interface ToolRegistrationRequest {
   client_id: string
   initiate_login_uri: string
@@ -168,10 +166,16 @@ const getRegistrationEndpoint = async (
         response_types: ['id_token'],
         client_name: 'Task Assessment',
         'client_name#de': 'Aufgabenbewertung',
-        redirect_uris: [...config.redirect_urls], // testen ob das so geht oder auch ohne url am ende
+        redirect_uris: [
+          'http://localhost:5173/ws/editor/lol/1/2',
+          'http://localhost:5000',
+          'http://localhost:5000/v1/lti/register',
+          'http://localhost:5173',
+          'http://localhost:5173/lti/register'
+        ],
         policy_uri: 'http://localhost:5000/policy',
         'policy_uri#de': 'http://localhost:5000/policy',
-        initiate_login_uri: config.initiate_login_uri,
+        initiate_login_uri: 'http://localhost:5173/lti/login',
         jwks_uri: 'http://localhost:5000/.well-known/jwks',
         token_endpoint_auth_method: 'private_key_jwt',
         scope:

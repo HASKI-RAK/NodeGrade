@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { GraphModule } from 'src/graphgateway/graph.module';
+import { GraphModule } from '../graphgateway/graph.module';
 
 @Module({
   imports: [GraphModule],

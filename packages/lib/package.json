@@ -4,8 +4,8 @@
   "description": "library for holding nodes, event and shared core features in the task assessment",
   "main": "index.ts",
   "author": "David Fischer",
+  "type": "module",
   "license": "MIT",
-  "type": "commonjs",
   "scripts": {
     "build": "tsc"
   },
