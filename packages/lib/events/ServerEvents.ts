@@ -20,7 +20,7 @@ export type ServerEventPayload = {
   nodeExecuting: number // node id
   nodeExecuted: number // node id
   graphSaved: SerializedGraph // graph
-  output: {
+  outputSet: {
     uniqueId: string
     type: OutputType
     label: string
@@ -29,13 +29,13 @@ export type ServerEventPayload = {
   //feedback: string // string from the feedback node
   //successPercentage: number // can be used for cosine similarity and is indicated by a progress bar in the frontend. used by successPercentageNode
   maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 700
-  nodeError: {
+  nodeErrorOccured: {
     nodeId: number
     error: string
   }
-  question: string // question from the question node
-  questionImage: string // image from the question node
-  processingPercentageUpdate: number // displays in the frontend as a progress bar from 0 to 100. Server calculates the percentage of the graph that has been processed
+  questionSet: string // question from the question node
+  questionImageSet: string // image from the question node
+  percentageUpdated: number // displays in the frontend as a progress bar from 0 to 100. Server calculates the percentage of the graph that has been processed
 }
 
 export type ServerBenchmarkPostPayload = (string | number | string[])[]

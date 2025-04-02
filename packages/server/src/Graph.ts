@@ -76,7 +76,7 @@ export function addOnNodeAdded(
         node.color = '#ff0000'
         if (!benchmark && ws) {
           sendWs(ws, {
-            eventName: 'nodeError',
+            eventName: 'nodeErrorOccured',
             payload: {
               nodeId: node.id,
               error:
@@ -102,7 +102,7 @@ export function sendQuestion(lgraph: LGraph, ws: WebSocket) {
     // send question
     log.debug('Sending question: ', question.properties.value)
     sendWs(ws, {
-      eventName: 'question',
+      eventName: 'questionSet',
       payload: question.properties.value
     })
   }
@@ -115,7 +115,7 @@ export const sendImages = (ws: WebSocket, lgraph: LGraph) => {
     if (!image.properties.imageUrl) continue
     log.debug('Sending image: ', image.properties_info)
     sendWs(ws, {
-      eventName: 'questionImage',
+      eventName: 'questionImageSet',
       payload: image.properties.imageUrl
     })
   }

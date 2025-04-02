@@ -81,7 +81,7 @@ export const Editor = () => {
   })
   const [question, setQuestion] = useState<string>('')
   const [outputs, setOutputs] = useState<
-    Record<string, ServerEventPayload['output']> | undefined
+    Record<string, ServerEventPayload['outputSet']> | undefined
   >(undefined)
   // get search params:
   const searchParams = new URLSearchParams(window.location.search)
@@ -175,7 +175,7 @@ export const Editor = () => {
           lgraph.configure(payload)
           lgraph.setDirtyCanvas(true, true)
         },
-        question(payload) {
+        questionSet(payload) {
           setQuestion(payload)
         },
         nodeExecuting: (nodeId) => handleNodeExecuting(lgraph, nodeId),
@@ -187,7 +187,7 @@ export const Editor = () => {
             open: true
           })
         },
-        output(output) {
+        outputSet(output) {
           // check if output is already in outputs, if not add it, otherwise update it
           console.log('Outputs: ', outputs)
           setOutputs((prev) => {
@@ -196,7 +196,7 @@ export const Editor = () => {
           })
           console.log('Output: ', output)
         },
-        nodeError(payload) {
+        nodeErrorOccured(payload) {
           console.warn('Node error: ', payload)
           setSnackbar({
             message: payload.error,
@@ -207,10 +207,10 @@ export const Editor = () => {
         maxInputChars(maxChars) {
           setMaxInputChars(maxChars)
         },
-        processingPercentageUpdate(payload) {
+        percentageUpdated(payload) {
           setProcessingPercentage(payload)
         },
-        questionImage: function (imageBase64: string): void | Promise<void> {
+        questionImageSet: function (imageBase64: string): void | Promise<void> {
           setImage(imageBase64)
         }
       }).then((handled) => {

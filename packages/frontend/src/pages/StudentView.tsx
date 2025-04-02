@@ -33,7 +33,7 @@ export const StudentView = () => {
   })
   const [question, setQuestion] = useState<string>('')
   const [outputs, setOutputs] = useState<
-    Record<string, ServerEventPayload['output']> | undefined
+    Record<string, ServerEventPayload['outputSet']> | undefined
   >(undefined)
   const memoizedOutputs = useMemo(() => outputs, [outputs])
   const [image, setImage] = useState<string>('')
@@ -64,7 +64,7 @@ export const StudentView = () => {
           lgraph.configure(payload)
           lgraph.setDirtyCanvas(true, true)
         },
-        question(payload) {
+        questionSet(payload) {
           setQuestion(payload)
         },
         graphSaved: () => {
@@ -74,7 +74,7 @@ export const StudentView = () => {
             open: true
           })
         },
-        output(output) {
+        outputSet(output) {
           // check if output is already in outputs, if not add it, otherwise update it
           console.log('Outputs: ', outputs)
           setOutputs((prev) => {
@@ -83,7 +83,7 @@ export const StudentView = () => {
           })
           console.log('Output: ', output)
         },
-        nodeError(payload) {
+        nodeErrorOccured(payload) {
           console.warn('Node error: ', payload)
           setSnackbar({
             message: payload.error,
@@ -94,13 +94,13 @@ export const StudentView = () => {
         maxInputChars(maxChars) {
           setMaxInputChars(maxChars)
         },
-        processingPercentageUpdate(payload) {
+        percentageUpdated(payload) {
           setProcessingPercentage(payload)
         },
         // We don't have handlers for these events
         nodeExecuting: function (): void | Promise<void> {},
         nodeExecuted: function (): void | Promise<void> {},
-        questionImage: function (base64Image: string): void | Promise<void> {
+        questionImageSet: function (base64Image: string): void | Promise<void> {
           console.log('Image received')
           setImage(base64Image)
         }

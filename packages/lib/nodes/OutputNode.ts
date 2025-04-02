@@ -11,7 +11,7 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  * path: output/feedback
  */
 export class OutputNode extends LGraphNode {
-  properties: ServerEventPayload['output']
+  properties: ServerEventPayload['outputSet']
   constructor() {
     super()
     this.title = 'feedback output'

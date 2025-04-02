@@ -34,7 +34,7 @@ export async function runGraph(
     await runLgraph(lgraph, (percentage) => {
       // only send every 10%
       sendWs(ws, {
-        eventName: 'processingPercentageUpdate',
+        eventName: 'percentageUpdated',
         payload: Number(percentage.toFixed(2)) * 100
       })
     })
