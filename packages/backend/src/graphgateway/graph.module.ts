@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { GraphGateway } from './graph.gateway';
-import { GraphService } from 'src/graph.service';
+import { GraphService } from 'src/graph/graph.service';
 
 @Module({
   providers: [GraphGateway, GraphService],

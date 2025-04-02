@@ -1,14 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
-import { AnswerInputNode, LiteGraph, QuestionNode } from '@haski/ta-lib';
+import { PrismaService } from '../prisma.service';
+import {
+  AnswerInputNode,
+  LiteGraph,
+  OutputNode,
+  QuestionNode,
+} from '@haski/ta-lib';
 // import { addOnNodeAdded, runLgraph } from './Graph'; //TODO: migrate from old codebase
 import { SampleSolutionNode } from '@haski/ta-lib/nodes/SampleSolutionNode';
+import { executeLgraph } from 'src/core/Graph';
 
 @Injectable()
 export class BenchmarkService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async processBenchmark({
+  async runBenchmark({
     path,
     data,
   }: {
@@ -19,9 +25,7 @@ export class BenchmarkService {
       where: { path },
     });
 
-    if (!graph) {
-      throw new Error('Graph not found');
-    }
+    if (!graph) throw new Error('Graph not found');
 
     const lgraph = new LiteGraph.LGraph();
     // addOnNodeAdded(lgraph, undefined, true);
@@ -38,14 +42,10 @@ export class BenchmarkService {
       node.properties.value = data.answer;
     });
 
-    // const result = await runLgraph(lgraph);
+    const result = await executeLgraph(lgraph);
 
-    // if (!result) {
-    //   throw new Error('No result from graph execution');
-    // }
-
-    // return result
-    //   .findNodesByClass('OutputNode')
-    //   .map((node) => node.properties.value);
+    return result
+      .findNodesByClass(OutputNode)
+      .map((node) => node.properties.value);
   }
 }

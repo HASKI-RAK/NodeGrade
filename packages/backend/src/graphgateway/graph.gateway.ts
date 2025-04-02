@@ -2,6 +2,8 @@ import { WebSocket } from 'ws';
 import { ClientEventPayload } from '@haski/ta-lib';
 import { Logger } from '@nestjs/common';
 import {
+  ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
@@ -9,7 +11,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { GraphHandlerService } from './graph-handler.service';
 
 @WebSocketGateway({
@@ -30,24 +32,38 @@ export class GraphGateway
     this.logger.log('Initialized');
   }
 
-  handleConnection(client: any, ...args: any[]) {
+  handleConnection(client: Socket) {
     const { sockets } = this.io.sockets;
 
     this.logger.log(`Client id: ${client.id} connected`);
     this.logger.debug(`Number of connected clients: ${sockets.size}`);
   }
 
-  handleDisconnect(client: any) {
+  handleDisconnect(client: Socket) {
     this.logger.log(`Client id:${client.id} disconnected`);
   }
 
   @SubscribeMessage('runGraph')
-  async handleRunGraph(client: any, payload: ClientEventPayload['runGraph']) {
+  async handleRunGraph(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ClientEventPayload['runGraph'],
+  ) {
     await this.graphHandlerService.handleRunGraph(client, payload);
   }
 
   @SubscribeMessage('saveGraph')
-  async handleSaveGraph(client: any, payload: ClientEventPayload['saveGraph']) {
+  async handleSaveGraph(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ClientEventPayload['saveGraph'],
+  ) {
     await this.graphHandlerService.handleSaveGraph(client, payload);
+  }
+
+  @SubscribeMessage('loadGraph')
+  async handleLoadGraph(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ClientEventPayload['loadGraph'],
+  ) {
+    await this.graphHandlerService.handleLoadGraph(client, payload);
   }
 }

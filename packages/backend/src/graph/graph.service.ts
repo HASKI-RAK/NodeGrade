@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { PrismaService } from '../prisma.service';
 import { LGraph, LGraphNode } from '@haski/ta-lib';
 
 @Injectable()
@@ -10,6 +10,7 @@ export class GraphService {
     return this.prisma.graph.findMany();
   }
 
+  //TODO: doesnt belong here
   /**
    * Run the graph in order
    * first compute the execution order
@@ -33,6 +34,8 @@ export class GraphService {
         await node.onExecute?.();
         updateProggresCb?.(index / execorder.length);
       } catch (error) {
+        console.error('Error executing node:', error);
+        // Optionally log the error or handle it as needed
         // Handle node execution errors
         // TODO: Reset node green states or handle errors appropriately
       }
