@@ -31,10 +31,6 @@ export class SentenceTransformer extends LGraphNode {
     return SentenceTransformer.path
   }
 
-  setWebSocket(_ws: WebSocket): void {
-    this.ws = _ws
-  }
-
   async init(_env: Record<string, unknown>) {
     this.env = _env
   }

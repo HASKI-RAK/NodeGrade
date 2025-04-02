@@ -28,10 +28,6 @@ export class ImageNode extends LGraphNode {
     return ImageNode.path
   }
 
-  setWebSocket(_ws: WebSocket): void {
-    this.ws = _ws
-  }
-
   async init(_env: Record<string, unknown>) {
     this.env = _env
   }

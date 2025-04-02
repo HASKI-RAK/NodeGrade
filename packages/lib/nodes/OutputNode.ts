@@ -52,18 +52,13 @@ export class OutputNode extends LGraphNode {
     return OutputNode.path
   }
 
-  // this node uses the websocket
-  setWebSocket(ws: WebSocket) {
-    this.ws = ws
-  }
-
   //name of the function to call when executing
   async onExecute() {
     if (this.inputs[0]) {
       this.properties.value = this.getInputData(0)
     }
-    const output: ServerEvent<'output'> = {
-      eventName: 'output',
+    const output: ServerEvent<'outputSet'> = {
+      eventName: 'outputSet',
       payload: {
         uniqueId: this.id.toString(),
         type: this.properties.type,
@@ -71,8 +66,7 @@ export class OutputNode extends LGraphNode {
         value: this.properties.value
       }
     }
-    // console.log('output', output)
-    this.ws?.send(JSON.stringify(output))
+    this.emitEventCallback?.(output)
   }
 
   getTitle(): string {

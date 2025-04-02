@@ -3,6 +3,7 @@ import { WebSocket } from 'ws'
 
 import WebSocketNode from '../behavior/WebSocketNode'
 import { InOut } from '../types/NodeLinkMessage'
+import { ServerEvent, ServerEventPayload } from '../../events'
 
 interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
@@ -19,7 +20,9 @@ interface ILGraphNode extends LGN {
 // extend the LGraphNode class by adding a new method
 export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNode {
   env?: Record<string, unknown> | undefined
-  ws: WebSocket | undefined
+
+  emitEventCallback?(event: ServerEvent<keyof ServerEventPayload>): void
+
   static path: string
   static getPath(): string {
     throw new Error('getPath() not implemented')
@@ -131,8 +134,6 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
 
     return colorCodes[type]
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setWebSocket?(_ws: WebSocket): void
   init?(env: Record<string, unknown>): Promise<void>
 }
 

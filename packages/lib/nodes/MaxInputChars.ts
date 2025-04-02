@@ -27,10 +27,7 @@ export class MaxInputChars extends LGraphNode {
     return MaxInputChars.path
   }
 
-  // this node uses the websocket
-  setWebSocket(ws: WebSocket) {
-    this.ws = ws
-  }
+
 
   //name of the function to call when executing
   async onExecute() {
@@ -41,7 +38,7 @@ export class MaxInputChars extends LGraphNode {
       eventName: 'maxInputChars',
       payload: this.properties.value
     }
-    this.ws?.send(JSON.stringify(output))
+    this.emitEventCallback?.(output)
   }
 
   getTitle(): string {

@@ -155,10 +155,6 @@ export class LLMNode extends LGraphNode {
     return LLMNode.path
   }
 
-  setWebSocket(_ws: WebSocket): void {
-    this.ws = _ws
-  }
-
   // onAdded(_: LGraph): void {
   //   // this.initModels(['Wizard-Vicuna-30B-Uncensored'])
   // }
