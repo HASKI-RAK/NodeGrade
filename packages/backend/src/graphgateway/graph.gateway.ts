@@ -1,4 +1,3 @@
-import { WebSocket } from 'ws';
 import { ClientEventPayload } from '@haski/ta-lib';
 import { Logger } from '@nestjs/common';
 import {

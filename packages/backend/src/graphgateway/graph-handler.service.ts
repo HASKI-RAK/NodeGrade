@@ -4,14 +4,15 @@ import {
   LGraph,
   SerializedGraph,
   AnswerInputNode,
-  OutputNode,
   LGraphNode,
   LiteGraph,
   ServerEvent,
   ServerEventPayload,
 } from '@haski/ta-lib';
-import { GraphService } from 'src/graph/graph.service';
 import { Socket } from 'socket.io';
+import { emitEvent } from 'utils/socket-emitter';
+import { GraphService } from 'src/graph/graph.service';
+import { executeLgraph } from 'src/core/Graph';
 
 @Injectable()
 export class GraphHandlerService {
@@ -39,38 +40,54 @@ export class GraphHandlerService {
         };
       }
 
-      const onExecute = node.onExecute;
-      node.onExecute = async function () {
+      const onExecute = node.onExecute?.bind(node) as typeof node.onExecute;
+      node.onExecute = async () => {
         this.logger.debug(`Executing node: ${node.title}`);
 
-        if (!benchmark && client) {
-          client.emit('nodeExecuting', node.id);
-        }
+        if (!benchmark && client) emitEvent(client, 'nodeExecuting', node.id);
 
         node.color = LiteGraph.NODE_DEFAULT_COLOR;
 
         try {
-          await onExecute?.call(node);
+          await onExecute?.();
 
           if (!benchmark && client) {
             this.logger.debug(`Executed node: ${node.title}`);
-            client.emit('nodeExecuted', node.id);
+            emitEvent(client, 'nodeExecuted', node.id);
           }
-        } catch (error) {
+        } catch (error: unknown) {
           this.logger.error(error);
           node.color = '#ff0000';
 
           if (!benchmark && client) {
-            client.emit('nodeErrorOccured', {
+            emitEvent(client, 'nodeErrorOccured', {
               nodeId: node.id,
-              error: `Error while executing node: '${node.title}' with error: ${error.message}`,
+              error: `Error while executing node: '${node.title}`,
             });
           }
         }
-      }.bind(this);
+      };
     };
   }
 
+  /**
+   * Handles the "runGraph" event from a client. Configures and executes a graph
+   * based on the provided payload, updates the client with processing progress,
+   * and emits the final serialized graph upon completion.
+   *
+   * @param client - The socket client that initiated the event.
+   * @param payload - The payload containing the graph configuration and input data.
+   *
+   * @remarks
+   * - The graph is configured using the `LGraph` class and its nodes are updated
+   *   with the provided input data.
+   * - Progress updates are sent to the client via the `processingPercentageUpdate` event.
+   * - Upon successful execution, the serialized graph is emitted to the client
+   *   through the `graphFinished` event.
+   * - Errors during graph execution are logged.
+   *
+   * @throws Will log an error if the graph execution fails.
+   */
   async handleRunGraph(
     client: Socket,
     payload: ClientEventPayload['runGraph'],
@@ -89,41 +106,76 @@ export class GraphHandlerService {
       });
 
     try {
-      await this.graphService.runLgraph(lgraph, (percentage) => {
-        client.emit('processingPercentageUpdate', {
-          eventName: 'processingPercentageUpdate',
-          payload: Number(percentage.toFixed(2)) * 100,
-        });
+      await executeLgraph(lgraph, (percentage) => {
+        emitEvent(
+          client,
+          'percentageUpdated',
+          Number(percentage.toFixed(2)) * 100,
+        );
       });
 
-      const resultNodes = lgraph.findNodesByClass<OutputNode>(OutputNode);
-      const outputs = resultNodes.map((node) => node.properties);
-
-      client.emit('graphFinished', {
-        eventName: 'graphFinished',
-        payload: lgraph.serialize<SerializedGraph>(),
-      });
+      emitEvent(client, 'graphFinished', lgraph.serialize<SerializedGraph>());
     } catch (error) {
       this.logger.error('Error running graph: ', error);
     }
   }
 
-  async handleSaveGraph(client: any, payload: ClientEventPayload['saveGraph']) {
+  /**
+   * Handles the "saveGraph" event from a client. This method processes the
+   * incoming graph data, configures it into an LGraph instance, and saves it
+   * using the graph service. Upon successful saving, it emits a "graphSaved"
+   * event back to the client with the serialized graph data.
+   *
+   * @param client - The socket client instance that sent the event.
+   * @param payload - The payload containing the graph data and optional graph name.
+   *   - `payload.graph` - The graph configuration data to be saved.
+   *   - `payload.name` - (Optional) The name of the graph. Defaults to "UnnamedGraph" if not provided.
+   *
+   * @throws Will log an error if the graph saving process fails.
+   */
+  async handleSaveGraph(
+    client: Socket,
+    payload: ClientEventPayload['saveGraph'],
+  ) {
     this.logger.log(`SaveGraph event received from client id: ${client.id}`);
     const lgraph = new LGraph();
     lgraph.configure(payload.graph);
 
-    const name = payload.name || 'UnnamedGraph';
-    this.logger.debug(`Saving graph with name: ${name}`);
+    const pathname = payload.name || 'UnnamedGraph';
+    this.logger.debug(`Saving graph with pathname: ${pathname}`);
 
     try {
-      await this.graphService.saveGraph(name, lgraph);
-      client.emit('graphSaved', {
-        eventName: 'graphSaved',
-        payload: lgraph.serialize<SerializedGraph>(),
-      });
+      await this.graphService.saveGraph(pathname, lgraph);
+      emitEvent(client, 'graphSaved', lgraph.serialize<SerializedGraph>());
     } catch (error) {
       this.logger.error('Error saving graph: ', error);
+    }
+  }
+
+  async handleLoadGraph(
+    client: Socket,
+    payload: ClientEventPayload['loadGraph'],
+  ) {
+    this.logger.log(`LoadGraph event received from client id: ${client.id}`);
+    const pathname = payload || 'UnnamedGraph';
+    this.logger.debug(`Loading graph with pathname: ${pathname}`);
+
+    try {
+      const graph = await this.graphService.getGraph(pathname);
+      if (graph) {
+        const lgraph = new LGraph();
+        lgraph.configure(JSON.parse(graph.graph));
+        this.addOnNodeAdded(lgraph, client);
+
+        emitEvent(client, 'graphLoaded', lgraph.serialize<SerializedGraph>());
+      } else {
+        client.emit('graphNotFound', {
+          eventName: 'graphNotFound',
+          payload: `Graph with pathname "${pathname}" not found.`,
+        });
+      }
+    } catch (error) {
+      this.logger.error('Error loading graph: ', error);
     }
   }
 }

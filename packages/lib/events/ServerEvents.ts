@@ -16,10 +16,11 @@ export type OutputType = 'text' | 'score' | 'classifications'
 
 // type that matches ServerEventName with payload
 export type ServerEventPayload = {
-  graphFinished: SerializedGraph // graph
+  graphFinished: SerializedGraph // graph run finished
   nodeExecuting: number // node id
   nodeExecuted: number // node id
   graphSaved: SerializedGraph // graph
+  graphLoaded: SerializedGraph // after loading a graph
   outputSet: {
     uniqueId: string
     type: OutputType
@@ -46,7 +47,7 @@ export type ClientEventPayload = {
     graph: SerializedGraph
     name?: string // when no name is given, use the current location.pathname
   }
-  loadGraph: string // loads a graph by id (unique string identifier)
+  loadGraph: string // loads a graph by pathname
   // runs a graph
   runGraph: {
     answer: string

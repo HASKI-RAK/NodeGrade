@@ -17,6 +17,7 @@ export class BenchmarkController {
       };
     },
   ) {
-    return this.benchmarkService.runBenchmark(data);
+    const result = this.benchmarkService.runBenchmark(data);
+    return result;
   }
 }

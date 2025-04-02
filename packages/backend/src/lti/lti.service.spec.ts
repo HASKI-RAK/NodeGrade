@@ -25,9 +25,9 @@ describe('LtiService', () => {
         roles: 'Student',
         custom_activityname: 'math101',
         lis_person_contact_email_primary: 'student@example.com',
-      } as LtiBasicLaunchRequest;
+      };
 
-      const result = await service.handleBasicLogin(
+      const result = service.handleBasicLogin(
         mockPayload as LtiBasicLaunchRequest,
       );
 
@@ -44,7 +44,7 @@ describe('LtiService', () => {
         roles: 'Instructor',
         custom_activityname: 'math101',
         lis_person_contact_email_primary: 'instructor@example.com',
-      } as LtiBasicLaunchRequest;
+      };
 
       const result = await service.handleBasicLogin(
         mockPayload as LtiBasicLaunchRequest,
