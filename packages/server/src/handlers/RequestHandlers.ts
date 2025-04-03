@@ -201,7 +201,7 @@ export const handlers: RestHandlerMap<
     }
   },
   GET: {
-    '/v1/graphs': async (request, response) => {
+    '/graphs': async (request, response) => {
       try {
         // Wait for the database query to complete
         const graphs = await prisma.graph.findMany()

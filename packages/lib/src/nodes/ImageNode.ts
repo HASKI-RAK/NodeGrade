@@ -5,8 +5,9 @@
 /* eslint-disable immutable/no-this */
 import { WebSocket } from 'ws'
 
-import { LGraphCanvas, LGraphNode, Vector2 } from './litegraph-extensions'
+import { LGraphNode, Vector2 } from './litegraph-extensions'
 import { ImageWidget } from './widgets/ImageWidget'
+import { LGraphCanvas } from 'litegraph.js'
 
 export class ImageNode extends LGraphNode {
   properties: { imageUrl?: string }

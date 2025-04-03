@@ -1,4 +1,5 @@
-import { LGraph, LGraphCanvas } from '@haski/ta-lib'
+import { LGraph } from '@haski/ta-lib/dist/nodes/litegraph-extensions'
+import { LGraphCanvas } from 'litegraph.js'
 import { useEffect, useRef, useState } from 'react'
 
 type CanvasProps = {

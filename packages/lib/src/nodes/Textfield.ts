@@ -4,7 +4,8 @@
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
 
-import { LGraphCanvas, LGraphNode, Vector2 } from './litegraph-extensions'
+import { LGraphCanvas } from 'litegraph.js'
+import { LGraphNode, Vector2 } from './litegraph-extensions'
 import { TextWidget } from './widgets/TextWidget'
 
 export class Textfield extends LGraphNode {

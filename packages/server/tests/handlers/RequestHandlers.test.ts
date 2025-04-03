@@ -110,8 +110,8 @@ describe('Request Handlers', () => {
   })
 
   describe('GET handlers', () => {
-    it('should handle GET /v1/graphs request', async () => {
-      await handlers.GET!['/v1/graphs'](mockRequest, mockResponse)
+    it('should handle GET /graphs request', async () => {
+      await handlers.GET!['/graphs'](mockRequest, mockResponse)
 
       const expectedResponse = [{ id: 1, name: 'Test Graph', path: '/test' }]
 

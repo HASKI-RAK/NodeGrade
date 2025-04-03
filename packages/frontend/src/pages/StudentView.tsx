@@ -1,12 +1,12 @@
 import {
   ClientPayload,
   handleWsRequest,
-  LiteGraph,
   SerializedGraph,
   ServerEventPayload,
   WebSocketEvent
 } from '@haski/ta-lib'
 import { AlertColor, Backdrop, Box, Container, Typography } from '@mui/material'
+import { LiteGraph } from 'litegraph.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Socket } from 'socket.io-client'
@@ -15,6 +15,11 @@ import Snackbar from '@/common/SnackBar'
 import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
 import { connectSocket, emitEvent, getSocket } from '@/utils/socket'
+
+type EventHandlerArray<T> = [keyof T, (payload: T[keyof T]) => void | Promise<void>][]
+type EventHandlerMap<T> = {
+  [K in keyof T]: (payload: T[K]) => void | Promise<void>
+}
 
 export const StudentView = () => {
   const { domain, courseId, elementId } = useParams<{
@@ -70,100 +75,83 @@ export const StudentView = () => {
       setConnectionStatus('Connection error')
     }
 
-    // Set up event handlers to handle server events
-    function onEvent(wsEvent: WebSocketEvent<ServerEventPayload>) {
-      handleWsRequest<ServerEventPayload>(wsEvent, {
-        graphFinished: (payload) => {
-          console.log('Graph finished: ', payload)
-          setProcessingPercentage(0)
-          lgraph.configure(payload)
-          lgraph.setDirtyCanvas(true, true)
-        },
-        questionSet(payload) {
-          setQuestion(payload)
-        },
-        graphSaved: () => {
-          setSnackbar({
-            message: 'Graph saved',
-            severity: 'success',
-            open: true
-          })
-        },
-        outputSet(output) {
-          // check if output is already in outputs, if not add it, otherwise update it
-          console.log('Outputs: ', outputs)
-          setOutputs((prev) => {
-            if (prev === undefined) return { [output.uniqueId]: output }
-            return { ...prev, [output.uniqueId]: output }
-          })
-          console.log('Output: ', output)
-        },
-        nodeErrorOccured(payload) {
-          console.warn('Node error: ', payload)
-          setSnackbar({
-            message: payload.error,
-            severity: 'error',
-            open: true
-          })
-        },
-        maxInputChars(maxChars) {
-          setMaxInputChars(maxChars)
-        },
-        percentageUpdated(payload) {
-          setProcessingPercentage(payload)
-        },
-        // We don't have handlers for these events
-        nodeExecuting: function (): void | Promise<void> {},
-        nodeExecuted: function (): void | Promise<void> {},
-        questionImageSet: function (base64Image: string): void | Promise<void> {
-          console.log('Image received')
-          setImage(base64Image)
-        }
-      }).then((handled) => {
-        if (!handled) {
-          setSnackbar({
-            message: 'No handler for this event',
-            severity: 'error',
-            open: true
-          })
-        }
-      })
-    }
-
     // Set up connection event listeners
     socketInstance.on('connect', onConnect)
     socketInstance.on('disconnect', onDisconnect)
     socketInstance.on('connect_error', onConnectError)
 
-    // Set up event listeners for each event type
-    const eventTypes: (keyof ServerEventPayload)[] = [
-      'graphFinished',
-      'questionSet',
-      'graphSaved',
-      'outputSet',
-      'nodeErrorOccured',
-      'maxInputChars',
-      'percentageUpdated',
-      'nodeExecuting',
-      'nodeExecuted',
-      'questionImageSet'
-    ]
+    // Define event handlers with their corresponding event types
+    const eventHandlers: EventHandlerMap<ServerEventPayload> = {
+      graphFinished(payload) {
+        console.log('Graph finished: ', payload)
+        setProcessingPercentage(0)
+        lgraph.configure(payload)
+        lgraph.setDirtyCanvas(true, true)
+      },
+      questionSet(payload) {
+        setQuestion(payload)
+      },
+      graphSaved() {
+        setSnackbar({
+          message: 'Graph saved',
+          severity: 'success',
+          open: true
+        })
+      },
+      outputSet(output) {
+        // check if output is already in outputs, if not add it, otherwise update it
+        console.log('Outputs: ', outputs)
+        setOutputs((prev) => {
+          if (prev === undefined) return { [output.uniqueId]: output }
+          return { ...prev, [output.uniqueId]: output }
+        })
+        console.log('Output: ', output)
+      },
+      nodeErrorOccured(payload) {
+        console.warn('Node error: ', payload)
+        setSnackbar({
+          message: payload.error,
+          severity: 'error',
+          open: true
+        })
+      },
+      maxInputChars(maxChars) {
+        setMaxInputChars(maxChars)
+      },
+      percentageUpdated(payload) {
+        setProcessingPercentage(payload)
+      },
+      nodeExecuting() {},
+      nodeExecuted() {},
+      questionImageSet(base64Image) {
+        console.log('Image received')
+        setImage(base64Image)
+      },
+      graphLoaded() {} // Adding this to match all keys in ServerEventPayload
+    }
 
-    eventTypes.forEach((eventType) => {
-      socketInstance.on(eventType, (payload) => {
-        const wsEvent = { eventName: eventType, payload }
-        onEvent(wsEvent)
+    // For each event handler, set up the event listener
+    for (const [eventName, handler] of Object.entries(
+      eventHandlers
+    ) as EventHandlerArray<ServerEventPayload>) {
+      socketInstance.on(eventName, (payload) => {
+        if (handler) {
+          handler(payload)
+        } else {
+          console.error(`No handler for event: ${eventName}`)
+        }
       })
-    })
+    }
 
     // Connect to the socket server
     connectSocket()
 
     // Cleanup function
     return () => {
-      eventTypes.forEach((eventType) => {
-        socketInstance.off(eventType)
-      })
+      // Remove event listeners
+      for (const eventName of Object.keys(eventHandlers)) {
+        socketInstance.off(eventName as keyof ServerEventPayload)
+      }
       socketInstance.off('connect', onConnect)
       socketInstance.off('disconnect', onDisconnect)
       socketInstance.off('connect_error', onConnectError)

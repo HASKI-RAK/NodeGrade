@@ -62,7 +62,7 @@ export const AppBar = (props: AppBarProps) => {
   }
 
   useEffect(() => {
-    fetch(getConfig().API + 'v1/graphs')
+    fetch(getConfig().API + 'graphs')
       .then((res) => res.json())
       .then((graphs: Array<GraphSchema>) => {
         setWorkflows(graphs)
@@ -78,7 +78,7 @@ export const AppBar = (props: AppBarProps) => {
     <AppBarStyled position="fixed" open={props.open}>
       <Toolbar>
         <Typography variant="h6" noWrap sx={{ flexGrow: 1 }} component="div">
-          Task Editor
+          Node Grade
         </Typography>
         <FormControl>
           <Stack direction="column" padding={1} spacing={1}>

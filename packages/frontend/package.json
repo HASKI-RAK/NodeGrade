@@ -23,6 +23,7 @@
     "@mui/icons-material": "^5.14.16",
     "@mui/material": "^5.14.16",
     "@types/node": "^22.7.6",
+    "litegraph.js": "^0.7.14",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-rewards": "^2.0.4",

@@ -21,7 +21,7 @@ const manifestForPlugin: Partial<VitePWAOptions> = {
   injectRegister: 'script',
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
   manifest: {
-    name: 'Task Editor',
+    name: 'Node Grade',
     short_name: 'task-editor',
     description: 'Editor for automated task assessments',
     icons: [

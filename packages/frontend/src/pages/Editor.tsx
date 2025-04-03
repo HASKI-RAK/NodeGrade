@@ -2,8 +2,6 @@
 import {
   ClientPayload,
   handleWsRequest,
-  LGraph,
-  LiteGraph,
   SerializedGraph,
   ServerEventPayload,
   WebSocketEvent
@@ -22,6 +20,7 @@ import {
   Typography,
   useTheme
 } from '@mui/material'
+import { LGraph, LiteGraph } from 'litegraph.js'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Socket } from 'socket.io-client'
 
