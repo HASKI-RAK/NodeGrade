@@ -31,6 +31,8 @@ describe('GraphHandlerService', () => {
     version: 1.0,
   };
 
+  const stringifiedMockGraph: string = JSON.stringify(mockSerializedGraph);
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,7 +62,7 @@ describe('GraphHandlerService', () => {
   describe('handleRunGraph', () => {
     it('should configure and execute the graph, emitting progress and completion events', async () => {
       const mockPayload = {
-        graph: mockSerializedGraph,
+        graph: stringifiedMockGraph,
         answer: 'testAnswer',
       };
       const mockLGraph = {
@@ -81,19 +83,21 @@ describe('GraphHandlerService', () => {
 
       await service.handleRunGraph(mockSocket, mockPayload);
 
-      expect(mockLGraph.configure).toHaveBeenCalledWith(mockPayload.graph);
+      expect(mockLGraph.configure).toHaveBeenCalledWith(
+        JSON.parse(mockPayload.graph),
+      );
       expect(mockLGraph.findNodesByClass).toHaveBeenCalledWith(AnswerInputNode);
       expect(GraphCore.executeLgraph).toHaveBeenCalled();
       expect(emitEvent).toHaveBeenCalledWith(
         mockSocket,
         'graphFinished',
-        mockSerializedGraph,
+        JSON.stringify(mockSerializedGraph),
       );
     });
 
     it('should log an error if graph execution fails', async () => {
       const mockPayload = {
-        graph: mockSerializedGraph,
+        graph: stringifiedMockGraph,
         answer: 'testAnswer',
       };
       jest
@@ -115,7 +119,7 @@ describe('GraphHandlerService', () => {
   describe('handleSaveGraph', () => {
     it('should save the graph and emit a "graphSaved" event', async () => {
       const mockPayload = {
-        graph: mockSerializedGraph,
+        graph: stringifiedMockGraph,
         name: 'testGraph',
       };
       const mockLGraph = {
@@ -131,7 +135,9 @@ describe('GraphHandlerService', () => {
 
       await service.handleSaveGraph(mockSocket, mockPayload);
 
-      expect(mockLGraph.configure).toHaveBeenCalledWith(mockPayload.graph);
+      expect(mockLGraph.configure).toHaveBeenCalledWith(
+        JSON.parse(mockPayload.graph),
+      );
       expect(graphService.saveGraph).toHaveBeenCalledWith(
         'testGraph',
         expect.any(LGraph),
@@ -139,13 +145,13 @@ describe('GraphHandlerService', () => {
       expect(emitEvent).toHaveBeenCalledWith(
         mockSocket,
         'graphSaved',
-        mockSerializedGraph,
+        JSON.stringify(mockSerializedGraph),
       );
     });
 
     it('should log an error if saving the graph fails', async () => {
       const mockPayload = {
-        graph: mockSerializedGraph,
+        graph: stringifiedMockGraph,
         name: 'testGraph',
       };
       jest
@@ -168,7 +174,7 @@ describe('GraphHandlerService', () => {
     it('should load the graph and emit a "graphLoaded" event', async () => {
       const mockPayload = 'testGraph';
       const mockGraphData = {
-        graph: JSON.stringify(mockSerializedGraph),
+        graph: stringifiedMockGraph,
         id: 1,
         path: 'testGraph',
       };
@@ -194,7 +200,7 @@ describe('GraphHandlerService', () => {
       expect(emitEvent).toHaveBeenCalledWith(
         mockSocket,
         'graphLoaded',
-        mockSerializedGraph,
+        JSON.stringify(mockSerializedGraph),
       );
     });
 
