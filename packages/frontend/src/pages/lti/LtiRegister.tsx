@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { getConfig } from '@/utils/config'
+
 export const LtiRegister = () => {
   const [searchParams] = useSearchParams()
   const [error, setError] = useState<string | null>(null)
@@ -13,10 +15,9 @@ export const LtiRegister = () => {
       searchParams.get('registration_token')
     ) {
       console.log('registering tool...', searchParams.toString())
-      console.log(import.meta.env.VITE_LTI_REGISTER)
       // send request to registration endpoint
       fetch(
-        import.meta.env.VITE_LTI_REGISTER + '?' + searchParams.toString(),
+        getConfig().LTI_REGISTER + '?' + searchParams.toString(),
 
         {
           method: 'GET'

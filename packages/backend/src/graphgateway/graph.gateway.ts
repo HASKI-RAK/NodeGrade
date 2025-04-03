@@ -17,6 +17,7 @@ import { GraphHandlerService } from './graph-handler.service';
   cors: {
     origin: '*',
   },
+  path: '/socket.io',
 })
 export class GraphGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect

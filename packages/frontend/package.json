@@ -4,6 +4,8 @@
   "author": {
     "name": "David Fischer"
   },
+  "type": "commonjs",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "vite --host",
     "server": "npx ts-node ./server/src/server.ts",

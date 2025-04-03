@@ -1,9 +1,5 @@
-export { LGraphNode } from './LGraphNode'
-import { LiteGraph, LGraph, LGraphCanvas } from 'litegraph.js'
-import { type Vector2 } from 'litegraph.js'
+export { LGraph } from 'litegraph.js'
+export { LiteGraph, LGraphCanvas } from 'litegraph.js'
+export { type Vector2 } from 'litegraph.js'
 
-// direct exports
-export { LGraph, LGraphCanvas }
-export { LiteGraph }
-export { type Vector2 }
-export * from 'litegraph.js'
+export { LGraphNode } from './LGraphNode'

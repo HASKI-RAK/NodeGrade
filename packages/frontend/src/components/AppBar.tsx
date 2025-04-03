@@ -63,14 +63,35 @@ export const AppBar = (props: AppBarProps) => {
 
   useEffect(() => {
     fetch(getConfig().API + 'graphs')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          // If response is not OK (e.g., 404 Not Found)
+          if (res.status === 404) {
+            // Handle 404 case specifically
+            console.log('No graphs found')
+            setWorkflows([])
+            setSelectedWorkflow(undefined)
+            return []
+          }
+          // For other error statuses
+          throw new Error(`Error fetching graphs: ${res.status}`)
+        }
+        return res.json()
+      })
       .then((graphs: Array<GraphSchema>) => {
-        setWorkflows(graphs)
-        console.log('graphs', graphs)
-        // set the selected workflow
-        setSelectedWorkflow(
-          graphs.find((graph) => graph.path === props.currentPath) || graphs[0]
-        )
+        if (graphs && graphs.length > 0) {
+          setWorkflows(graphs)
+          console.log('graphs', graphs)
+          // set the selected workflow
+          setSelectedWorkflow(
+            graphs.find((graph) => graph.path === props.currentPath) || graphs[0]
+          )
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch graphs:', error)
+        setWorkflows([])
+        setSelectedWorkflow(undefined)
       })
   }, [location.pathname])
 

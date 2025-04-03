@@ -33,7 +33,7 @@ const TaskView = ({
   maxInputChars = 700
 }: {
   onSubmit: (answer: string) => void
-  outputs?: Record<string, ServerEventPayload['output']>
+  outputs?: Record<string, ServerEventPayload['outputSet']>
   question: string
   questionImage?: string
   maxInputChars?: number
