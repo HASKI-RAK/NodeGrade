@@ -78,7 +78,7 @@ export function useServerEvents({
       graphFinished(payload) {
         console.log('Graph finished: ', payload)
         setProcessingPercentage(0)
-        lgraph.configure(payload)
+        lgraph.configure(JSON.parse(payload))
         lgraph.setDirtyCanvas(true, true)
       },
       questionSet(payload) {
@@ -128,7 +128,7 @@ export function useServerEvents({
       },
       graphLoaded(payload) {
         console.log('Graph loaded: ', payload)
-        lgraph.configure(payload)
+        lgraph.configure(JSON.parse(payload))
         lgraph.setDirtyCanvas(true, true)
       }
     }

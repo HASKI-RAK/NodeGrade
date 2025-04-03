@@ -66,7 +66,6 @@ export class OutputNode extends LGraphNode {
         value: this.properties.value
       }
     }
-    console.log('Output: ', output)
     this.emitEventCallback?.(output)
   }
 

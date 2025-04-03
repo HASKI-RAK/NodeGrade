@@ -1,4 +1,4 @@
-import { SerializedGraph } from '@haski/ta-lib'
+import { ClientEventPayload, SerializedGraph } from '@haski/ta-lib'
 import { LGraph } from 'litegraph.js'
 import { useCallback, useEffect, useState } from 'react'
 import { Socket } from 'socket.io-client'
@@ -85,9 +85,9 @@ export function useSocket({ socketPath, lgraph }: UseSocketOptions): UseSocketRe
       domain: string
     }) => {
       if (socket && socket.connected) {
-        emitEvent('runGraph', {
+        emitEvent<ClientEventPayload['runGraph']>('runGraph', {
           ...params,
-          graph: lgraph.serialize<SerializedGraph>()
+          graph: JSON.stringify(lgraph.serialize<SerializedGraph>())
         })
       } else {
         console.error('Socket not connected')
@@ -113,7 +113,7 @@ export function useSocket({ socketPath, lgraph }: UseSocketOptions): UseSocketRe
     (name: string) => {
       if (socket && socket.connected) {
         emitEvent('saveGraph', {
-          graph: lgraph.serialize<SerializedGraph>(),
+          graph: JSON.stringify(lgraph.serialize<SerializedGraph>()),
           name
         })
       } else {

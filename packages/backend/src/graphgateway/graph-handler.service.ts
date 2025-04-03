@@ -96,7 +96,7 @@ export class GraphHandlerService {
     const lgraph = new LGraph();
     // Add the node execution handling
     this.addOnNodeAdded(lgraph, client);
-    lgraph.configure(payload.graph);
+    lgraph.configure(JSON.parse(payload.graph));
 
     lgraph
       .findNodesByClass<AnswerInputNode>(AnswerInputNode)
@@ -113,7 +113,11 @@ export class GraphHandlerService {
         );
       });
 
-      emitEvent(client, 'graphFinished', lgraph.serialize<SerializedGraph>());
+      emitEvent(
+        client,
+        'graphFinished',
+        JSON.stringify(lgraph.serialize<SerializedGraph>()),
+      );
     } catch (error) {
       this.logger.error('Error running graph: ', error);
     }
@@ -138,14 +142,18 @@ export class GraphHandlerService {
   ) {
     this.logger.log(`SaveGraph event received from client id: ${client.id}`);
     const lgraph = new LGraph();
-    lgraph.configure(payload.graph);
+    lgraph.configure(JSON.parse(payload.graph));
 
     const pathname = payload.name || 'UnnamedGraph';
     this.logger.debug(`Saving graph with pathname: ${pathname}`);
 
     try {
       await this.graphService.saveGraph(pathname, lgraph);
-      emitEvent(client, 'graphSaved', lgraph.serialize<SerializedGraph>());
+      emitEvent(
+        client,
+        'graphSaved',
+        JSON.stringify(lgraph.serialize<SerializedGraph>()),
+      );
     } catch (error) {
       this.logger.error('Error saving graph: ', error);
     }
@@ -168,7 +176,11 @@ export class GraphHandlerService {
         this.logger.debug(
           `Graph loaded successfully with pathname: ${pathname}`,
         );
-        emitEvent(client, 'graphLoaded', lgraph.serialize<SerializedGraph>());
+        emitEvent(
+          client,
+          'graphLoaded',
+          JSON.stringify(lgraph.serialize<SerializedGraph>()),
+        );
       } else {
         this.logger.warn(`Graph not found with pathname: ${pathname}`);
         client.emit('graphNotFound', {

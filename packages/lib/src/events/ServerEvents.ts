@@ -16,11 +16,11 @@ export type OutputType = 'text' | 'score' | 'classifications'
 
 // type that matches ServerEventName with payload
 export type ServerEventPayload = {
-  graphFinished: SerializedGraph // graph run finished
+  graphFinished: string //SerializedGraph // graph run finished
   nodeExecuting: number // node id
   nodeExecuted: number // node id
-  graphSaved: SerializedGraph // graph
-  graphLoaded: SerializedGraph // after loading a graph
+  graphSaved: string //SerializedGraph // graph
+  graphLoaded: string //SerializedGraph // after loading a graph
   outputSet: {
     uniqueId: string
     type: OutputType
@@ -44,7 +44,7 @@ export type ServerBenchmarkPostPayload = (string | number | string[])[]
 export type ClientEventPayload = {
   // saves a graph
   saveGraph: {
-    graph: SerializedGraph
+    graph: string //SerializedGraph
     name?: string // when no name is given, use the current location.pathname
   }
   loadGraph: string // loads a graph by pathname
@@ -54,7 +54,7 @@ export type ClientEventPayload = {
     user_id?: string // user id from the LTI launch (LMS) //TODO schauen was passiert wenn ohne diese geschickt wird
     timestamp?: string // timestamp from the LTI launch (LMS)
     domain?: string // custom_activityname from the LTI launch (LMS settings per activity)
-    graph: SerializedGraph
+    graph: string //SerializedGraph
   }
 }
 

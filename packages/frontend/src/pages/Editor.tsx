@@ -178,14 +178,6 @@ export const Editor = () => {
   return (
     <>
       <Box sx={{ display: 'flex' }}>
-        <Button
-          variant="contained"
-          onClick={() => {
-            loadGraph(selectedGraph)
-          }}
-        >
-          Load graph
-        </Button>
         <AppBar
           open={open}
           currentPath={selectedGraph}
