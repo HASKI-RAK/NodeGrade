@@ -94,10 +94,9 @@ export class GraphHandlerService {
   ) {
     this.logger.log(`RunGraph event received from client id: ${client.id}`);
     const lgraph = new LGraph();
-    lgraph.configure(payload.graph);
-
     // Add the node execution handling
     this.addOnNodeAdded(lgraph, client);
+    lgraph.configure(payload.graph);
 
     lgraph
       .findNodesByClass<AnswerInputNode>(AnswerInputNode)
