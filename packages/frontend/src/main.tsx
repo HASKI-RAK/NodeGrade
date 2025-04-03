@@ -22,11 +22,7 @@ fetch('/config/env.' + (process.env.NODE_ENV ?? 'development') + '.json')
   .then((config) => {
     setConfig(config)
 
-    root.render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    )
+    root.render(<App />)
   })
   .catch((error) => {
     alert('Error loading config: ' + error)

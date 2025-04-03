@@ -1,5 +1,6 @@
 /* eslint-disable immutable/no-mutation */
 import { LiteGraph } from '@haski/ta-lib'
+import { LGraph } from '@haski/ta-lib'
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
@@ -13,7 +14,7 @@ import {
   Typography,
   useTheme
 } from '@mui/material'
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import Snackbar from '@/common/SnackBar'
 import { AppBar } from '@/components/AppBar'
@@ -24,7 +25,6 @@ import { useEditorUI } from '@/hooks/useEditorUI'
 import { useGraphOperations } from '@/hooks/useGraphOperations'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
-import registerNodes from '@/utils/registernodes'
 
 export const drawerWidth = 500
 
@@ -68,9 +68,7 @@ export const Editor = () => {
   const path = window.location.pathname
 
   // Create LiteGraph instance
-  const lgraph = useMemo(() => {
-    return new (registerNodes(LiteGraph).LGraph)()
-  }, [])
+  const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
 
   // Use custom hooks
   const {
@@ -85,7 +83,7 @@ export const Editor = () => {
   const { socket, connectionStatus, runGraph, loadGraph, saveGraph, publishGraph } =
     useSocket({
       socketPath: path.slice(1), // window.location.pathname without leading slash
-      lgraph
+      lgraph: lgraph
     })
 
   const {
@@ -98,11 +96,11 @@ export const Editor = () => {
     handleSnackbarClose
   } = useServerEvents({
     socket,
-    lgraph
+    lgraph: lgraph
   })
 
   const { handleDownloadGraph, handleUploadGraph } = useGraphOperations({
-    lgraph
+    lgraph: lgraph
   })
 
   const memoizedOutputs = useMemo(() => outputs, [outputs])
@@ -161,9 +159,33 @@ export const Editor = () => {
 
   const theme = useTheme()
 
+  useEffect(() => {
+    // Set the initial graph name from the URL
+    const initialGraphName = '/' + path.slice(1)
+    setSelectedGraph(initialGraphName)
+
+    // Only load the graph when the connection is established
+    if (connectionStatus === 'Connected') {
+      // Load the graph from the server
+      loadGraph(initialGraphName)
+    }
+  }, [connectionStatus])
+
+  useEffect(() => {
+    console.log('Registering nodes')
+  }, [])
+
   return (
     <>
       <Box sx={{ display: 'flex' }}>
+        <Button
+          variant="contained"
+          onClick={() => {
+            loadGraph(selectedGraph)
+          }}
+        >
+          Load graph
+        </Button>
         <AppBar
           open={open}
           currentPath={selectedGraph}

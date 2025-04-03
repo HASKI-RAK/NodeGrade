@@ -166,9 +166,12 @@ export class GraphHandlerService {
         const lgraph = new LGraph();
         lgraph.configure(JSON.parse(graph.graph));
         this.addOnNodeAdded(lgraph, client);
-
+        this.logger.debug(
+          `Graph loaded successfully with pathname: ${pathname}`,
+        );
         emitEvent(client, 'graphLoaded', lgraph.serialize<SerializedGraph>());
       } else {
+        this.logger.warn(`Graph not found with pathname: ${pathname}`);
         client.emit('graphNotFound', {
           eventName: 'graphNotFound',
           payload: `Graph with pathname "${pathname}" not found.`,

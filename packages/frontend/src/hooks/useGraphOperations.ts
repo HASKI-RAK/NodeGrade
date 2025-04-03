@@ -37,6 +37,7 @@ export function useGraphOperations({
         reader.onload = (e) => {
           const contents = e.target?.result
           if (typeof contents === 'string') {
+            console.log('File contents:', contents)
             lgraph.configure(JSON.parse(contents))
             lgraph.setDirtyCanvas(true, true)
           }

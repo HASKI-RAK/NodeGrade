@@ -1,5 +1,5 @@
 import { Socket } from 'socket.io';
-import { ServerEvent, ServerEventPayload } from '@haski/ta-lib';
+import { ServerEventPayload } from '@haski/ta-lib';
 
 /**
  * Type-safe wrapper for client.emit that ensures correct event names and payload types
@@ -14,8 +14,5 @@ export function emitEvent<K extends keyof ServerEventPayload>(
   eventName: K,
   payload: ServerEventPayload[K],
 ): void {
-  client.emit(eventName, {
-    eventName,
-    payload,
-  } as ServerEvent<K>);
+  client.emit(eventName, payload);
 }
