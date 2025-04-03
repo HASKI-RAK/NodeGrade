@@ -8,9 +8,17 @@ export class GraphController {
 
   constructor(private readonly graphService: GraphService) {}
 
-  @Get('all')
+  @Get()
   async findAllGraphs(@Res() response: Response): Promise<void> {
     const graphs = await this.graphService.findAllGraphs();
+
+    if (graphs.length === 0) {
+      this.logger.warn('No graphs found');
+      response
+        .status(HttpStatus.NOT_FOUND)
+        .json({ message: 'No graphs found' });
+      return;
+    }
 
     response.status(HttpStatus.OK).json(
       graphs.map((g) => ({
