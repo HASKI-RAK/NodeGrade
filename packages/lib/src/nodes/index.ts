@@ -81,6 +81,7 @@ export {
   QuestionNode,
   Route,
   SentenceTransformer,
+  SampleSolutionNode,
   Textfield,
   Watch
 }

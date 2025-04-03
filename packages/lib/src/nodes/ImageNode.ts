@@ -3,10 +3,9 @@
 /* eslint-disable immutable/no-let */
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
-import { LGraphCanvas, Vector2 } from '@haski/ta-lib'
 import { WebSocket } from 'ws'
 
-import { LGraphNode } from './litegraph-extensions'
+import { LGraphCanvas, LGraphNode, Vector2 } from './litegraph-extensions'
 import { ImageWidget } from './widgets/ImageWidget'
 
 export class ImageNode extends LGraphNode {

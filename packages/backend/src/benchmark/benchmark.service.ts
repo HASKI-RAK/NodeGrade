@@ -5,9 +5,9 @@ import {
   LiteGraph,
   OutputNode,
   QuestionNode,
+  SampleSolutionNode,
 } from '@haski/ta-lib';
 // import { addOnNodeAdded, runLgraph } from './Graph'; //TODO: migrate from old codebase
-import { SampleSolutionNode } from '@haski/ta-lib/nodes/SampleSolutionNode';
 import { executeLgraph } from 'src/core/Graph';
 
 @Injectable()

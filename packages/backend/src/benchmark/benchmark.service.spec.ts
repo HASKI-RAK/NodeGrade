@@ -7,9 +7,9 @@ import {
   AnswerInputNode,
   OutputNode,
   LGraphNode,
+  SampleSolutionNode,
 } from '@haski/ta-lib';
 import { executeLgraph } from 'src/core/Graph';
-import { SampleSolutionNode } from '@haski/ta-lib/nodes/SampleSolutionNode';
 
 jest.mock('src/core/Graph', () => ({
   executeLgraph: jest.fn(),

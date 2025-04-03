@@ -2,9 +2,10 @@
   "name": "@haski/ta-lib",
   "version": "1.0.0",
   "description": "library for holding nodes, event and shared core features in the task assessment",
-  "main": "index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "author": "David Fischer",
-  "type": "module",
+  "type": "commonjs",
   "license": "MIT",
   "scripts": {
     "build": "tsc"

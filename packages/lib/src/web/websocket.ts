@@ -1,10 +1,10 @@
-import {
-  ClientEventPayload,
-  ServerEvent,
-  ServerEventPayload,
-  WebSocketEvent
-} from '@haski/ta-lib'
 import { WebSocket } from 'ws'
+import {
+  ServerEventPayload,
+  ServerEvent,
+  ClientEventPayload,
+  WebSocketEvent
+} from '../events'
 /**
  * Send a message to the client on an established WebSocket connection
  * @param ws - WebSocket used to send the message
