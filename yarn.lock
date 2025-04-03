@@ -2082,6 +2082,7 @@ __metadata:
     react-rewards: "npm:^2.0.4"
     react-router-dom: "npm:^6.17.0"
     react-use-websocket: "npm:^4.5.0"
+    socket.io-client: "npm:^4.8.1"
     typescript: "npm:^5.2.2"
     vite: "npm:^4.4.11"
     vite-plugin-pwa: "npm:^0.16.5"
@@ -6671,6 +6672,19 @@ __metadata:
     ws: "npm:~8.17.1"
     xmlhttprequest-ssl: "npm:~2.0.0"
   checksum: 10c0/ef220f9875d6a43bade906bd9b61118e812474bbe46e80f38c92dca238484170daf92d51e58bbade6433c29ffb5ba329f4864c5609f2e33c5e31041b1f8ad672
+  languageName: node
+  linkType: hard
+
+"engine.io-client@npm:~6.6.1":
+  version: 6.6.3
+  resolution: "engine.io-client@npm:6.6.3"
+  dependencies:
+    "@socket.io/component-emitter": "npm:~3.1.0"
+    debug: "npm:~4.3.1"
+    engine.io-parser: "npm:~5.2.1"
+    ws: "npm:~8.17.1"
+    xmlhttprequest-ssl: "npm:~2.1.1"
+  checksum: 10c0/ebe0b1da6831d5a68564f9ffb80efe682da4f0538488eaffadf0bcf5177a8b4472cdb01d18a9f20dece2f8de30e2df951eb4635bef2f1b492e9f08a523db91a0
   languageName: node
   linkType: hard
 
@@ -12297,6 +12311,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"socket.io-client@npm:^4.8.1":
+  version: 4.8.1
+  resolution: "socket.io-client@npm:4.8.1"
+  dependencies:
+    "@socket.io/component-emitter": "npm:~3.1.0"
+    debug: "npm:~4.3.2"
+    engine.io-client: "npm:~6.6.1"
+    socket.io-parser: "npm:~4.2.4"
+  checksum: 10c0/544c49cc8cc77118ef68b758a8a580c8e680a5909cae05c566d2cc07ec6cd6720a4f5b7e985489bf2a8391749177a5437ac30b8afbdf30b9da6402687ad51c86
+  languageName: node
+  linkType: hard
+
 "socket.io-parser@npm:~4.2.4":
   version: 4.2.4
   resolution: "socket.io-parser@npm:4.2.4"
@@ -14177,6 +14203,13 @@ __metadata:
   version: 2.0.0
   resolution: "xmlhttprequest-ssl@npm:2.0.0"
   checksum: 10c0/b64ab371459bd5e3a4827e3c7535759047d285fd310aea6fd028973d547133f3be0d473c1fdae9f14d89bf509267759198ae1fbe89802079a7e217ddd990d734
+  languageName: node
+  linkType: hard
+
+"xmlhttprequest-ssl@npm:~2.1.1":
+  version: 2.1.2
+  resolution: "xmlhttprequest-ssl@npm:2.1.2"
+  checksum: 10c0/70d60869323e823f473a238f78fd108437edbc3690ecd5859c39c83217080090a18899b272e515769c0d1f518cc64cbed6b6995b23fdd7ba13b297d530b6e631
   languageName: node
   linkType: hard
 

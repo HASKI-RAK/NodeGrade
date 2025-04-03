@@ -9,12 +9,12 @@ import {
 import { AlertColor, Backdrop, Box, Container, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import useWebSocket, { ReadyState } from 'react-use-websocket'
+import { Socket } from 'socket.io-client'
 
 import Snackbar from '@/common/SnackBar'
 import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
-import { getConfig } from '@/utils/config'
+import { connectSocket, emitEvent, getSocket } from '@/utils/socket'
 
 export const StudentView = () => {
   const { domain, courseId, elementId } = useParams<{
@@ -41,10 +41,10 @@ export const StudentView = () => {
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const searchParams = new URLSearchParams(window.location.search)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
-  const [socketUrl] = useState(
-    getConfig().WS + `ws/student/${domain}/${courseId}/${elementId}`
-  )
-  const { sendJsonMessage, lastMessage, readyState } = useWebSocket(socketUrl)
+
+  const [socketPath] = useState(`ws/student/${domain}/${courseId}/${elementId}`)
+  const [socket, setSocket] = useState<Socket | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...')
 
   const handleSnackbarClose = (event: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
@@ -53,10 +53,25 @@ export const StudentView = () => {
     setSnackbar({ ...snackbar, open: false })
   }
 
+  // Initialize socket and set up event listeners
   useEffect(() => {
-    if (lastMessage !== null) {
-      const wsEvent: WebSocketEvent<ServerEventPayload> = JSON.parse(lastMessage.data)
-      //* Handle events from server
+    const socketInstance = getSocket(socketPath)
+    setSocket(socketInstance)
+
+    function onConnect() {
+      setConnectionStatus('Connected')
+    }
+
+    function onDisconnect() {
+      setConnectionStatus('Disconnected')
+    }
+
+    function onConnectError() {
+      setConnectionStatus('Connection error')
+    }
+
+    // Set up event handlers to handle server events
+    function onEvent(wsEvent: WebSocketEvent<ServerEventPayload>) {
       handleWsRequest<ServerEventPayload>(wsEvent, {
         graphFinished: (payload) => {
           console.log('Graph finished: ', payload)
@@ -114,28 +129,65 @@ export const StudentView = () => {
         }
       })
     }
-  }, [lastMessage])
+
+    // Set up connection event listeners
+    socketInstance.on('connect', onConnect)
+    socketInstance.on('disconnect', onDisconnect)
+    socketInstance.on('connect_error', onConnectError)
+
+    // Set up event listeners for each event type
+    const eventTypes: (keyof ServerEventPayload)[] = [
+      'graphFinished',
+      'questionSet',
+      'graphSaved',
+      'outputSet',
+      'nodeErrorOccured',
+      'maxInputChars',
+      'percentageUpdated',
+      'nodeExecuting',
+      'nodeExecuted',
+      'questionImageSet'
+    ]
+
+    eventTypes.forEach((eventType) => {
+      socketInstance.on(eventType, (payload) => {
+        const wsEvent = { eventName: eventType, payload }
+        onEvent(wsEvent)
+      })
+    })
+
+    // Connect to the socket server
+    connectSocket()
+
+    // Cleanup function
+    return () => {
+      eventTypes.forEach((eventType) => {
+        socketInstance.off(eventType)
+      })
+      socketInstance.off('connect', onConnect)
+      socketInstance.off('disconnect', onDisconnect)
+      socketInstance.off('connect_error', onConnectError)
+    }
+  }, [socketPath])
 
   const handleSubmit = (answer: string) => {
-    sendJsonMessage<ClientPayload>({
-      eventName: 'runGraph',
-      payload: {
+    if (socket && socket.connected) {
+      emitEvent('runGraph', {
         answer: answer,
         user_id: searchParams.get('user_id') ?? undefined,
         timestamp: searchParams.get('timestamp') ?? undefined,
         domain: domain,
         graph: lgraph.serialize<SerializedGraph>()
-      }
-    })
+      })
+    } else {
+      console.error('Socket not connected')
+      setSnackbar({
+        message: 'Connection to server lost. Please refresh the page.',
+        severity: 'error',
+        open: true
+      })
+    }
   }
-
-  const connectionStatus = {
-    [ReadyState.CONNECTING]: 'Connecting...',
-    [ReadyState.OPEN]: '',
-    [ReadyState.CLOSING]: 'Closing',
-    [ReadyState.CLOSED]: 'Connection closed',
-    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
-  }[readyState]
 
   const handleAnswerSubmit = useCallback((answer: string) => {
     handleSubmit(answer)

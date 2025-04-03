@@ -23,14 +23,20 @@ import {
   useTheme
 } from '@mui/material'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import useWebSocket, { ReadyState } from 'react-use-websocket'
+import { Socket } from 'socket.io-client'
 
 import Snackbar from '@/common/SnackBar'
 import { AppBar } from '@/components/AppBar'
 import Canvas from '@/components/Canvas'
 import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
-import { getConfig } from '@/utils/config'
+import {
+  connectSocket,
+  emitEvent,
+  getSocket,
+  handleEvent,
+  handleEvents
+} from '@/utils/socket'
 
 export const drawerWidth = 500
 
@@ -68,6 +74,15 @@ const DrawerHeader = styled('div')(({ theme }) => ({
   justifyContent: 'flex-start'
 }))
 
+type PayloadEventHandlerDict<T> = {
+  [K in keyof T]: (payload: T[K]) => void
+}
+
+type EventHandlerArray<T> = [keyof T, (payload: T[keyof T]) => void | Promise<void>][]
+type EventHandlerMap<T> = {
+  [K in keyof T]: (payload: T[K]) => void | Promise<void>
+}
+
 export const Editor = () => {
   const [open, setOpen] = useState(true)
   const [snackbar, setSnackbar] = useState<{
@@ -93,15 +108,16 @@ export const Editor = () => {
   const [image, setImage] = useState<string | undefined>()
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
-  const [socketUrl, setSocketUrl] = useState(
-    getConfig().WS + path.slice(1) // window.location.pathname
-  )
+
+  const [socketPath] = useState(path.slice(1)) // window.location.pathname without leading slash
+  const [socket, setSocket] = useState<Socket | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...')
+
   const [size, setSize] = useState({
     width: window.outerWidth,
     height: window.outerHeight
   })
   const theme = useTheme()
-  const { sendJsonMessage, lastMessage, readyState } = useWebSocket(socketUrl)
 
   const checkSize = useCallback(() => {
     setSize({
@@ -143,114 +159,162 @@ export const Editor = () => {
     // prompt user
     const name = prompt('Enter graph name', path)
     if (!name) return
-    sendJsonMessage<ClientPayload>({
-      eventName: 'saveGraph',
-      payload: {
-        graph: lgraph.serialize<SerializedGraph>(),
-        name // when no name is given, use the current location.pathname
-      }
+    emitEvent('saveGraph', {
+      graph: lgraph.serialize<SerializedGraph>(),
+      name // when no name is given, use the current location.pathname
     })
   }
 
   const handlePublishGraph = () => {
     //name based on the current location.pathname, just exchange editor with student
     const name = path.replace('editor', 'student')
-    sendJsonMessage<ClientPayload>({
-      eventName: 'saveGraph',
-      payload: {
-        graph: lgraph.serialize<SerializedGraph>(),
-        name
-      }
+    emitEvent('saveGraph', {
+      graph: lgraph.serialize<SerializedGraph>(),
+      name
     })
   }
 
+  // Initialize socket and set up event listeners
   useEffect(() => {
-    if (lastMessage !== null) {
-      const wsEvent: WebSocketEvent<ServerEventPayload> = JSON.parse(lastMessage.data)
-      //* Handle events from server
-      handleWsRequest<ServerEventPayload>(wsEvent, {
-        graphFinished: (payload) => {
-          console.log('Graph finished: ', payload)
-          setProcessingPercentage(0)
-          lgraph.configure(payload)
-          lgraph.setDirtyCanvas(true, true)
-        },
-        questionSet(payload) {
-          setQuestion(payload)
-        },
-        nodeExecuting: (nodeId) => handleNodeExecuting(lgraph, nodeId),
-        nodeExecuted: (nodeId) => handleNodeExecuted(lgraph, nodeId),
-        graphSaved: () => {
-          setSnackbar({
-            message: 'Graph saved',
-            severity: 'success',
-            open: true
-          })
-        },
-        outputSet(output) {
-          // check if output is already in outputs, if not add it, otherwise update it
-          console.log('Outputs: ', outputs)
-          setOutputs((prev) => {
-            if (prev === undefined) return { [output.uniqueId]: output }
-            return { ...prev, [output.uniqueId]: output }
-          })
-          console.log('Output: ', output)
-        },
-        nodeErrorOccured(payload) {
-          console.warn('Node error: ', payload)
-          setSnackbar({
-            message: payload.error,
-            severity: 'error',
-            open: true
-          })
-        },
-        maxInputChars(maxChars) {
-          setMaxInputChars(maxChars)
-        },
-        percentageUpdated(payload) {
-          setProcessingPercentage(payload)
-        },
-        questionImageSet: function (imageBase64: string): void | Promise<void> {
-          setImage(imageBase64)
-        }
-      }).then((handled) => {
-        if (!handled) {
-          setSnackbar({
-            message: 'No handler for this event',
-            severity: 'error',
-            open: true
-          })
+    const socketInstance = getSocket(socketPath)
+    setSocket(socketInstance)
+
+    function onConnect() {
+      setConnectionStatus('Connected')
+    }
+
+    function onDisconnect() {
+      setConnectionStatus('Disconnected')
+    }
+
+    function onConnectError() {
+      setConnectionStatus('Connection error')
+    }
+
+    // Set up connection event listeners
+    socketInstance.on('connect', onConnect)
+    socketInstance.on('disconnect', onDisconnect)
+    socketInstance.on('connect_error', onConnectError)
+
+    // Define event handlers with their corresponding event types
+    const eventHandlers: EventHandlerMap<ServerEventPayload> = {
+      graphFinished(payload) {
+        console.log('Graph finished: ', payload)
+        setProcessingPercentage(0)
+        lgraph.configure(payload)
+        lgraph.setDirtyCanvas(true, true)
+      },
+      questionSet(payload) {
+        setQuestion(payload)
+      },
+      nodeExecuting(nodeId) {
+        console.log('Node executing: ', nodeId)
+        handleNodeExecuting(lgraph, nodeId)
+      },
+      nodeExecuted(nodeId) {
+        console.log('Node executed: ', nodeId)
+        handleNodeExecuted(lgraph, nodeId)
+      },
+      graphSaved(payload) {
+        console.log('Graph saved: ', payload)
+        setSnackbar({
+          message: 'Graph saved',
+          severity: 'success',
+          open: true
+        })
+      },
+      outputSet(output) {
+        // check if output is already in outputs, if not add it, otherwise update it
+        console.log('Outputs: ', outputs)
+        setOutputs((prev) => {
+          if (prev === undefined) return { [output.uniqueId]: output }
+          return { ...prev, [output.uniqueId]: output }
+        })
+        console.log('Output: ', output)
+      },
+      nodeErrorOccured(payload) {
+        console.warn('Node error: ', payload)
+        setSnackbar({
+          message: payload.error,
+          severity: 'error',
+          open: true
+        })
+      },
+      maxInputChars(maxChars) {
+        setMaxInputChars(maxChars)
+      },
+      percentageUpdated(payload) {
+        setProcessingPercentage(payload)
+      },
+      questionImageSet: function (imageBase64: string): void | Promise<void> {
+        setImage(imageBase64)
+      },
+      graphLoaded(payload) {
+        console.log('Graph loaded: ', payload)
+        lgraph.configure(payload)
+        lgraph.setDirtyCanvas(true, true)
+      }
+    }
+    // For each event handler, set up the event listener
+    for (const [eventName, handler] of Object.entries(
+      eventHandlers
+    ) as EventHandlerArray<ServerEventPayload>) {
+      socketInstance.on(eventName, (payload) => {
+        if (handler) {
+          handler(payload)
+        } else {
+          console.error(`No handler for event: ${eventName}`)
         }
       })
     }
+
+    // Connect to the socket server
+    connectSocket()
+
     setOpen(true)
     window.addEventListener('resize', checkSize)
+
+    // Cleanup function
     return () => {
       window.removeEventListener('resize', checkSize)
+
+      //TODO: Remove all event listeners
+      socketInstance.off('connect', onConnect)
+      socketInstance.off('disconnect', onDisconnect)
+      socketInstance.off('connect_error', onConnectError)
     }
-  }, [lastMessage])
+  }, [socketPath])
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSubmit = useCallback((answer: string) => {
-    // TODO: Add type to json
-    sendJsonMessage<ClientPayload>({
-      eventName: 'runGraph',
-      payload: {
-        answer: answer,
-        user_id: searchParams.get('user_id') ?? undefined,
-        timestamp: searchParams.get('timestamp') ?? undefined,
-        domain: path.slice(1), // custom_activityname from the LTI launch (LMS settings per activity)
-        graph: lgraph.serialize<SerializedGraph>()
+  const handleSubmit = useCallback(
+    (answer: string) => {
+      // TODO: Add type to json
+      if (socket && socket.connected) {
+        emitEvent('runGraph', {
+          answer: answer,
+          user_id: searchParams.get('user_id') ?? undefined,
+          timestamp: searchParams.get('timestamp') ?? undefined,
+          domain: path.slice(1), // custom_activityname from the LTI launch (LMS settings per activity)
+          graph: lgraph.serialize<SerializedGraph>()
+        })
+      } else {
+        console.error('Socket not connected')
+        setSnackbar({
+          message: 'Connection to server lost. Please refresh the page.',
+          severity: 'error',
+          open: true
+        })
       }
-    })
-  }, [])
+    },
+    [socket, searchParams]
+  )
 
   const handleClickChangeSocketUrl = useCallback(() => {
-    const newUrl = prompt('Enter new socket url', socketUrl)
+    const newUrl = prompt('Enter new socket path', socketPath)
     if (newUrl) {
-      setSocketUrl(newUrl)
+      window.location.href = '/editor/' + newUrl
     }
-  }, [socketUrl])
+  }, [socketPath])
 
   const handleDownloadGraph = () => {
     const dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(
@@ -291,19 +355,18 @@ export const Editor = () => {
    */
   const handleWorkflowChange = (workflow: string) => {
     setSelectedGraph(workflow)
-    sendJsonMessage<ClientPayload>({
-      eventName: 'loadGraph',
-      payload: workflow
-    })
+    if (socket && socket.connected) {
+      emitEvent('loadGraph', workflow)
+    } else {
+      console.error('Socket not connected')
+      setSnackbar({
+        message: 'Connection to server lost. Please refresh the page.',
+        severity: 'error',
+        open: true
+      })
+    }
   }
 
-  const connectionStatus = {
-    [ReadyState.CONNECTING]: 'Connecting...',
-    [ReadyState.OPEN]: 'Open',
-    [ReadyState.CLOSING]: 'Closing',
-    [ReadyState.CLOSED]: 'Connection closed',
-    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
-  }[readyState]
   return (
     <>
       <Box sx={{ display: 'flex' }}>
