@@ -45,6 +45,7 @@ const router = createBrowserRouter(
           </ErrorBoundary>
         }
       />
+      <Route path="/" element={<div>Welcome to the Task Editor</div>} />
       <Route path="lti/register" element={<LtiRegister />} />
       {/* ... etc. */}
       <Route path="lti/login" element={<LogRouteAccess />} />

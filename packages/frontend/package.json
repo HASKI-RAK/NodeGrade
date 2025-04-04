@@ -7,7 +7,7 @@
   "type": "commonjs",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite --host 0.0.0.0",
     "server": "npx ts-node ./server/src/server.ts",
     "build": "tsc && vite build --mode production",
     "serve": "vite preview --host",

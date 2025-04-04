@@ -67,6 +67,18 @@ export default defineConfig({
   build: {
     sourcemap: process.env.SOURCE_MAP === 'true'
   },
+  // server: {
+  //   host: '0.0.0.0',
+  //   port: 5173,
+  //   strictPort: true,
+  //   headers: {
+  //     'Access-Control-Allow-Origin': '*'
+  //   },
+  //   cors: true,
+  //   hmr: {
+  //     host: 'nodegrade.haski.app'
+  //   }
+  // },
   optimizeDeps: {
     include: ['@emotion/react', '@emotion/styled', '@mui/material/Tooltip']
   },
