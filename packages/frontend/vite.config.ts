@@ -67,18 +67,27 @@ export default defineConfig({
   build: {
     sourcemap: process.env.SOURCE_MAP === 'true'
   },
-  // server: {
-  //   host: '0.0.0.0',
-  //   port: 5173,
-  //   strictPort: true,
-  //   headers: {
-  //     'Access-Control-Allow-Origin': '*'
-  //   },
-  //   cors: true,
-  //   hmr: {
-  //     host: 'nodegrade.haski.app'
-  //   }
-  // },
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*'
+    },
+    cors: true,
+    hmr: {
+      host: 'nodegrade.haski.app'
+    },
+    proxy: {
+      // Configure a proxy to route API requests through Vite server
+      '/api': {
+        target: process.env.VITE_API_URL || 'https://nodegrade-backend.haski.app',
+        changeOrigin: true,
+        secure: false, // This is the key setting that disables certificate validation
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
+  },
   optimizeDeps: {
     include: ['@emotion/react', '@emotion/styled', '@mui/material/Tooltip']
   },
