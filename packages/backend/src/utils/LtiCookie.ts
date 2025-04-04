@@ -5,4 +5,5 @@ export type LtiCookie = {
   isEditor: boolean;
   lis_person_name_full: string;
   tool_consumer_instance_name: string;
+  lis_person_contact_email_primary: string;
 };

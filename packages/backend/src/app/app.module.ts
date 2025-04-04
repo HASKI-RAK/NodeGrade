@@ -7,10 +7,17 @@ import { BenchmarkController } from '../benchmark/benchmark.controller';
 import { BenchmarkService } from '../benchmark/benchmark.service';
 import { LtiController } from '../lti/lti.controller';
 import { LtiService } from '../lti/lti.service';
+import { XapiService } from '../xapi.service';
 
 @Module({
   imports: [GraphModule],
   controllers: [GraphController, BenchmarkController, LtiController],
-  providers: [GraphService, PrismaService, BenchmarkService, LtiService],
+  providers: [
+    GraphService,
+    PrismaService,
+    BenchmarkService,
+    LtiService,
+    XapiService,
+  ],
 })
 export class AppModule {}

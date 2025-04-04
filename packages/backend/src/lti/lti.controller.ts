@@ -38,6 +38,8 @@ export class LtiController {
         lis_person_name_full: payload.lis_person_name_full,
         timestamp: new Date().toISOString(),
         tool_consumer_instance_name: payload.tool_consumer_instance_name,
+        lis_person_contact_email_primary:
+          payload.lis_person_contact_email_primary,
       };
       response.cookie('lti_nodegrade_cookie', JSON.stringify(cookie), {
         maxAge: 5 * 60 * 60 * 1000, // 5 hours
