@@ -1,4 +1,4 @@
-import { INodeInputSlot, INodeOutputSlot, LGraphNode as LGN } from 'litegraph.js'
+import { INodeInputSlot, INodeOutputSlot, LGraphNode as LGN, LGraph } from 'litegraph.js'
 import { WebSocket } from 'ws'
 
 import WebSocketNode from '../behavior/WebSocketNode'
@@ -108,6 +108,16 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
       ...extra_info,
       ...LGraphNode.mapLinkTypeToColor(type)
     })
+  }
+
+  /**
+   * when added to graph (warning: this is called BEFORE the node is configured when loading)
+   * Called by `LGraph.add`
+   */
+  async onAdded?(graph: LGraph): Promise<void> {
+    if (this.env) {
+      this.init?.(this.env)
+    }
   }
 
   /**

@@ -123,7 +123,7 @@ const TaskView = ({
               onChange={handleSetAnswer}
             />
             <Stack direction="row" spacing={2}>
-              <Button variant="contained" type="submit" onClick={() => handleSubmit()}>
+              <Button variant="contained" type="submit">
                 Absenden
               </Button>
               <Typography variant="caption">

@@ -32,11 +32,11 @@ export class GraphHandlerService {
    * @param client Socket client for communication
    * @param benchmark Flag to disable reporting for benchmarking
    */
-  private addOnNodeAdded(
+  private addOnNodeAdded = (
     lgraph: LGraph,
     client: Socket,
     benchmark = false,
-  ): void {
+  ): void => {
     lgraph.onNodeAdded = (node: LGraphNode) => {
       if (!benchmark && client) {
         node.emitEventCallback = (
@@ -74,7 +74,7 @@ export class GraphHandlerService {
         }
       };
     };
-  }
+  };
 
   /**
    * Handles the "runGraph" event from a client. Configures and executes a graph
