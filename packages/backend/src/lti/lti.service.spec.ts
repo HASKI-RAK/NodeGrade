@@ -17,6 +17,26 @@ describe('LtiService', () => {
     expect(service).toBeDefined();
   });
 
+  it('should handle basic login', () => {
+    const mockPayload: LtiBasicLaunchRequest = {
+      user_id: '123',
+      roles: 'Student',
+      context_id: '456',
+      context_label: 'Math',
+      context_title: 'Math 101',
+      lti_message_type: 'basic-lti-launch-request',
+      lti_version: '1.3.0',
+      resource_link_id: '789',
+      custom_activityname: 'math101',
+    };
+
+    const result = service.handleBasicLogin(mockPayload);
+
+    expect(result).toEqual({
+      redirectUrl: expect.any(String),
+    });
+  });
+
   describe('handleBasicLogin', () => {
     it('should return redirect URL for student role', async () => {
       // Mock LTI basic launch request for student

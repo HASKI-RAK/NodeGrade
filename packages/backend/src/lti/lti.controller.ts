@@ -10,6 +10,7 @@ import { Response } from 'express';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 import { LtiService } from './lti.service';
 import { LtiBasicLaunchValidationPipe } from './pipes/lti-validation.pipe';
+import { LtiCookie } from 'src/utils/LtiCookie';
 
 @Controller('lti')
 export class LtiController {
@@ -26,6 +27,26 @@ export class LtiController {
       this.logger.debug(
         `Processing LTI basic login with payload: ${JSON.stringify(payload)}`,
       );
+
+      // Set cookies for LTI launch request data
+      const cookie: LtiCookie = {
+        user_id: payload.user_id,
+        tool_consumer_instance_guid: payload.tool_consumer_instance_guid,
+        isEditor:
+          payload.roles.includes('Instructor') ||
+          payload.roles.includes('Administrator'),
+        lis_person_name_full: payload.lis_person_name_full,
+        timestamp: new Date().toISOString(),
+        tool_consumer_instance_name: payload.tool_consumer_instance_name,
+      };
+      response.cookie('lti_nodegrade_cookie', JSON.stringify(cookie), {
+        maxAge: 5 * 60 * 60 * 1000, // 5 hours
+        httpOnly: true,
+      });
+      this.logger.debug(
+        `Set cookie lti_nodegrade_cookie with user_id: ${payload.user_id}`,
+      );
+
       const { redirectUrl } = this.ltiService.handleBasicLogin(payload);
 
       this.logger.debug(`Redirecting to: ${redirectUrl}`);
