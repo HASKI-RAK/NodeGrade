@@ -15,7 +15,9 @@ import { GraphHandlerService } from './graph-handler.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: 'https://nodegrade.haski.app',
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
   },
   path: '/socket.io',
 })
@@ -34,9 +36,15 @@ export class GraphGateway
 
   handleConnection(client: Socket) {
     const { sockets } = this.io.sockets;
-
     this.logger.log(`Client id: ${client.id} connected`);
     this.logger.debug(`Number of connected clients: ${sockets.size}`);
+
+    // LTI cookie is now handled by our WebSocketCookieAdapter
+    if (client.handshake.auth.ltiCookie) {
+      this.logger.debug(
+        `Client ${client.id} connected with LTI cookie for user: ${client.handshake.auth.ltiCookie}`,
+      );
+    }
   }
 
   handleDisconnect(client: Socket) {

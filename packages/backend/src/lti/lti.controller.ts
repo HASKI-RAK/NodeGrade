@@ -5,8 +5,9 @@ import {
   Logger,
   BadRequestException,
   Res,
+  Req,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 import { LtiService } from './lti.service';
 import { LtiBasicLaunchValidationPipe } from './pipes/lti-validation.pipe';
@@ -21,6 +22,7 @@ export class LtiController {
   @Post('basiclogin')
   handleBasicLogin(
     @Body(new LtiBasicLaunchValidationPipe()) payload: LtiBasicLaunchRequest,
+    @Req() request: Request,
     @Res() response: Response,
   ): void {
     try {

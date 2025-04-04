@@ -72,7 +72,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     headers: {
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': 'https://nodegrade.haski.app'
     },
     cors: true,
     hmr: {

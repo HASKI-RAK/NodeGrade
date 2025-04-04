@@ -8,17 +8,23 @@ import {
   LiteGraph,
   ServerEvent,
   ServerEventPayload,
+  OutputNode,
 } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { emitEvent } from 'utils/socket-emitter';
 import { GraphService } from 'src/graph/graph.service';
 import { executeLgraph } from 'src/core/Graph';
+import { XapiService, xAPI } from '../xapi.service';
+import { LtiCookie } from '../utils/LtiCookie';
 
 @Injectable()
 export class GraphHandlerService {
   private readonly logger = new Logger(GraphHandlerService.name);
 
-  constructor(private readonly graphService: GraphService) {}
+  constructor(
+    private readonly graphService: GraphService,
+    private readonly xapiService: XapiService,
+  ) {}
 
   /**
    * Adds execution handling to nodes in the graph
@@ -105,6 +111,53 @@ export class GraphHandlerService {
       });
 
     try {
+      // Extract LtiCookie data from the client's handshake
+      const ltiCookie: LtiCookie | undefined = (
+        client.handshake.auth as { ltiCookie?: LtiCookie }
+      ).ltiCookie;
+
+      // Send initial xAPI statement before executing the graph
+      if (ltiCookie) {
+        this.logger.debug('Sending initial xAPI statement');
+        await xAPI.sendStatement({
+          statement: {
+            actor: {
+              name: ltiCookie.lis_person_name_full || 'Unknown User',
+              mbox: ltiCookie.lis_person_contact_email_primary
+                ? `mailto:${ltiCookie.lis_person_contact_email_primary}`
+                : 'mailto:unknown@example.com',
+            },
+            verb: {
+              id: 'https://wiki.haski.app/variables/services.started',
+              display: {
+                en: 'started',
+              },
+            },
+            object: {
+              id: 'https://wiki.haski.app/functions/Graph',
+              definition: {
+                name: {
+                  en: 'Graph Execution',
+                },
+                extensions: {
+                  'https://ta.haski.app/variables/services.user_id':
+                    payload.user_id || ltiCookie.user_id,
+                  'https://ta.haski.app/variables/services.isEditor':
+                    ltiCookie.isEditor,
+                  'https://ta.haski.app/variables/services.tool_consumer_instance_name':
+                    ltiCookie.tool_consumer_instance_name,
+                  'https://ta.haski.app/variables/services.timestamp':
+                    payload.timestamp || ltiCookie.timestamp,
+                  'https://ta.haski.app/variables/services.domain':
+                    payload.domain,
+                },
+              },
+            },
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
       await executeLgraph(lgraph, (percentage) => {
         emitEvent(
           client,
@@ -112,6 +165,61 @@ export class GraphHandlerService {
           Number(percentage.toFixed(2)) * 100,
         );
       });
+
+      // Send completed xAPI statement after graph execution
+      if (ltiCookie) {
+        this.logger.debug('Sending completed xAPI statement');
+
+        // Collect output data from output nodes
+        const outputs = lgraph
+          .findNodesByClass<OutputNode>(OutputNode)
+          .map((node) => ({
+            id: node.id,
+            label: node.title,
+            value: node.properties.value,
+          }));
+
+        xAPI.sendStatement({
+          statement: {
+            actor: {
+              name: ltiCookie.lis_person_name_full || 'Unknown User',
+              mbox: ltiCookie.lis_person_contact_email_primary
+                ? `mailto:${ltiCookie.lis_person_contact_email_primary}`
+                : 'mailto:unknown@example.com',
+            },
+            verb: {
+              id: 'https://wiki.haski.app/variables/services.answered',
+              display: {
+                en: 'answered',
+              },
+            },
+            object: {
+              id: 'https://wiki.haski.app/functions/TextField',
+              definition: {
+                name: {
+                  en: 'TextField',
+                },
+                extensions: {
+                  'https://ta.haski.app/variables/services.user_id':
+                    payload.user_id || ltiCookie.user_id,
+                  'https://ta.haski.app/variables/services.answered':
+                    payload.answer,
+                  'https://ta.haski.app/variables/services.timestamp':
+                    payload.timestamp || ltiCookie.timestamp,
+                  'https://ta.haski.app/variables/services.domain':
+                    payload.domain,
+                  'https://ta.haski.app/variables/services.outputs': outputs,
+                  'https://ta.haski.app/variables/services.isEditor':
+                    ltiCookie.isEditor,
+                  'https://ta.haski.app/variables/services.tool_consumer_instance_name':
+                    ltiCookie.tool_consumer_instance_name,
+                },
+              },
+            },
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
 
       emitEvent(
         client,

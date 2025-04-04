@@ -15,7 +15,9 @@ export const getSocket = (path?: string): Socket => {
     const url = getConfig().API || 'http://localhost:5000'
     const fullUrl = path ? `${url}/${path}` : url
     console.log('Connecting to socket at:', fullUrl)
-    socket = io(url)
+    socket = io(url, {
+      withCredentials: true
+    })
 
     // Add global error handler
     socket.on('error', (error) => {
