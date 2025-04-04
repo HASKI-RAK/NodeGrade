@@ -67,17 +67,17 @@ export interface LtiLaunchRequest {
 }
 
 export interface LtiBasicLaunchRequest {
-  user_id: number
+  user_id: string
   lis_person_sourcedid?: string
   roles: string
   custom_activityname?: string // custom parameter specified in the LMS under "Custom Parameters". This is the name of the graph to load
-  context_id: number
+  context_id: string
   context_label: string
   context_title: string
   lti_message_type: string
   resource_link_title: string
   resource_link_description?: string
-  resource_link_id: number
+  resource_link_id: string
   context_type: string
   lis_course_section_sourcedid?: string
   lis_result_sourcedid: {
@@ -85,7 +85,7 @@ export interface LtiBasicLaunchRequest {
       instanceid: string
       userid: string
       typeid: string | null
-      launchid: number
+      launchid: string
     }
     hash: string
   }

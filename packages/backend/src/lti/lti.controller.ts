@@ -3,8 +3,10 @@ import {
   Post,
   Body,
   Logger,
-  HttpRedirectResponse,
+  BadRequestException,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 import { LtiService } from './lti.service';
 import { LtiBasicLaunchValidationPipe } from './pipes/lti-validation.pipe';
@@ -18,18 +20,37 @@ export class LtiController {
   @Post('basiclogin')
   handleBasicLogin(
     @Body(new LtiBasicLaunchValidationPipe()) payload: LtiBasicLaunchRequest,
-  ): HttpRedirectResponse {
+    @Res() response: Response,
+  ): void {
     try {
+      this.logger.debug(
+        `Processing LTI basic login with payload: ${JSON.stringify(payload)}`,
+      );
       const { redirectUrl } = this.ltiService.handleBasicLogin(payload);
 
       this.logger.debug(`Redirecting to: ${redirectUrl}`);
-      return {
-        statusCode: 302,
-        url: redirectUrl,
-      };
+      response.redirect(302, redirectUrl);
     } catch (error: unknown) {
-      this.logger.error('Error in LTI basic login', error);
-      throw error;
+      const errorMsg =
+        error instanceof Error
+          ? error.message
+          : 'Unknown error processing LTI request';
+
+      // Log detailed error information
+      this.logger.error(
+        `Error in LTI basic login: ${errorMsg}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      // If it's a validation error, we already have details from the pipe
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      // For other errors, provide a more descriptive error
+      throw new BadRequestException(
+        `Failed to process LTI request: ${errorMsg}`,
+      );
     }
   }
 }
