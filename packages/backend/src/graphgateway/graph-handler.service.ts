@@ -14,7 +14,7 @@ import { Socket } from 'socket.io';
 import { emitEvent } from 'utils/socket-emitter';
 import { GraphService } from 'src/graph/graph.service';
 import { executeLgraph } from 'src/core/Graph';
-import { XapiService, xAPI } from '../xapi.service';
+import { XapiService } from '../xapi.service';
 import { LtiCookie } from '../utils/LtiCookie';
 
 @Injectable()
@@ -119,7 +119,7 @@ export class GraphHandlerService {
       // Send initial xAPI statement before executing the graph
       if (ltiCookie) {
         this.logger.debug('Sending initial xAPI statement');
-        await xAPI.sendStatement({
+        await this.xapiService.getXapi().sendStatement({
           statement: {
             actor: {
               name: ltiCookie.lis_person_name_full || 'Unknown User',
@@ -179,7 +179,7 @@ export class GraphHandlerService {
             value: node.properties.value,
           }));
 
-        xAPI.sendStatement({
+        await this.xapiService.getXapi().sendStatement({
           statement: {
             actor: {
               name: ltiCookie.lis_person_name_full || 'Unknown User',
