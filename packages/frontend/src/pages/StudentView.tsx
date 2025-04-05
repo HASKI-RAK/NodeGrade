@@ -102,18 +102,6 @@ export const StudentView = () => {
           overflowY: 'scroll'
         }}
       >
-        <Typography
-          variant="body1"
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            padding: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            color: 'white'
-          }}
-        >
-          {connectionStatus}
-        </Typography>
         <Box
           sx={{
             display: 'flex',
