@@ -56,6 +56,7 @@ export {
   SampleSolutionNode,
   Textfield,
   Watch,
+  ImageNode,
   LiteGraph,
   LGraphRegisterCustomNodes
 }

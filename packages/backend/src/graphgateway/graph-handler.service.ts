@@ -5,10 +5,12 @@ import {
   SerializedGraph,
   AnswerInputNode,
   LGraphNode,
+  ImageNode,
   LiteGraph,
   ServerEvent,
   ServerEventPayload,
   OutputNode,
+  QuestionNode,
 } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { emitEvent } from 'utils/socket-emitter';
@@ -74,6 +76,24 @@ export class GraphHandlerService {
         }
       };
     };
+  };
+
+  private sendImages = (client: Socket, lgraph: LGraph): void => {
+    lgraph.findNodesByClass(ImageNode).forEach((node) => {
+      if (!node.properties.imageUrl) return;
+      const imageUrl = node.properties.imageUrl;
+      this.logger.debug(`Sending image: ${node.title}`);
+      emitEvent(client, 'questionImageSet', imageUrl);
+    });
+  };
+
+  private sendQuestion = (client: Socket, lgraph: LGraph): void => {
+    lgraph.findNodesByClass(QuestionNode).forEach((node) => {
+      if (!node.properties.value) return;
+      const question = node.properties.value;
+      this.logger.debug(`Sending question: ${node.title}`);
+      emitEvent(client, 'questionSet', question);
+    });
   };
 
   /**
@@ -354,6 +374,9 @@ export class GraphHandlerService {
           'graphLoaded',
           JSON.stringify(lgraph.serialize<SerializedGraph>()),
         );
+        this.sendImages(client, lgraph);
+        this.sendQuestion(client, lgraph);
+        emitEvent(client, 'maxInputChars', 1500);
       } else {
         this.logger.warn(`Graph not found with pathname: ${pathname}`);
         client.emit('graphNotFound', {
