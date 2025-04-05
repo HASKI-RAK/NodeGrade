@@ -11,6 +11,7 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  * path: input/answer
  */
 export class AnswerInputNode extends LGraphNode {
+  properties: { value: string }
   constructor() {
     super()
     this.addOut('string')

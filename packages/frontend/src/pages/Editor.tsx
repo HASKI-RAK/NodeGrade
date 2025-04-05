@@ -110,9 +110,19 @@ export const Editor = () => {
       try {
         runGraph({
           answer,
-          user_id: searchParams.get('user_id') ?? undefined,
-          timestamp: searchParams.get('timestamp') ?? undefined,
-          domain: path.slice(1) // custom_activityname from the LTI launch
+          xapi: {
+            custom_activityname: searchParams.get('custom_activityname') || '',
+            resource_link_title: searchParams.get('resource_link_title') || '',
+            tool_consumer_info_product_family_code:
+              searchParams.get('tool_consumer_info_product_family_code') || '',
+            launch_presentation_locale:
+              searchParams.get('launch_presentation_locale') || '',
+            tool_consumer_instance_guid:
+              searchParams.get('tool_consumer_instance_guid') || '',
+            context_id: searchParams.get('context_id') || '',
+            context_title: searchParams.get('context_title') || '',
+            context_type: searchParams.get('context_type') || ''
+          }
         })
       } catch (error) {
         console.error('Error running graph:', error)

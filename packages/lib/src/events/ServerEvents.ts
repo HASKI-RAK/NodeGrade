@@ -51,10 +51,18 @@ export type ClientEventPayload = {
   // runs a graph
   runGraph: {
     answer: string
-    user_id?: string // user id from the LTI launch (LMS) //TODO schauen was passiert wenn ohne diese geschickt wird
-    timestamp?: string // timestamp from the LTI launch (LMS)
-    domain?: string // custom_activityname from the LTI launch (LMS settings per activity)
     graph: string //SerializedGraph
+    xapi?: {
+      // user_id is handled by cookie for security reasons
+      custom_activityname: string // the name in the url to which it has been saved: for instance: strategie_leicht. This has to be specified in the LMS custom parameters
+      resource_link_title: string
+      tool_consumer_info_product_family_code: string
+      launch_presentation_locale: string
+      tool_consumer_instance_guid: string
+      context_id: string
+      context_title: string
+      context_type: string
+    }
   }
 }
 

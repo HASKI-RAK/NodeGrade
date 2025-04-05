@@ -10,15 +10,12 @@ interface UseSocketOptions {
   lgraph: LGraph
 }
 
+type ClientEventPayloadExceptGraph = Omit<ClientEventPayload['runGraph'], 'graph'>
+
 export interface UseSocketResult {
   socket: Socket | null
   connectionStatus: string
-  runGraph: (params: {
-    answer: string
-    user_id?: string
-    timestamp?: string
-    domain: string
-  }) => void
+  runGraph: (params: ClientEventPayloadExceptGraph) => void
   loadGraph: (workflowId: string) => void
   saveGraph: (name: string) => void
   publishGraph: (path: string) => void
@@ -78,12 +75,7 @@ export function useSocket({ socketPath, lgraph }: UseSocketOptions): UseSocketRe
   }, [socketPath])
 
   const runGraph = useCallback(
-    (params: {
-      answer: string
-      user_id?: string
-      timestamp?: string
-      domain: string
-    }) => {
+    (params: ClientEventPayloadExceptGraph) => {
       if (socket && socket.connected) {
         emitEvent<ClientEventPayload['runGraph']>('runGraph', {
           ...params,

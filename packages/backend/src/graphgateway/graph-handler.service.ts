@@ -104,11 +104,18 @@ export class GraphHandlerService {
     this.addOnNodeAdded(lgraph, client);
     lgraph.configure(JSON.parse(payload.graph));
 
+    // Start measuring execution time
+    const startTime = Date.now();
+
     lgraph
       .findNodesByClass<AnswerInputNode>(AnswerInputNode)
       .forEach((node) => {
-        node.properties.value = payload.answer.substring(0, 700);
+        node.properties.value = payload.answer.substring(0, 1500);
       });
+    const answer = lgraph
+      .findNodesByClass<AnswerInputNode>(AnswerInputNode)
+      .map((node) => node.properties.value)
+      .join(' ');
 
     try {
       // Extract LtiCookie data from the client's handshake
@@ -117,40 +124,56 @@ export class GraphHandlerService {
       ).ltiCookie;
 
       // Send initial xAPI statement before executing the graph
-      if (ltiCookie) {
-        this.logger.debug('Sending initial xAPI statement');
+      if (ltiCookie && payload.xapi) {
+        this.logger.debug('User input xAPI statement');
         await this.xapiService.getXapi().sendStatement({
           statement: {
             actor: {
               name: ltiCookie.lis_person_name_full || 'Unknown User',
-              mbox: ltiCookie.lis_person_contact_email_primary
-                ? `mailto:${ltiCookie.lis_person_contact_email_primary}`
-                : 'mailto:unknown@example.com',
+              account: {
+                name: ltiCookie.user_id || 'unknown',
+                homePage: payload.xapi?.tool_consumer_instance_guid
+                  ? `https://${payload.xapi.tool_consumer_instance_guid}`
+                  : 'https://example.com',
+              },
             },
             verb: {
-              id: 'https://wiki.haski.app/variables/services.started',
+              id: 'https://wiki.haski.app/variables/nodegrade.input',
               display: {
-                en: 'started',
+                en: 'input',
               },
             },
             object: {
-              id: 'https://wiki.haski.app/functions/Graph',
+              id: `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/ws/${ltiCookie.isEditor ? 'editor' : 'student'}/${
+                payload.xapi?.custom_activityname
+              }/1/1`,
               definition: {
                 name: {
-                  en: 'Graph Execution',
+                  en: payload.xapi?.resource_link_title,
                 },
-                extensions: {
-                  'https://ta.haski.app/variables/services.user_id':
-                    payload.user_id || ltiCookie.user_id,
-                  'https://ta.haski.app/variables/services.isEditor':
-                    ltiCookie.isEditor,
-                  'https://ta.haski.app/variables/services.tool_consumer_instance_name':
-                    ltiCookie.tool_consumer_instance_name,
-                  'https://ta.haski.app/variables/services.timestamp':
-                    payload.timestamp || ltiCookie.timestamp,
-                  'https://ta.haski.app/variables/services.domain':
-                    payload.domain,
+                type: 'http://www.tincanapi.co.uk/activitytypes/grade_classification',
+                description: {
+                  en: 'Free form text assessment',
                 },
+              },
+            },
+            context: {
+              platform: 'nodegrade',
+              language: payload.xapi?.launch_presentation_locale,
+              contextActivities: {
+                parent: [
+                  {
+                    id: `https://${
+                      payload.xapi?.tool_consumer_instance_guid
+                    }/${payload.xapi?.context_id}`,
+                    definition: {
+                      name: {
+                        en: payload.xapi?.context_title,
+                      },
+                      type: `https://wiki.haski.app/variables/context.${payload.xapi?.context_type}`,
+                    },
+                  },
+                ],
               },
             },
             timestamp: new Date().toISOString(),
@@ -166,54 +189,96 @@ export class GraphHandlerService {
         );
       });
 
-      // Send completed xAPI statement after graph execution
-      if (ltiCookie) {
-        this.logger.debug('Sending completed xAPI statement');
+      // Calculate execution time in milliseconds
+      const executionTimeMs = Date.now() - startTime;
 
-        // Collect output data from output nodes
-        const outputs = lgraph
-          .findNodesByClass<OutputNode>(OutputNode)
-          .map((node) => ({
-            id: node.id,
-            label: node.title,
-            value: node.properties.value,
-          }));
+      // Format duration as ISO 8601 with precision of 0.01 seconds
+      // Convert ms to seconds with 2 decimal places (0.01 precision)
+      const seconds = (executionTimeMs / 1000).toFixed(2);
+      const formattedDuration = `PT${seconds}S`;
+
+      this.logger.debug(`Execution time: ${formattedDuration}`);
+
+      // Accumulate all output values from the graph where the properties.type is score
+      const resultScore = lgraph
+        .findNodesByClass<OutputNode>(OutputNode)
+        .filter((node) => node.properties.type === 'score')
+        .map((node) => node.properties.value)[0] as number;
+      this.logger.debug(`Result score: ${resultScore}`);
+
+      // Textual feedback of the first type text output:
+      const feedback = lgraph
+        .findNodesByClass<OutputNode>(OutputNode)
+        .filter((node) => node.properties.type === 'text')
+        .map((node) => node.properties.value)[0] as string;
+      this.logger.debug(`Feedback: ${feedback}`);
+      // Send completed xAPI statement after graph execution
+      if (ltiCookie && payload.xapi) {
+        this.logger.debug('Sending graph completed xAPI statement');
 
         await this.xapiService.getXapi().sendStatement({
           statement: {
             actor: {
               name: ltiCookie.lis_person_name_full || 'Unknown User',
-              mbox: ltiCookie.lis_person_contact_email_primary
-                ? `mailto:${ltiCookie.lis_person_contact_email_primary}`
-                : 'mailto:unknown@example.com',
+              account: {
+                name: ltiCookie.user_id || 'unknown',
+                homePage: payload.xapi?.tool_consumer_instance_guid
+                  ? `https://${payload.xapi.tool_consumer_instance_guid}`
+                  : 'https://example.com',
+              },
             },
             verb: {
-              id: 'https://wiki.haski.app/variables/services.answered',
+              id: 'https://wiki.haski.app/variables/xapi.answered',
               display: {
                 en: 'answered',
               },
             },
             object: {
-              id: 'https://wiki.haski.app/functions/TextField',
+              id: `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/ws/${ltiCookie.isEditor ? 'editor' : 'student'}/${
+                payload.xapi?.custom_activityname
+              }/1/1`,
               definition: {
                 name: {
-                  en: 'TextField',
+                  en: payload.xapi?.resource_link_title,
                 },
-                extensions: {
-                  'https://ta.haski.app/variables/services.user_id':
-                    payload.user_id || ltiCookie.user_id,
-                  'https://ta.haski.app/variables/services.answered':
-                    payload.answer,
-                  'https://ta.haski.app/variables/services.timestamp':
-                    payload.timestamp || ltiCookie.timestamp,
-                  'https://ta.haski.app/variables/services.domain':
-                    payload.domain,
-                  'https://ta.haski.app/variables/services.outputs': outputs,
-                  'https://ta.haski.app/variables/services.isEditor':
-                    ltiCookie.isEditor,
-                  'https://ta.haski.app/variables/services.tool_consumer_instance_name':
-                    ltiCookie.tool_consumer_instance_name,
+                type: 'http://www.tincanapi.co.uk/activitytypes/grade_classification',
+                description: {
+                  en: 'Free form text assessment',
                 },
+              },
+            },
+            result: {
+              score: {
+                raw: resultScore,
+                min: 0,
+                max: 100,
+                scaled: resultScore / 100,
+              },
+              duration: formattedDuration,
+              completion: true,
+              success: resultScore >= 60,
+              response: feedback,
+              extensions: {
+                'https://wiki.haski.app/variables/nodegrade.input': answer,
+              },
+            },
+            context: {
+              platform: 'nodegrade',
+              language: payload.xapi?.launch_presentation_locale,
+              contextActivities: {
+                parent: [
+                  {
+                    id: `https://${
+                      payload.xapi?.tool_consumer_instance_guid
+                    }/${payload.xapi?.context_id}`,
+                    definition: {
+                      name: {
+                        en: payload.xapi?.context_title,
+                      },
+                      type: `https://wiki.haski.app/variables/context.${payload.xapi?.context_type}`,
+                    },
+                  },
+                ],
               },
             },
             timestamp: new Date().toISOString(),

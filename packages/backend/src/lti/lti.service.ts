@@ -51,7 +51,25 @@ export class LtiService {
         this.logger.warn('No activity name provided, using default');
       }
 
-      const redirectUrl = `${frontendUrl.trim()}/ws/${userType}/${activityName}/1/1?user_id=${payload.user_id}&timestamp=${timestamp}`;
+      const redirectUrl = `${frontendUrl.trim()}/ws/${userType}/${activityName}/1/1?user_id=${payload.user_id}&resource_link_title=${encodeURIComponent(
+        payload.resource_link_title,
+      )}&resource_link_id=${encodeURIComponent(
+        payload.resource_link_id,
+      )}&tool_consumer_instance_name=${encodeURIComponent(
+        payload.tool_consumer_instance_name,
+      )}&custom_activityname=${encodeURIComponent(
+        payload.custom_activityname || '',
+      )}&tool_consumer_info_product_family_code=${encodeURIComponent(
+        payload.tool_consumer_info_product_family_code,
+      )}&launch_presentation_locale=${encodeURIComponent(
+        payload.launch_presentation_locale,
+      )}&tool_consumer_instance_guid=${encodeURIComponent(
+        payload.tool_consumer_instance_guid,
+      )}&context_id=${encodeURIComponent(
+        payload.context_id,
+      )}&context_title=${encodeURIComponent(
+        payload.context_title,
+      )}&context_type=${encodeURIComponent(payload.context_type)}`;
       this.logger.debug(`Generated redirect URL: ${redirectUrl}`);
 
       return {
