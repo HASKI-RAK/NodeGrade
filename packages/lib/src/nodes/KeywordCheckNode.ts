@@ -26,8 +26,8 @@ export class KeywordCheckNode extends LGraphNode {
     })
     this.properties = {
       useSemantic: false,
-      presentKeywords: 'array',
-      missingKeywords: 'text'
+      presentKeywords: '',
+      missingKeywords: ''
     }
     this.title = 'Keyword Check'
     this.serialize_widgets = true
