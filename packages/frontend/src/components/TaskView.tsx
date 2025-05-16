@@ -21,7 +21,7 @@ const BorderLinearProgress = styled(LinearProgress)<
   },
   [`& .${linearProgressClasses.bar}`]: {
     borderRadius: 5,
-    backgroundColor: value >= 70 ? '#388E3C' : '#308fe8'
+    backgroundColor: value >= 60 ? '#388E3C' : '#308fe8'
   }
 }))
 
@@ -30,7 +30,7 @@ const TaskView = ({
   outputs,
   question,
   questionImage,
-  maxInputChars = 700
+  maxInputChars = 1200
 }: {
   onSubmit: (answer: string) => void
   outputs?: Record<string, ServerEventPayload['outputSet']>
@@ -165,7 +165,7 @@ const TaskView = ({
                     }
                     return (
                       <>
-                        {out.value >= 70 && <Alert severity="success">Bestanden!</Alert>}
+                        {out.value >= 60 && <Alert severity="success">Bestanden!</Alert>}
                         <Typography variant="h6">
                           {out.label}: {out.value}
                         </Typography>
