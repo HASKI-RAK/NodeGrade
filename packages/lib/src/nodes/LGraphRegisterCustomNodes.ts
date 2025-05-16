@@ -29,7 +29,7 @@ import { KeywordCheckNode } from './KeywordCheckNode'
 import { Watch } from './Watch'
 
 export function LGraphRegisterCustomNodes() {
-  // LiteGraph.clearRegisteredTypes() // Clear all registered types
+  // LiteGraph.clearRegisteredTypes() // Uncomment this line to clear all registered types during debugging or development.
   LiteGraph.registerNodeType(MyAddNode.getPath(), MyAddNode)
   LiteGraph.registerNodeType(Watch.getPath(), Watch)
   LiteGraph.registerNodeType(Textfield.getPath(), Textfield)
