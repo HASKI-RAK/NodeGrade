@@ -1,0 +1,169 @@
+classDiagram
+    class AppModule {
+        +imports: GraphModule[]
+        +controllers: Controller[]
+        +providers: Provider[]
+    }
+
+    class PrismaService {
+        +graph: PrismaClient.graph
+        +onModuleInit()
+        +onModuleDestroy()
+        +enableShutdownHooks()
+    }
+
+    class GraphService {
+        -prisma: PrismaService
+        +findAllGraphs(): Graph[]
+        +findGraphByPath(path: string): Graph
+        +updateGraph(id: number, data: any): Graph
+        +createGraph(data: any): Graph
+    }
+
+    class GraphController {
+        -logger: Logger
+        -graphService: GraphService
+        +findAllGraphs(response: Response): void
+    }
+
+    class BenchmarkService {
+        -prisma: PrismaService
+        +runBenchmark(params: BenchmarkParams): Promise~string[]~
+    }
+
+    class BenchmarkController {
+        -benchmarkService: BenchmarkService
+        +runBenchmark(data: BenchmarkData): Promise~any~
+    }
+
+    class LtiService {
+        -logger: Logger
+        +handleBasicLogin(payload: LtiBasicLaunchRequest): LtiLoginResult
+    }
+
+    class LtiController {
+        -logger: Logger
+        -ltiService: LtiService
+        +handleBasicLogin(payload: LtiBasicLaunchRequest): HttpRedirectResponse
+    }
+
+    class LtiBasicLaunchValidationPipe {
+        +transform(value: unknown): LtiBasicLaunchRequest
+        -isLtiBasicLaunchRequest(value: unknown): boolean
+    }
+
+    %% Entity/Model classes
+    class Graph {
+        +id: number
+        +path: string
+        +graph: string
+    }
+
+    class Settings {
+        +id: number
+        +path: string
+        +modelUrl: string
+    }
+
+    class LtiPlatform {
+        +id: number
+        +clientId: string
+        +issuer: string
+        +jwksUri: string
+        +authorizationEndpoint: string
+        +registrationEndpoint: string
+        +tokenEndpoint: string
+        +scopesSupported: string[]
+        +responseTypesSupported: string[]
+        +clientRegistration: LtiClientRegistration
+    }
+
+    class LtiClientRegistration {
+        +id: number
+        +clientId: string
+        +responseTypes: string[]
+        +jwksUri: string
+        +initiateLoginUri: string
+        +grantTypes: string[]
+        +redirectUris: string[]
+        +applicationType: string
+        +tokenEndpointAuthMethod: string
+        +clientName: string
+        +logoUri: string
+        +scope: string
+        +ltiToolConfiguration: Json
+        +ltiPlatformId: number
+    }
+
+    %% Type interfaces
+    class BenchmarkParams {
+        +path: string
+        +data: BenchmarkData
+    }
+
+    class BenchmarkData {
+        +question: string
+        +realAnswer: string
+        +answer: string
+    }
+
+    class LtiLoginResult {
+        +redirectUrl: string
+        +isEditor: boolean
+        +timestamp: string
+    }
+
+    class HttpRedirectResponse {
+        +statusCode: number
+        +url: string
+    }
+
+    %% External classes
+    class LtiBasicLaunchRequest {
+        +user_id: number
+        +roles: string
+        +context_id: number
+        +context_label: string
+        +context_title: string
+        +custom_activityname: string
+    }
+
+    class PrismaClient {
+        +graph: PrismaClient.graph
+    }
+
+    %% Relationships
+    AppModule --> GraphModule : imports
+    AppModule --> GraphController : contains
+    AppModule --> BenchmarkController : contains
+    AppModule --> LtiController : contains
+    AppModule --> GraphService : provides
+    AppModule --> PrismaService : provides
+    AppModule --> BenchmarkService : provides
+    AppModule --> LtiService : provides
+    
+    GraphController --> GraphService : uses
+    BenchmarkController --> BenchmarkService : uses
+    LtiController --> LtiService : uses
+    LtiController --> LtiBasicLaunchValidationPipe : uses
+    
+    GraphService --> PrismaService : uses
+    BenchmarkService --> PrismaService : uses
+    
+    LtiController ..> HttpRedirectResponse : returns
+    LtiService ..> LtiLoginResult : returns
+    
+    BenchmarkService ..> BenchmarkParams : accepts
+    BenchmarkController ..> BenchmarkData : accepts
+    
+    PrismaService --> PrismaClient : extends
+    
+    LtiPlatform --> LtiClientRegistration : has one
+    
+    Graph -- PrismaService : accessed via
+    Settings -- PrismaService : accessed via
+    LtiPlatform -- PrismaService : accessed via
+    LtiClientRegistration -- PrismaService : accessed via
+    
+    LtiBasicLaunchValidationPipe ..> LtiBasicLaunchRequest : validates
+    LtiService ..> LtiBasicLaunchRequest : processes

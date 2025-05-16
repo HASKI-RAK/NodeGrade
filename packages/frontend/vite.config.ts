@@ -21,7 +21,7 @@ const manifestForPlugin: Partial<VitePWAOptions> = {
   injectRegister: 'script',
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
   manifest: {
-    name: 'Task Editor',
+    name: 'Node Grade',
     short_name: 'task-editor',
     description: 'Editor for automated task assessments',
     icons: [
@@ -66,6 +66,27 @@ export default defineConfig({
   base: './',
   build: {
     sourcemap: process.env.SOURCE_MAP === 'true'
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+    headers: {
+      'Access-Control-Allow-Origin': 'https://nodegrade.haski.app'
+    },
+    cors: true,
+    hmr: {
+      host: 'nodegrade.haski.app'
+    },
+    proxy: {
+      // Configure a proxy to route API requests through Vite server
+      '/api': {
+        target: process.env.VITE_API_URL || 'https://nodegrade-backend.haski.app',
+        changeOrigin: true,
+        secure: false, // This is the key setting that disables certificate validation
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
   },
   optimizeDeps: {
     include: ['@emotion/react', '@emotion/styled', '@mui/material/Tooltip']

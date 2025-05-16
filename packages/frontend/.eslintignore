@@ -1,0 +1,10 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+node_modules/*
+*.test.ts
+*.spec.ts
+*.e2e*.ts
+*.unit.ts

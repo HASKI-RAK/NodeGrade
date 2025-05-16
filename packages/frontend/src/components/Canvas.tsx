@@ -1,5 +1,7 @@
-import { LGraph, LGraphCanvas } from '@haski/ta-lib'
-import { useEffect, useRef, useState } from 'react'
+/* eslint-disable immutable/no-mutation */
+import { LGraph } from '@haski/ta-lib'
+import { LGraphCanvas } from 'litegraph.js'
+import { useEffect, useRef } from 'react'
 
 type CanvasProps = {
   width: number
@@ -8,24 +10,33 @@ type CanvasProps = {
 }
 
 const Canvas = (props: CanvasProps) => {
-  const [lgraph, setLgraph] = useState<LGraph>(props.lgraph)
-  // const [lcanvas, setLcanvas] = useState<LGraphCanvas>()
   const lcanvas = useRef<LGraphCanvas>()
   const canvasRef = useRef(null)
 
   useEffect(() => {
-    setLgraph(props.lgraph)
-    if (canvasRef.current && lcanvas.current === undefined) {
-      // to prevent multiple instances of lgraphcanvas
-      // eslint-disable-next-line immutable/no-mutation
-      lcanvas.current = new LGraphCanvas(canvasRef.current, props.lgraph)
-      // eslint-disable-next-line immutable/no-mutation
-      lcanvas.current.allow_interaction = true
+    console.log('Canvas mounted or lgraph updated')
+
+    if (canvasRef.current) {
+      if (!lcanvas.current) {
+        // Initialize canvas if it doesn't exist
+        lcanvas.current = new LGraphCanvas(canvasRef.current, props.lgraph)
+        lcanvas.current.allow_interaction = true
+      } else {
+        // Update the graph reference if canvas already exists
+        lcanvas.current.setGraph(props.lgraph)
+      }
+
+      // Force a redraw
+      props.lgraph.setDirtyCanvas(true, true)
     }
+
     return () => {
-      lgraph.stop()
+      // Only stop the graph when component unmounts
+      if (lcanvas.current && canvasRef.current === null) {
+        props.lgraph.stop()
+      }
     }
-  }, [lgraph])
+  }, [props.lgraph, canvasRef.current])
 
   return (
     <canvas
@@ -35,10 +46,6 @@ const Canvas = (props: CanvasProps) => {
       height={props.height}
       id="mycanvas"
       style={{ border: '1px solid' }}
-      // onKeyDown={(event) => {
-      //   console.log('key pressed: ', event)
-      //   lcanvas.current?.processKey(event as unknown as KeyboardEvent)
-      // }}
     />
   )
 }

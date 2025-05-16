@@ -1,20 +1,14 @@
-import {
-  ClientPayload,
-  handleWsRequest,
-  LiteGraph,
-  SerializedGraph,
-  ServerEventPayload,
-  WebSocketEvent
-} from '@haski/ta-lib'
+import { ClientEventPayload, SerializedGraph, ServerEventPayload } from '@haski/ta-lib'
 import { AlertColor, Backdrop, Box, Container, Typography } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LiteGraph } from 'litegraph.js'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
-import useWebSocket, { ReadyState } from 'react-use-websocket'
 
 import Snackbar from '@/common/SnackBar'
 import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
-import { getConfig } from '@/utils/config'
+import { useServerEvents } from '@/hooks/useServerEvents'
+import { useSocket } from '@/hooks/useSocket'
 
 export const StudentView = () => {
   const { domain, courseId, elementId } = useParams<{
@@ -22,124 +16,77 @@ export const StudentView = () => {
     courseId: string
     elementId: string
   }>()
-  const [snackbar, setSnackbar] = useState<{
-    message: string
-    severity: AlertColor
-    open: boolean
-  }>({
-    message: '',
-    severity: 'success',
-    open: false
-  })
-  const [question, setQuestion] = useState<string>('')
-  const [outputs, setOutputs] = useState<
-    Record<string, ServerEventPayload['output']> | undefined
-  >(undefined)
-  const memoizedOutputs = useMemo(() => outputs, [outputs])
-  const [image, setImage] = useState<string>('')
-  const [maxInputChars, setMaxInputChars] = useState<number>(700)
-  const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const searchParams = new URLSearchParams(window.location.search)
+
+  // Create LiteGraph instance
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
-  const [socketUrl] = useState(
-    getConfig().WS + `ws/student/${domain}/${courseId}/${elementId}`
-  )
-  const { sendJsonMessage, lastMessage, readyState } = useWebSocket(socketUrl)
 
-  const handleSnackbarClose = (event: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return
-    }
-    setSnackbar({ ...snackbar, open: false })
-  }
+  // Set socket path based on URL params
+  const socketPath = `/ws/student/${domain}/${courseId}/${elementId}`
 
-  useEffect(() => {
-    if (lastMessage !== null) {
-      const wsEvent: WebSocketEvent<ServerEventPayload> = JSON.parse(lastMessage.data)
-      //* Handle events from server
-      handleWsRequest<ServerEventPayload>(wsEvent, {
-        graphFinished: (payload) => {
-          console.log('Graph finished: ', payload)
-          setProcessingPercentage(0)
-          lgraph.configure(payload)
-          lgraph.setDirtyCanvas(true, true)
-        },
-        question(payload) {
-          setQuestion(payload)
-        },
-        graphSaved: () => {
-          setSnackbar({
-            message: 'Graph saved',
-            severity: 'success',
-            open: true
-          })
-        },
-        output(output) {
-          // check if output is already in outputs, if not add it, otherwise update it
-          console.log('Outputs: ', outputs)
-          setOutputs((prev) => {
-            if (prev === undefined) return { [output.uniqueId]: output }
-            return { ...prev, [output.uniqueId]: output }
-          })
-          console.log('Output: ', output)
-        },
-        nodeError(payload) {
-          console.warn('Node error: ', payload)
-          setSnackbar({
-            message: payload.error,
-            severity: 'error',
-            open: true
-          })
-        },
-        maxInputChars(maxChars) {
-          setMaxInputChars(maxChars)
-        },
-        processingPercentageUpdate(payload) {
-          setProcessingPercentage(payload)
-        },
-        // We don't have handlers for these events
-        nodeExecuting: function (): void | Promise<void> {},
-        nodeExecuted: function (): void | Promise<void> {},
-        questionImage: function (base64Image: string): void | Promise<void> {
-          console.log('Image received')
-          setImage(base64Image)
-        }
-      }).then((handled) => {
-        if (!handled) {
-          setSnackbar({
-            message: 'No handler for this event',
-            severity: 'error',
-            open: true
-          })
-        }
-      })
-    }
-  }, [lastMessage])
+  // Use the socket hook to manage socket connection
+  const { socket, connectionStatus, runGraph, loadGraph } = useSocket({
+    socketPath,
+    lgraph
+  })
 
-  const handleSubmit = (answer: string) => {
-    sendJsonMessage<ClientPayload>({
-      eventName: 'runGraph',
-      payload: {
-        answer: answer,
-        user_id: searchParams.get('user_id') ?? undefined,
-        timestamp: searchParams.get('timestamp') ?? undefined,
-        domain: domain,
-        graph: lgraph.serialize<SerializedGraph>()
+  // Use the serverEvents hook to manage server events
+  const {
+    outputs,
+    question,
+    image,
+    maxInputChars,
+    processingPercentage,
+    snackbar,
+    handleSnackbarClose
+  } = useServerEvents({
+    socket,
+    lgraph
+  })
+
+  const memoizedOutputs = useMemo(() => outputs, [outputs])
+
+  // Handle form submission
+  const handleSubmit = useCallback(
+    (answer: string) => {
+      try {
+        runGraph({
+          answer,
+          xapi: {
+            custom_activityname: searchParams.get('custom_activityname') || '',
+            resource_link_title: searchParams.get('resource_link_title') || '',
+            tool_consumer_info_product_family_code:
+              searchParams.get('tool_consumer_info_product_family_code') || '',
+            launch_presentation_locale:
+              searchParams.get('launch_presentation_locale') || '',
+            tool_consumer_instance_guid:
+              searchParams.get('tool_consumer_instance_guid') || '',
+            context_id: searchParams.get('context_id') || '',
+            context_title: searchParams.get('context_title') || '',
+            context_type: searchParams.get('context_type') || ''
+          }
+        })
+      } catch (error) {
+        console.error('Error running graph:', error)
       }
-    })
-  }
+    },
+    [runGraph, searchParams, domain]
+  )
 
-  const connectionStatus = {
-    [ReadyState.CONNECTING]: 'Connecting...',
-    [ReadyState.OPEN]: '',
-    [ReadyState.CLOSING]: 'Closing',
-    [ReadyState.CLOSED]: 'Connection closed',
-    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
-  }[readyState]
+  // Load the graph when the connection is established
+  useEffect(() => {
+    // Only load the graph when the connection is established
+    if (connectionStatus === 'Connected') {
+      console.log('Loading graph for student view:', socketPath)
+      // Load the graph from the server
+      loadGraph(socketPath)
+    }
+  }, [connectionStatus, loadGraph, socketPath])
 
-  const handleAnswerSubmit = useCallback((answer: string) => {
-    handleSubmit(answer)
-  }, [])
+  // Debug outputs
+  useEffect(() => {
+    console.log('Student view outputs updated:', outputs)
+  }, [outputs])
 
   return (
     <>
@@ -155,18 +102,6 @@ export const StudentView = () => {
           overflowY: 'scroll'
         }}
       >
-        <Typography
-          variant="body1"
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            padding: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            color: 'white'
-          }}
-        >
-          {connectionStatus}
-        </Typography>
         <Box
           sx={{
             display: 'flex',
@@ -179,7 +114,7 @@ export const StudentView = () => {
           <TaskView
             question={question}
             questionImage={image}
-            onSubmit={handleAnswerSubmit}
+            onSubmit={handleSubmit}
             outputs={memoizedOutputs}
             maxInputChars={maxInputChars}
           />

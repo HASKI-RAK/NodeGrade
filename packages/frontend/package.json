@@ -4,8 +4,10 @@
   "author": {
     "name": "David Fischer"
   },
+  "type": "commonjs",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite --host 0.0.0.0",
     "server": "npx ts-node ./server/src/server.ts",
     "build": "tsc && vite build --mode production",
     "serve": "vite preview --host",
@@ -23,11 +25,13 @@
     "@mui/icons-material": "^5.14.16",
     "@mui/material": "^5.14.16",
     "@types/node": "^22.7.6",
+    "litegraph.js": "^0.7.14",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-rewards": "^2.0.4",
     "react-router-dom": "^6.17.0",
     "react-use-websocket": "^4.5.0",
+    "socket.io-client": "^4.8.1",
     "zustand": "^4.4.6"
   },
   "devDependencies": {

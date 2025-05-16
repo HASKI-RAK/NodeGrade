@@ -17,5 +17,8 @@
   },
   "pre-commit": "lint",
   "license": "MIT",
-  "packageManager": "yarn@4.7.0"
+  "packageManager": "yarn@4.7.0",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.29.0"
+  }
 }

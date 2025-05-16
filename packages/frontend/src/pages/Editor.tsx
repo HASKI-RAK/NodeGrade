@@ -1,18 +1,10 @@
 /* eslint-disable immutable/no-mutation */
-import {
-  ClientPayload,
-  handleWsRequest,
-  LGraph,
-  LiteGraph,
-  SerializedGraph,
-  ServerEventPayload,
-  WebSocketEvent
-} from '@haski/ta-lib'
+import { LiteGraph } from '@haski/ta-lib'
+import { LGraph } from '@haski/ta-lib'
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import {
-  AlertColor,
   Box,
   Button,
   Divider,
@@ -22,15 +14,17 @@ import {
   Typography,
   useTheme
 } from '@mui/material'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import useWebSocket, { ReadyState } from 'react-use-websocket'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import Snackbar from '@/common/SnackBar'
 import { AppBar } from '@/components/AppBar'
 import Canvas from '@/components/Canvas'
 import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
-import { getConfig } from '@/utils/config'
+import { useEditorUI } from '@/hooks/useEditorUI'
+import { useGraphOperations } from '@/hooks/useGraphOperations'
+import { useServerEvents } from '@/hooks/useServerEvents'
+import { useSocket } from '@/hooks/useSocket'
 
 export const drawerWidth = 500
 
@@ -69,241 +63,128 @@ const DrawerHeader = styled('div')(({ theme }) => ({
 }))
 
 export const Editor = () => {
-  const [open, setOpen] = useState(true)
-  const [snackbar, setSnackbar] = useState<{
-    message: string
-    severity: AlertColor
-    open: boolean
-  }>({
-    message: '',
-    severity: 'success',
-    open: false
-  })
-  const [question, setQuestion] = useState<string>('')
-  const [outputs, setOutputs] = useState<
-    Record<string, ServerEventPayload['output']> | undefined
-  >(undefined)
-  // get search params:
+  // Get search params
   const searchParams = new URLSearchParams(window.location.search)
+  const path = window.location.pathname
+
+  // Create LiteGraph instance
+  const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
+
+  // Use custom hooks
+  const {
+    open,
+    handleDrawerOpen,
+    handleDrawerClose,
+    size,
+    selectedGraph,
+    setSelectedGraph
+  } = useEditorUI()
+
+  const { socket, connectionStatus, runGraph, loadGraph, saveGraph, publishGraph } =
+    useSocket({
+      socketPath: path.slice(1), // window.location.pathname without leading slash
+      lgraph: lgraph
+    })
+
+  const {
+    outputs,
+    question,
+    image,
+    maxInputChars,
+    processingPercentage,
+    snackbar,
+    handleSnackbarClose
+  } = useServerEvents({
+    socket,
+    lgraph: lgraph
+  })
+
+  const { handleDownloadGraph, handleUploadGraph } = useGraphOperations({
+    lgraph: lgraph
+  })
+
   const memoizedOutputs = useMemo(() => outputs, [outputs])
 
-  const path = window.location.pathname
-  const [selectedGraph, setSelectedGraph] = useState<string>(path)
-  const [maxInputChars, setMaxInputChars] = useState<number>(700)
-  const [image, setImage] = useState<string | undefined>()
-  const [processingPercentage, setProcessingPercentage] = useState<number>(0)
-  const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
-  const [socketUrl, setSocketUrl] = useState(
-    getConfig().WS + path.slice(1) // window.location.pathname
+  const handleSubmit = useCallback(
+    (answer: string) => {
+      try {
+        runGraph({
+          answer,
+          xapi: {
+            custom_activityname: searchParams.get('custom_activityname') || '',
+            resource_link_title: searchParams.get('resource_link_title') || '',
+            tool_consumer_info_product_family_code:
+              searchParams.get('tool_consumer_info_product_family_code') || '',
+            launch_presentation_locale:
+              searchParams.get('launch_presentation_locale') || '',
+            tool_consumer_instance_guid:
+              searchParams.get('tool_consumer_instance_guid') || '',
+            context_id: searchParams.get('context_id') || '',
+            context_title: searchParams.get('context_title') || '',
+            context_type: searchParams.get('context_type') || ''
+          }
+        })
+      } catch (error) {
+        console.error('Error running graph:', error)
+        // The error message is handled in the useSocket hook
+      }
+    },
+    [runGraph, searchParams, path]
   )
-  const [size, setSize] = useState({
-    width: window.outerWidth,
-    height: window.outerHeight
-  })
-  const theme = useTheme()
-  const { sendJsonMessage, lastMessage, readyState } = useWebSocket(socketUrl)
 
-  const checkSize = useCallback(() => {
-    setSize({
-      width: window.outerWidth,
-      height: window.outerWidth
-    })
-  }, [open])
-
-  const handleDrawerOpen = () => {
-    setOpen(true)
-  }
-
-  const handleDrawerClose = () => {
-    setOpen(false)
-  }
-
-  const handleSnackbarClose = (event: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return
-    }
-    setSnackbar({ ...snackbar, open: false })
-  }
-
-  const handleNodeExecuting = (lgraph: LGraph, nodeId: number) => {
-    if (lgraph.getNodeById(nodeId) === null) return
-    // eslint-disable-next-line immutable/no-mutation
-    lgraph.getNodeById(nodeId)!.color = '#88FF00'
-    lgraph.setDirtyCanvas(true, true)
-  }
-
-  const handleNodeExecuted = (lgraph: LGraph, nodeId: number) => {
-    if (lgraph.getNodeById(nodeId) === null) return
-    // eslint-disable-next-line immutable/no-mutation
-    lgraph.getNodeById(nodeId)!.color = '#FFFFFF00'
-    lgraph.setDirtyCanvas(true, true)
-  }
-
-  const handleSaveGraph = () => {
+  const handleSaveGraph = useCallback(() => {
     // prompt user
     const name = prompt('Enter graph name', path)
     if (!name) return
-    sendJsonMessage<ClientPayload>({
-      eventName: 'saveGraph',
-      payload: {
-        graph: lgraph.serialize<SerializedGraph>(),
-        name // when no name is given, use the current location.pathname
-      }
-    })
-  }
+    saveGraph(name)
+  }, [saveGraph, path])
 
-  const handlePublishGraph = () => {
-    //name based on the current location.pathname, just exchange editor with student
-    const name = path.replace('editor', 'student')
-    sendJsonMessage<ClientPayload>({
-      eventName: 'saveGraph',
-      payload: {
-        graph: lgraph.serialize<SerializedGraph>(),
-        name
-      }
-    })
-  }
-
-  useEffect(() => {
-    if (lastMessage !== null) {
-      const wsEvent: WebSocketEvent<ServerEventPayload> = JSON.parse(lastMessage.data)
-      //* Handle events from server
-      handleWsRequest<ServerEventPayload>(wsEvent, {
-        graphFinished: (payload) => {
-          console.log('Graph finished: ', payload)
-          setProcessingPercentage(0)
-          lgraph.configure(payload)
-          lgraph.setDirtyCanvas(true, true)
-        },
-        question(payload) {
-          setQuestion(payload)
-        },
-        nodeExecuting: (nodeId) => handleNodeExecuting(lgraph, nodeId),
-        nodeExecuted: (nodeId) => handleNodeExecuted(lgraph, nodeId),
-        graphSaved: () => {
-          setSnackbar({
-            message: 'Graph saved',
-            severity: 'success',
-            open: true
-          })
-        },
-        output(output) {
-          // check if output is already in outputs, if not add it, otherwise update it
-          console.log('Outputs: ', outputs)
-          setOutputs((prev) => {
-            if (prev === undefined) return { [output.uniqueId]: output }
-            return { ...prev, [output.uniqueId]: output }
-          })
-          console.log('Output: ', output)
-        },
-        nodeError(payload) {
-          console.warn('Node error: ', payload)
-          setSnackbar({
-            message: payload.error,
-            severity: 'error',
-            open: true
-          })
-        },
-        maxInputChars(maxChars) {
-          setMaxInputChars(maxChars)
-        },
-        processingPercentageUpdate(payload) {
-          setProcessingPercentage(payload)
-        },
-        questionImage: function (imageBase64: string): void | Promise<void> {
-          setImage(imageBase64)
-        }
-      }).then((handled) => {
-        if (!handled) {
-          setSnackbar({
-            message: 'No handler for this event',
-            severity: 'error',
-            open: true
-          })
-        }
-      })
-    }
-    setOpen(true)
-    window.addEventListener('resize', checkSize)
-    return () => {
-      window.removeEventListener('resize', checkSize)
-    }
-  }, [lastMessage])
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSubmit = useCallback((answer: string) => {
-    // TODO: Add type to json
-    sendJsonMessage<ClientPayload>({
-      eventName: 'runGraph',
-      payload: {
-        answer: answer,
-        user_id: searchParams.get('user_id') ?? undefined,
-        timestamp: searchParams.get('timestamp') ?? undefined,
-        domain: path.slice(1), // custom_activityname from the LTI launch (LMS settings per activity)
-        graph: lgraph.serialize<SerializedGraph>()
-      }
-    })
-  }, [])
+  const handlePublishGraph = useCallback(() => {
+    publishGraph(path)
+  }, [publishGraph, path])
 
   const handleClickChangeSocketUrl = useCallback(() => {
-    const newUrl = prompt('Enter new socket url', socketUrl)
+    const newUrl = prompt('Enter new socket path', path.slice(1))
     if (newUrl) {
-      setSocketUrl(newUrl)
+      window.location.href = '/editor/' + newUrl
     }
-  }, [socketUrl])
-
-  const handleDownloadGraph = () => {
-    const dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(lgraph.serialize())
-    )}`
-    const downloadAnchorNode = document.createElement('a')
-    downloadAnchorNode.setAttribute('href', dataStr)
-    downloadAnchorNode.setAttribute('download', 'graph.json')
-    document.body.appendChild(downloadAnchorNode) // required for firefox
-    downloadAnchorNode.click()
-    downloadAnchorNode.remove()
-  }
-
-  const handleUploadGraph = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const contents = e.target?.result
-          if (typeof contents === 'string') {
-            lgraph.configure(JSON.parse(contents))
-            lgraph.setDirtyCanvas(true, true)
-          }
-        }
-        reader.readAsText(file)
-      }
-    }
-    input.click()
-  }
+  }, [path])
 
   /**
    * Loads a new workflow from the server. Does not save the current graph nor does it run it.
    * @param workflow - the ID of the workflow to load
    */
-  const handleWorkflowChange = (workflow: string) => {
-    setSelectedGraph(workflow)
-    sendJsonMessage<ClientPayload>({
-      eventName: 'loadGraph',
-      payload: workflow
-    })
-  }
+  const handleWorkflowChange = useCallback(
+    (workflow: string) => {
+      setSelectedGraph(workflow)
+      try {
+        loadGraph(workflow)
+      } catch (error) {
+        console.error('Error loading graph:', error)
+        // The error message is handled in the useSocket hook
+      }
+    },
+    [setSelectedGraph, loadGraph]
+  )
 
-  const connectionStatus = {
-    [ReadyState.CONNECTING]: 'Connecting...',
-    [ReadyState.OPEN]: 'Open',
-    [ReadyState.CLOSING]: 'Closing',
-    [ReadyState.CLOSED]: 'Connection closed',
-    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
-  }[readyState]
+  const theme = useTheme()
+
+  useEffect(() => {
+    // Set the initial graph name from the URL
+    const initialGraphName = '/' + path.slice(1)
+    setSelectedGraph(initialGraphName)
+
+    // Only load the graph when the connection is established
+    if (connectionStatus === 'Connected') {
+      // Load the graph from the server
+      loadGraph(initialGraphName)
+    }
+  }, [connectionStatus])
+
+  useEffect(() => {
+    console.log('Registering nodes')
+  }, [])
+
   return (
     <>
       <Box sx={{ display: 'flex' }}>

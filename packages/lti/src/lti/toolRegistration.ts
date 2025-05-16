@@ -2,8 +2,6 @@
 
 import { IncomingMessage, ServerResponse } from 'http'
 
-import config from '../config.json'
-
 export interface ToolRegistrationRequest {
   client_id: string
   initiate_login_uri: string
@@ -69,17 +67,17 @@ export interface LtiLaunchRequest {
 }
 
 export interface LtiBasicLaunchRequest {
-  user_id: number
+  user_id: string
   lis_person_sourcedid?: string
   roles: string
   custom_activityname?: string // custom parameter specified in the LMS under "Custom Parameters". This is the name of the graph to load
-  context_id: number
+  context_id: string
   context_label: string
   context_title: string
   lti_message_type: string
   resource_link_title: string
   resource_link_description?: string
-  resource_link_id: number
+  resource_link_id: string
   context_type: string
   lis_course_section_sourcedid?: string
   lis_result_sourcedid: {
@@ -87,7 +85,7 @@ export interface LtiBasicLaunchRequest {
       instanceid: string
       userid: string
       typeid: string | null
-      launchid: number
+      launchid: string
     }
     hash: string
   }
@@ -168,10 +166,16 @@ const getRegistrationEndpoint = async (
         response_types: ['id_token'],
         client_name: 'Task Assessment',
         'client_name#de': 'Aufgabenbewertung',
-        redirect_uris: [...config.redirect_urls], // testen ob das so geht oder auch ohne url am ende
+        redirect_uris: [
+          'http://localhost:5173/ws/editor/lol/1/2',
+          'http://localhost:5000',
+          'http://localhost:5000/v1/lti/register',
+          'http://localhost:5173',
+          'http://localhost:5173/lti/register'
+        ],
         policy_uri: 'http://localhost:5000/policy',
         'policy_uri#de': 'http://localhost:5000/policy',
-        initiate_login_uri: config.initiate_login_uri,
+        initiate_login_uri: 'http://localhost:5173/lti/login',
         jwks_uri: 'http://localhost:5000/.well-known/jwks',
         token_endpoint_auth_method: 'private_key_jwt',
         scope:

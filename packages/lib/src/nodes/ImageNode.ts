@@ -1,0 +1,51 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable no-var */
+/* eslint-disable immutable/no-let */
+/* eslint-disable immutable/no-mutation */
+/* eslint-disable immutable/no-this */
+import { WebSocket } from 'ws'
+
+import { LGraphNode, Vector2 } from './litegraph-extensions'
+import { ImageWidget } from './widgets/ImageWidget'
+import { LGraphCanvas } from 'litegraph.js'
+
+export class ImageNode extends LGraphNode {
+  properties: { imageUrl?: string }
+  widget: ImageWidget
+  constructor() {
+    super()
+    this.addOut('*')
+    this.properties = { imageUrl: undefined }
+    this.widget = this.addCustomWidget<ImageWidget>(new ImageWidget())
+    this.size = [200, 200]
+    this.title = 'Image'
+  }
+
+  //name of the node
+  static title = 'Image'
+  static path = 'basic/Image'
+  static getPath(): string {
+    return ImageNode.path
+  }
+
+  async init(_env: Record<string, unknown>) {
+    this.env = _env
+  }
+
+  //name of the function to call when executing
+  async onExecute() {
+    this.setOutputData(0, this.properties.imageUrl)
+  }
+
+  onMouseDown(event: MouseEvent, pos: Vector2, graphCanvas: LGraphCanvas): void {
+    // only when y greater than the title margin
+    if (pos[1] < 10) {
+      return
+    }
+    event.preventDefault()
+
+    if (this.widget) {
+      this.widget.createImageUploadElement(this)
+    }
+  }
+}
