@@ -7,6 +7,7 @@ import { CosineSimilarity } from './CosineSimilarity'
 import { DocumentLoader } from './DocumentLoader'
 import { ExtractNumberNode } from './ExtractNumberNode'
 import { ImageNode } from './ImageNode'
+import { KeywordCheckNode } from './KeywordCheckNode'
 import { LGraphRegisterCustomNodes } from './LGraphRegisterCustomNodes'
 import { LiteGraph } from './litegraph-extensions'
 import { LLMNode } from './LLMNode'
@@ -58,7 +59,8 @@ export {
   Watch,
   ImageNode,
   LiteGraph,
-  LGraphRegisterCustomNodes
+  LGraphRegisterCustomNodes,
+  KeywordCheckNode
 }
 
 export { LGraphNode } from './litegraph-extensions/LGraphNode'
