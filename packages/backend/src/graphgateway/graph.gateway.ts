@@ -15,7 +15,7 @@ import { GraphHandlerService } from './graph-handler.service';
 
 @WebSocketGateway({
   cors: {
-    origin: 'https://nodegrade.haski.app',
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
   },

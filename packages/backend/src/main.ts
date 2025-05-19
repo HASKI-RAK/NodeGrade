@@ -12,7 +12,7 @@ async function bootstrap() {
 
   // Enable CORS for development
   app.enableCors({
-    origin: 'https://nodegrade.haski.app',
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],

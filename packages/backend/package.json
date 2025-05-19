@@ -19,7 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "setup": "yarn install --frozen-lockfile && yarn prisma generate"
+    "setup": "yarn install --frozen-lockfile && yarn prisma generate && yarn prisma migrate dev --name init"
   },
   "dependencies": {
     "@haski/lti": "workspace:*",
