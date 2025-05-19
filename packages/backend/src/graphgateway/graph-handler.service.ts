@@ -356,7 +356,7 @@ export class GraphHandlerService {
     client: Socket,
     payload: ClientEventPayload['loadGraph'],
   ) {
-    this.logger.log(`LoadGraph event received from client id: ${client.id}`);
+    this.logger.debug(`LoadGraph event received from client id: ${client.id}`);
     const pathname = payload || 'UnnamedGraph';
     this.logger.debug(`Loading graph with pathname: ${pathname}`);
 
