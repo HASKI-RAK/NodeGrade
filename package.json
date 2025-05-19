@@ -10,10 +10,10 @@
   ],
   "scripts": {
     "dev": "yarn workspaces foreach -i --parallel --verbose --all run dev",
-    "setup": "yarn workspace @haski/ta-server setup",
+    "setup": "yarn workspace @haski/backend setup",
     "lint": "yarn workspaces foreach --parallel --all run lint",
     "test": "yarn workspaces foreach --parallel --all run jest",
-    "build": "yarn workspaces foreach --parallel --all run build"
+    "build": "yarn workspaces foreach --parallel --all run build &&yarn workspaces foreach --parallel --all run build"
   },
   "pre-commit": "lint",
   "license": "MIT",
