@@ -3,6 +3,13 @@
 This is a monorepo with multiple packages. We have a frontend, a backend, a shared library `lib` and `lti` which is responsible for Learning Tools Interoperability functionality.
 The frontend and backend use rest and websockets to communicate.
 
+## Test Driven Development (TDD)
+
+- Always start by writing tests before implementing new features or fixing bugs.
+- Define the expected behavior and edge cases in your tests.
+- Only write the minimum code necessary to make the tests pass.
+- Refactor your code after tests pass, ensuring all tests remain green.
+
 ## Console
 
 Check the current os with `uname`.
@@ -14,10 +21,11 @@ If we are using windows powershell, keep in mind that you cant use operators lik
 - When you create a new test, make sure to eliminate all related errors before running.
 - Sometimes not the tests are the issue, but the implementation. When you think that the tests should work, take a look at the implementation to find the bug.
 
-## Alyways do the following
+## Always do the following
 
 Before starting to work, briefly summarize your task in one short sentence!
-After implementing a feature, run the tests. If they fail, try to fix them based on the Test failures.
+Write or update tests before implementing or changing code.
+After implementing a feature, run the tests. If they fail, try to fix them based on the test failures.
 Only focus on the task given to you, do not modify unrelated code.
 If you are not sure about something, ask for help. Do not hesitate to ask for clarification or help if you are stuck.
 
