@@ -18,8 +18,16 @@ jest.mock('src/core/Graph', () => ({
 describe('GraphHandlerService', () => {
   let service: GraphHandlerService;
   let graphService: GraphService;
-  let mockSocket: Socket;
-
+  const mockSocket: any = {
+    handshake: {
+      auth: {
+        token: 'test-token',
+      },
+    },
+    emit: jest.fn(),
+    on: jest.fn(),
+    id: 'mock-socket-id',
+  };
   // Create a valid SerializedGraph mock object to use in tests
   const mockSerializedGraph: SerializedGraph = {
     last_node_id: 0,
@@ -31,7 +39,10 @@ describe('GraphHandlerService', () => {
     version: 1.0,
   };
 
-  const stringifiedMockGraph: string = JSON.stringify(mockSerializedGraph);
+  // Load the graph from graph_simple.json
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const graphSimple = require('./graph_simple.json');
+  const stringifiedGraphSimple: string = JSON.stringify(graphSimple);
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -44,15 +55,17 @@ describe('GraphHandlerService', () => {
             getGraph: jest.fn(),
           },
         },
+        {
+          provide: require('../xapi.service').XapiService,
+          useValue: {
+            getXapi: jest.fn().mockReturnValue({ sendStatement: jest.fn() }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<GraphHandlerService>(GraphHandlerService);
     graphService = module.get<GraphService>(GraphService);
-    mockSocket = {
-      id: 'mockSocketId',
-      emit: jest.fn(),
-    } as unknown as Socket;
   });
 
   it('should be defined', () => {
@@ -62,13 +75,22 @@ describe('GraphHandlerService', () => {
   describe('handleRunGraph', () => {
     it('should configure and execute the graph, emitting progress and completion events', async () => {
       const mockPayload = {
-        graph: stringifiedMockGraph,
+        graph: stringifiedGraphSimple,
         answer: 'testAnswer',
       };
+      // Use a minimal mock node with required properties for AnswerInputNode
+      const mockAnswerNode: AnswerInputNode = {
+        id: 1,
+        title: 'AnswerInput',
+        type: 'input/answer',
+        properties: { value: '' },
+      } as unknown as AnswerInputNode;
       const mockLGraph = {
         configure: jest.fn(),
-        findNodesByClass: jest.fn().mockReturnValue([]),
-        serialize: jest.fn().mockReturnValue(mockSerializedGraph),
+        findNodesByClass: jest.fn((cls) =>
+          cls === AnswerInputNode ? [mockAnswerNode] : [],
+        ),
+        serialize: jest.fn().mockReturnValue(graphSimple),
       };
       jest.spyOn(service as any, 'addOnNodeAdded').mockImplementation();
       jest
@@ -87,17 +109,20 @@ describe('GraphHandlerService', () => {
         JSON.parse(mockPayload.graph),
       );
       expect(mockLGraph.findNodesByClass).toHaveBeenCalledWith(AnswerInputNode);
-      expect(GraphCore.executeLgraph).toHaveBeenCalled();
+      expect(mockAnswerNode.properties.value).toBe('testAnswer');
+
+      expect(GraphCore.executeLgraph).toHaveBeenCalledTimes(1);
+
       expect(emitEvent).toHaveBeenCalledWith(
         mockSocket,
         'graphFinished',
-        JSON.stringify(mockSerializedGraph),
+        JSON.stringify(graphSimple),
       );
     });
 
     it('should log an error if graph execution fails', async () => {
       const mockPayload = {
-        graph: stringifiedMockGraph,
+        graph: stringifiedGraphSimple,
         answer: 'testAnswer',
       };
       jest
@@ -119,7 +144,7 @@ describe('GraphHandlerService', () => {
   describe('handleSaveGraph', () => {
     it('should save the graph and emit a "graphSaved" event', async () => {
       const mockPayload = {
-        graph: stringifiedMockGraph,
+        graph: stringifiedGraphSimple,
         name: 'testGraph',
       };
       const mockLGraph = {
@@ -151,7 +176,7 @@ describe('GraphHandlerService', () => {
 
     it('should log an error if saving the graph fails', async () => {
       const mockPayload = {
-        graph: stringifiedMockGraph,
+        graph: stringifiedGraphSimple,
         name: 'testGraph',
       };
       jest
@@ -174,7 +199,7 @@ describe('GraphHandlerService', () => {
     it('should load the graph and emit a "graphLoaded" event', async () => {
       const mockPayload = 'testGraph';
       const mockGraphData = {
-        graph: stringifiedMockGraph,
+        graph: stringifiedGraphSimple,
         id: 1,
         path: 'testGraph',
       };

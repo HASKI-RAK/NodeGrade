@@ -142,63 +142,66 @@ export class GraphHandlerService {
       const ltiCookie: LtiCookie | undefined = (
         client.handshake.auth as { ltiCookie?: LtiCookie }
       ).ltiCookie;
-
-      // Send initial xAPI statement before executing the graph
-      if (ltiCookie && payload.xapi) {
-        this.logger.debug('User input xAPI statement');
-        await this.xapiService.getXapi().sendStatement({
-          statement: {
-            actor: {
-              name: ltiCookie.lis_person_name_full || 'Unknown User',
-              account: {
-                name: ltiCookie.user_id || 'unknown',
-                homePage: payload.xapi?.tool_consumer_instance_guid
-                  ? `https://${payload.xapi.tool_consumer_instance_guid}`
-                  : 'https://example.com',
-              },
-            },
-            verb: {
-              id: 'https://wiki.haski.app/variables/nodegrade.input',
-              display: {
-                en: 'input',
-              },
-            },
-            object: {
-              id: `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/ws/${ltiCookie.isEditor ? 'editor' : 'student'}/${
-                payload.xapi?.custom_activityname
-              }/1/1`,
-              definition: {
-                name: {
-                  en: payload.xapi?.resource_link_title,
-                },
-                type: 'http://www.tincanapi.co.uk/activitytypes/grade_classification',
-                description: {
-                  en: 'Free form text assessment',
+      try {
+        // Send initial xAPI statement before executing the graph
+        if (ltiCookie && payload.xapi) {
+          this.logger.debug('User input xAPI statement');
+          await this.xapiService.getXapi().sendStatement({
+            statement: {
+              actor: {
+                name: ltiCookie.lis_person_name_full || 'Unknown User',
+                account: {
+                  name: ltiCookie.user_id || 'unknown',
+                  homePage: payload.xapi?.tool_consumer_instance_guid
+                    ? `https://${payload.xapi.tool_consumer_instance_guid}`
+                    : 'https://example.com',
                 },
               },
-            },
-            context: {
-              platform: 'nodegrade',
-              language: payload.xapi?.launch_presentation_locale,
-              contextActivities: {
-                parent: [
-                  {
-                    id: `https://${
-                      payload.xapi?.tool_consumer_instance_guid
-                    }/${payload.xapi?.context_id}`,
-                    definition: {
-                      name: {
-                        en: payload.xapi?.context_title,
-                      },
-                      type: `https://wiki.haski.app/variables/context.${payload.xapi?.context_type}`,
-                    },
+              verb: {
+                id: 'https://wiki.haski.app/variables/nodegrade.input',
+                display: {
+                  en: 'input',
+                },
+              },
+              object: {
+                id: `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/ws/${ltiCookie.isEditor ? 'editor' : 'student'}/${
+                  payload.xapi?.custom_activityname
+                }/1/1`,
+                definition: {
+                  name: {
+                    en: payload.xapi?.resource_link_title,
                   },
-                ],
+                  type: 'http://www.tincanapi.co.uk/activitytypes/grade_classification',
+                  description: {
+                    en: 'Free form text assessment',
+                  },
+                },
               },
+              context: {
+                platform: 'nodegrade',
+                language: payload.xapi?.launch_presentation_locale,
+                contextActivities: {
+                  parent: [
+                    {
+                      id: `https://${
+                        payload.xapi?.tool_consumer_instance_guid
+                      }/${payload.xapi?.context_id}`,
+                      definition: {
+                        name: {
+                          en: payload.xapi?.context_title,
+                        },
+                        type: `https://wiki.haski.app/variables/context.${payload.xapi?.context_type}`,
+                      },
+                    },
+                  ],
+                },
+              },
+              timestamp: new Date().toISOString(),
             },
-            timestamp: new Date().toISOString(),
-          },
-        });
+          });
+        }
+      } catch (error) {
+        this.logger.error('Error sending xAPI statement: ', error);
       }
 
       await executeLgraph(lgraph, (percentage) => {

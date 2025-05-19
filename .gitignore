@@ -25,3 +25,4 @@ models/RunOne.json
 packages/frontend/**/*.js
 packages/backend/prisma/migrations/
 .gitignore
+packages/backend/test-output.txt
