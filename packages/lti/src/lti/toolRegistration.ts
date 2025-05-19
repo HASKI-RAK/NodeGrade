@@ -68,19 +68,24 @@ export interface LtiLaunchRequest {
 
 export interface LtiBasicLaunchRequest {
   user_id: string
-  lis_person_sourcedid?: string
   roles: string
-  custom_activityname?: string // custom parameter specified in the LMS under "Custom Parameters". This is the name of the graph to load
-  context_id: string
-  context_label: string
-  context_title: string
-  lti_message_type: string
   resource_link_title: string
-  resource_link_description?: string
   resource_link_id: string
+  tool_consumer_instance_name: string
+  tool_consumer_info_product_family_code: string
+  launch_presentation_locale: string
+  tool_consumer_instance_guid: string
+  context_id: string
+  context_title: string
   context_type: string
+  custom_activityname?: string
+  // All other fields are optional
+  lis_person_sourcedid?: string
+  context_label?: string
+  lti_message_type?: string
+  resource_link_description?: string
   lis_course_section_sourcedid?: string
-  lis_result_sourcedid: {
+  lis_result_sourcedid?: {
     data: {
       instanceid: string
       userid: string
@@ -89,23 +94,19 @@ export interface LtiBasicLaunchRequest {
     }
     hash: string
   }
-  lis_outcome_service_url: string
-  lis_person_name_given: string
-  lis_person_name_family: string
+  lis_outcome_service_url?: string
+  lis_person_name_given?: string
+  lis_person_name_family?: string
   lis_person_name_full: string
-  ext_user_username: string
+  ext_user_username?: string
   lis_person_contact_email_primary: string
-  launch_presentation_locale: string
-  ext_lms: string
-  tool_consumer_info_product_family_code: string
-  tool_consumer_info_version: string
-  oauth_callback: string
-  lti_version: string
-  tool_consumer_instance_guid: string
-  tool_consumer_instance_name: string
-  tool_consumer_instance_description: string
-  launch_presentation_document_target: string
-  launch_presentation_return_url: string
+  ext_lms?: string
+  tool_consumer_info_version?: string
+  oauth_callback?: string
+  lti_version?: string
+  launch_presentation_document_target?: string
+  launch_presentation_return_url?: string
+  tool_consumer_instance_description?: string
 }
 
 // Dummy storage for registered tools
