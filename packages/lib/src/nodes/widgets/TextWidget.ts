@@ -1,6 +1,6 @@
 /* eslint-disable immutable/no-this */
 /* eslint-disable immutable/no-mutation */
-import { IWidget, Vector2, widgetTypes } from 'litegraph.js'
+import { IWidget, widgetTypes } from 'litegraph.js'
 
 import { LGraphNode } from '../litegraph-extensions'
 
@@ -87,25 +87,29 @@ export class TextWidget implements IWidget {
       return
     }
 
-    const words = text.split(' ')
-    let line = ''
-
     ctx.fillStyle = 'white' // Text color
     ctx.font = '16px Arial' // Set the font here as needed
     ctx.textBaseline = 'top'
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' '
-      const metrics = ctx.measureText(testLine)
-      const testWidth = metrics.width
-      if (testWidth > width && n > 0) {
-        ctx.fillText(line, x, y)
-        line = words[n] + ' '
-        y += lineHeight
-      } else {
-        line = testLine
+
+    const lines = text.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const words = lines[i].split(' ')
+      let line = ''
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' '
+        const metrics = ctx.measureText(testLine)
+        const testWidth = metrics.width
+        if (testWidth > width && n > 0) {
+          ctx.fillText(line, x, y)
+          line = words[n] + ' '
+          y += lineHeight
+        } else {
+          line = testLine
+        }
       }
+      ctx.fillText(line, x, y)
+      y += lineHeight
     }
-    ctx.fillText(line, x, y)
 
     // Restore the context to avoid clipping text in the future
     ctx.restore()
