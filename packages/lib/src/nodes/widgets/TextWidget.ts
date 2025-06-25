@@ -1,24 +1,66 @@
 /* eslint-disable immutable/no-this */
 /* eslint-disable immutable/no-mutation */
-import { IWidget, widgetTypes } from 'litegraph.js'
+import { IWidget, Vector2, widgetTypes } from 'litegraph.js'
 
 import { LGraphNode } from '../litegraph-extensions'
 
+/**
+ * TextWidget - A multi-line text widget with inline editing capabilities for LiteGraph.js nodes
+ *
+ * This widget provides a text display area that supports:
+ * - Multi-line text rendering with automatic word wrapping
+ * - Inline editing via HTML textarea overlay
+ * - Click-to-edit functionality
+ * - Visual feedback during editing (hides canvas text to prevent double rendering)
+ *
+ * Usage:
+ * - Click on the text area to start inline editing
+ * - Use Shift+Enter for new lines, Enter to save changes
+ * - Press Escape to cancel editing without saving changes
+ *
+ * @implements {IWidget}
+ */
 export class TextWidget implements IWidget {
+  /** Widget identifier name */
   name: string
+  /** Widget display value */
   value: string
+  /** Y position offset within the node */
   y?: number
+  /** Widget properties containing the actual text value */
   properties: { value: string }
+  /** Widget type classification */
   type?: widgetTypes
+  /** Flag to track if widget is currently in editing mode */
+  isEditing?: boolean
 
+  /**
+   * Creates a new TextWidget instance with default values
+   */
   constructor() {
     this.name = 'text'
     this.value = 'Dis is a value'
-    this.properties = { value: 'Enter aayour text' }
+    this.properties = { value: 'Enter your text' }
     this.y = 0
     this.type = undefined
+    this.isEditing = false
   }
 
+  /**
+   * Renders the text widget on the canvas with multi-line support and word wrapping
+   *
+   * Features:
+   * - Draws a background rectangle behind the text
+   * - Automatically wraps text to fit within the widget width
+   * - Skips text rendering when inline editing is active to prevent visual conflicts
+   * - Uses consistent font styling (16px Arial, white text on dark background)
+   *
+   * @param ctx - The 2D rendering context for drawing
+   * @param node - The parent LiteGraph node containing this widget
+   * @param width - Available width for the widget
+   * @param posY - Y position where the widget should be drawn
+   * @param height - Available height for the widget
+   */
   draw?(
     ctx: CanvasRenderingContext2D,
     node: LGraphNode,
@@ -32,89 +74,18 @@ export class TextWidget implements IWidget {
     let y = posY
     ctx.save()
 
-    const canvas = ctx.canvas
-    const canvasRect = canvas.getBoundingClientRect()
-    // get this node's position relative to the canvas
-    const nodeRect = node.getBounding()
-
-    // get canvas transform info
-    const transform = ctx.getTransform()
-
-    // get the canvas scale factor
-    const scaleA = transform.a
-
-    const scaleD = transform.d
-    const scale = scaleA > scaleD ? scaleA : scaleD
-
-    // get the canvas offset
-    const left = canvasRect.left + window.pageXOffset
-
-    const top = canvasRect.top + window.pageYOffset
-
-    // get the node's position relative to the canvas
-    const nodeX = nodeRect[0]
-    const nodeY = nodeRect[1]
-
-    const nodeWidth = nodeRect[2] * scale
-    const nodeHeight = nodeRect[3] * scale
-
-    const transformedX = transform.a * nodeX + transform.c * nodeY + transform.e
-    const transformedY = transform.b * nodeX + transform.d * nodeY + transform.f
-
-    // offset based on canvas scale and transform
-    const nodeLeft = transform.e * transform.d
-    const nodeTop = transform.f * transform.d + 20
-
-    // // insert html text field above canvas if it doesn't exist
-    // if (!document.getElementById('textWidget' + node.id)) {
-    //   const html = document.createElement('input') as HTMLInputElement
-    //   // give it a unique identifier
-    //   html.id = 'textWidget' + node.id
-    //   // placeholder text
-    //   html.placeholder = 'Enter text'
-
-    //   // label input form field
-    //   html.name = 'textWidget' + node.id
-    //   // set the value
-    //   html.value = node.properties.value
-
-    //   html.type = 'text'
-    //   html.style.position = 'absolute'
-    //   html.style.left = `${nodeLeft}px`
-    //   html.style.top = `${nodeTop}px`
-    //   html.style.width = `${width}px`
-    //   html.style.height = `${height}px`
-    //   html.style.border = 'none'
-    //   html.style.padding = '0px'
-    //   html.style.margin = '0px'
-    //   html.style.outline = 'none'
-    //   html.style.zIndex = '30'
-    //   html.style.textAlign = 'left'
-    //   html.style.font = '14px Arial'
-    //   html.style.color = 'white'
-    //   html.style.backgroundColor = 'red'
-    //   html.style.opacity = '0.75'
-    //   html.style.overflow = 'hidden'
-    //   html.style.resize = 'none'
-    //   html.onchange = () => {
-    //     node.properties.value = html.value
-    //   }
-    //   document.body.appendChild(html)
-    // } else {
-    //   // if it does exist, update the value
-    //   const html = document.getElementById('textWidget' + node.id) as HTMLInputElement
-    //   html.style.left = `${nodeLeft}px`
-    //   html.style.top = `${nodeTop}px`
-    //   html.style.width = `${width}px`
-    //   html.style.height = `${height}px`
-    //   // if (html) {
-    //   //   html.value = node.properties.value
-    //   // }
-    // }
-
     // draw rect behind text
-    ctx.fillStyle = '#222'
+    // ctx.fillStyle = '#222' // background color
     ctx.fillRect(x, y, width, node.size[1] - y)
+
+    // Skip text rendering if currently editing via HTML input
+    if (
+      document.getElementById('inlineTextInput') ||
+      document.getElementById('textWidget' + node.id)
+    ) {
+      ctx.restore()
+      return
+    }
 
     const words = text.split(' ')
     let line = ''
@@ -139,6 +110,17 @@ export class TextWidget implements IWidget {
     // Restore the context to avoid clipping text in the future
     ctx.restore()
   }
+
+  /**
+   * Computes the preferred size for the text widget
+   *
+   * This method determines the widget's dimensions based on the available width.
+   * Currently returns a fixed height of 50 pixels, but could be enhanced to
+   * calculate height based on text content and line count.
+   *
+   * @param width - The available width for the widget
+   * @returns A tuple [width, height] representing the widget's preferred dimensions
+   */
   computeSize?(width: number): [number, number] {
     return [width, 50]
   }
