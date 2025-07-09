@@ -107,6 +107,29 @@ TODO
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Citation
+If you use this work, pleace cite the corresponding paper:
+```bib
+@inproceedings{10.1145/3723010.3723021,
+author = {Fischer, David Vincent and Haug, Jim and Schoppel, Paul and Abke, J\"{o}rg and Becker, Matthias and Hagel, Georg},
+title = {Evaluation of a Node-based Automatic Short Answer Tool “NodeGrade”},
+year = {2025},
+isbn = {9798400712821},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3723010.3723021},
+doi = {10.1145/3723010.3723021},
+abstract = {NodeGrade tries to provide a suitable solution for the problem of time-intensive short answer grading. This research focuses simultaneously on performance, functionality and user experience, which is underlined by a triangulated approach. The evaluation results show comparable performance of NodeGrade on public datasets, even outperforming GPT-4 on the SemEval 2013 Task 7. Matching of NodeGrade’s output with multiple human expert raters reveals some weaknesses regarding cases at the lower and upper boundary. In terms of user experience, the interviewed and observed students recognized both positive facets, like better learning support and helpful feedback, and negative sides, including technical limitations and lack of transparency. Overall, NodeGrade promises high potential for further practical use and testing in the field of software engineering education and automatic short answer grading.},
+booktitle = {Proceedings of the 6th European Conference on Software Engineering Education},
+pages = {20–29},
+numpages = {10},
+keywords = {ASAG, Automatic Short Answer Grading, Short Answer Scoring, AI in Education, Software Engineering Education, Natural Language Processing, Large Language Models},
+location = {
+},
+series = {ECSEE '25}
+}
+```
+Which can also be found at: https://dl.acm.org/doi/10.1145/3723010.3723021
 ### Credits
 
 Porter Stemmer by Martin Porter 1980, used under the MIT License. Implementation from [James Aylett](https://tartarus.org/martin/PorterStemmer/js.txt) under the [copyright](https://tartarus.org/copyright). License noted in script.
