@@ -61,10 +61,12 @@ export class GraphHandlerService {
         node.env = {
           // Backend nodes talk directly to the model worker via internal network
           MODEL_WORKER_URL: modelWorkerUrl,
+          // Optionally allow nodes to use OpenAI when key is set
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY as unknown as string,
         };
 
         this.logger.debug(
-          `Set env for node ${node.title} with MODEL_WORKER_URL: ${modelWorkerUrl}`,
+          `Set env for node ${node.title} with MODEL_WORKER_URL: ${modelWorkerUrl} OPENAI: ${process.env.OPENAI_API_KEY ? 'on' : 'off'}`,
         );
 
         // Note: We don't call init() here because onNodeAdded is synchronous
@@ -142,10 +144,11 @@ export class GraphHandlerService {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         nodeAny.env = {
           MODEL_WORKER_URL: modelWorkerUrl,
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY as unknown as string,
         };
 
         this.logger.debug(
-          `Hydrating existing node: ${node.title} (${node.type}) with MODEL_WORKER_URL: ${modelWorkerUrl}`,
+          `Hydrating existing node: ${node.title} (${node.type}) with MODEL_WORKER_URL: ${modelWorkerUrl} OPENAI: ${process.env.OPENAI_API_KEY ? 'on' : 'off'}`,
         );
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access

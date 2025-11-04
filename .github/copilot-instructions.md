@@ -10,7 +10,7 @@ If we are using windows powershell, keep in mind that you cant use operators lik
 
 ## Tests
 
-- We are using Jest and yarn. Run `yarn test --testPathPattern "<relevant term>"` for spec tests, `yarn test:e2e` for e2e tests. Always change directory before running tests, for example `cd ./packages/server; yarn test`.
+- We are using Jest and yarn. Run `yarn test --testPathPattern "<relevant term>"` for spec tests, `yarn test:e2e` for e2e tests.
 - When you create a new test, make sure to eliminate all related errors before running.
 - Sometimes not the tests are the issue, but the implementation. When you think that the tests should work, take a look at the implementation to find the bug.
 

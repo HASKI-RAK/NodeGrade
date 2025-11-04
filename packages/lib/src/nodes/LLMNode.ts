@@ -6,30 +6,6 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
 import { PromptMessageType } from './types/NodeLinkMessage'
 import { OpenAiApiResponse, OpenAiModel } from './types/OpenAiApi'
 
-// record with all models
-// const models = [
-//   {
-//     name: 'zephir',
-//     path: 'D:\\Development\\python\\text-generation-webui-main\\models\\zephir-7b-beta'
-//   },
-//   {
-//     name: 'zephir-7b-beta',
-//     path: 'D:\\Development\\python\\text-generation-webui-main\\models\\zephir-7b-beta'
-//   },
-//   {
-//     name: 'SUS-Chat-34B',
-//     path: 'SUS-Chat-34B'
-//   },
-//   {
-//     name: 'Wizard-Vicuna-30B-Uncensored',
-//     path: 'Wizard-Vicuna-30B-Uncensored'
-//   },
-//   {
-//     name: 'microsoft/Orca-2-13b',
-//     path: 'Orca-2-13b'
-//   }
-// ]
-
 /**
  * Language Model node
  */
@@ -37,6 +13,9 @@ export class LLMNode extends LGraphNode {
   env: Record<string, unknown>
   widget_llm: any
   models: string[] = []
+  // track model sources to route execution
+  private openAiModelSet: Set<string> = new Set()
+  private localModelSet: Set<string> = new Set()
 
   constructor() {
     super()
@@ -143,7 +122,9 @@ export class LLMNode extends LGraphNode {
       repetition_penalty_range: 512,
       guidance_scale: 1,
       // carry available models in serializable properties so frontend can populate the widget
-      available_models: []
+      available_models: [],
+      // map model id -> source ("local" | "openai") to persist across serialization
+      available_model_sources: {}
     }
     this.title = 'LLM'
     this.env = {}
@@ -164,23 +145,58 @@ export class LLMNode extends LGraphNode {
     this.env = _env
     // Only fetch models if we're running on the backend (node has fetch in env or is in Node.js)
     // Frontend nodes will get models from serialized properties
-    if (typeof window === 'undefined' && this.env.MODEL_WORKER_URL) {
+    if (globalThis.window === undefined) {
       try {
-        const models = await this.fetchModels(
-          (this.env.MODEL_WORKER_URL as string) + '/v1/models'
-        )
-        this.initModels(models)
+        const fetches: Promise<string[]>[] = []
+        const sources: Array<'local' | 'openai'> = []
+
+        if (this.env.MODEL_WORKER_URL) {
+          fetches.push(
+            this.fetchModels((this.env.MODEL_WORKER_URL as string) + '/v1/models')
+          )
+          sources.push('local')
+        }
+
+        const openaiKey = this.env.OPENAI_API_KEY as string | undefined
+        if (openaiKey) {
+          fetches.push(this.fetchOpenAiModels(openaiKey))
+          sources.push('openai')
+        }
+
+        if (fetches.length === 0) return
+
+        const results = await Promise.allSettled(fetches)
+        const merged: string[] = []
+        const sourceMap: Record<string, 'local' | 'openai'> = {}
+
+        results.forEach((res, idx) => {
+          if (res.status === 'fulfilled') {
+            const provider = sources[idx]
+            for (const id of res.value) {
+              if (!merged.includes(id)) merged.push(id)
+              sourceMap[id] = provider
+              if (provider === 'openai') this.openAiModelSet.add(id)
+              else this.localModelSet.add(id)
+            }
+          }
+        })
+
+        this.initModels(merged, sourceMap)
       } catch (error) {
         console.error('Failed to fetch models:', error)
       }
     }
   }
 
-  initModels(models: string[]) {
+  initModels(models: string[], sourceMap?: Record<string, 'local' | 'openai'>) {
     this.models = models
     // store also in properties so it survives serialization to the frontend
     // eslint-disable-next-line immutable/no-mutation
     ;(this.properties as any).available_models = models
+    if (sourceMap) {
+      // eslint-disable-next-line immutable/no-mutation
+      ;(this.properties as any).available_model_sources = sourceMap
+    }
     this.widget_llm.options = { values: this.models }
     // check if old model is still available, otherwise set to first model
     if (!this.models.includes(this.properties.model)) {
@@ -216,6 +232,118 @@ export class LLMNode extends LGraphNode {
     }
   }
 
+  private async fetchOpenAiModels(apiKey: string): Promise<string[]> {
+    try {
+      const response = await fetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`
+        }
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data: OpenAiApiResponse = (await response.json()) as OpenAiApiResponse
+      if (data.object !== 'list' || !Array.isArray(data.data)) {
+        throw new Error('Invalid data format from OpenAI')
+      }
+      return data.data.map((m: OpenAiModel) => m.id)
+    } catch (err) {
+      console.error('Failed to fetch OpenAI models:', err)
+      return []
+    }
+  }
+
+  private isOpenAiModel(modelId: string): boolean {
+    if (this.openAiModelSet.has(modelId)) return true
+    const src = (this.properties as any).available_model_sources?.[modelId]
+    return src === 'openai'
+  }
+
+  private async executeOpenAi(
+    model: string,
+    messages: PromptMessageType[] | undefined,
+    apiKey: string
+  ): Promise<string> {
+    // Build body compatible with OpenAI Responses API
+    const body: Record<string, unknown> = {
+      model,
+      input: messages ?? []
+    }
+    if (typeof this.properties.temperature === 'number') {
+      body.temperature = this.properties.temperature
+    }
+    if (typeof this.properties.top_p === 'number') {
+      body.top_p = this.properties.top_p
+    }
+    if (typeof this.properties.max_tokens === 'number') {
+      body.max_completion_tokens = this.properties.max_tokens
+    }
+    // Note: Responses API may not accept presence_penalty; omit here
+
+    // First try the modern Responses API
+    let response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    // If not available or invalid params, fallback to legacy chat/completions
+    if (!response.ok && (response.status === 404 || response.status === 400)) {
+      const legacyBody: Record<string, unknown> = {
+        model,
+        messages,
+        temperature: this.properties.temperature,
+        top_p: this.properties.top_p,
+        // some newer models require max_completion_tokens even on chat/completions
+        max_completion_tokens: this.properties.max_tokens,
+        presence_penalty: this.properties.presence_penalty
+      }
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(legacyBody)
+      })
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(
+        `OpenAI request failed: ${response.status} ${response.statusText} ${text}`
+      )
+    }
+
+    const data: any = await response.json()
+    // Prefer output_text if present (Responses API)
+    if (typeof data?.output_text === 'string' && data.output_text.length) {
+      return data.output_text
+    }
+    // Try to aggregate textual outputs
+    if (Array.isArray(data?.output)) {
+      const parts: string[] = []
+      for (const item of data.output) {
+        if (typeof item?.content === 'string') parts.push(item.content)
+        else if (Array.isArray(item?.content)) {
+          for (const c of item.content) {
+            if (typeof c?.text === 'string') parts.push(c.text)
+          }
+        }
+      }
+      if (parts.length) return parts.join('')
+    }
+    // Legacy chat/completions style
+    if (Array.isArray(data?.choices) && data.choices[0]?.message?.content) {
+      return data.choices[0].message.content as string
+    }
+    throw new Error('OpenAI response parsing failed')
+  }
+
   //name of the function to call when executing
   async onExecute() {
     // Only execute on the backend - frontend nodes should never call this
@@ -226,8 +354,24 @@ export class LLMNode extends LGraphNode {
     //get inputs
     const message = this.getInputData<PromptMessageType | undefined>(0)
     const messages = this.getInputData<PromptMessageType[] | undefined>(1)
+    const selectedModel = this.properties.model
+
+    // If model belongs to OpenAI and key is present, route to OpenAI
+    const openaiKey = this.env.OPENAI_API_KEY as string | undefined
+    if (openaiKey && this.isOpenAiModel(selectedModel)) {
+      const content = await this.executeOpenAi(
+        selectedModel,
+        message ? [message] : messages,
+        openaiKey
+      )
+      this.properties.value = content
+      this.setOutputData(0, content)
+      return
+    }
+
+    // Default: local model worker (OpenAI-compatible proxy)
     const input = {
-      model: this.properties.model,
+      model: selectedModel,
       messages: message ? [message] : messages,
       max_tokens: this.properties.max_tokens,
       temperature: this.properties.temperature,
@@ -238,7 +382,6 @@ export class LLMNode extends LGraphNode {
       repetition_penalty_range: this.properties.repetition_penalty_range,
       guidance_scale: this.properties.guidance_scale
     }
-
     const required_input = JSON.stringify(input)
     const workerUrl =
       (this.env.MODEL_WORKER_URL as string) ?? 'http://193.174.195.36:8000'
@@ -255,7 +398,6 @@ export class LLMNode extends LGraphNode {
       throw new Error(`LLM API request failed: ${response.status} ${response.statusText}`)
     }
 
-    // get response
     const data = await response.json()
     const choices = data.choices
     this.properties.value = choices[0].message.content
@@ -268,6 +410,18 @@ export class LLMNode extends LGraphNode {
     const available = (this.properties as any).available_models as string[] | undefined
     if (Array.isArray(available) && available.length) {
       this.models = available
+      // reconstruct model source sets from serialized map if available
+      const srcMap = (this.properties as any).available_model_sources as
+        | Record<string, 'local' | 'openai'>
+        | undefined
+      this.openAiModelSet = new Set()
+      this.localModelSet = new Set()
+      if (srcMap) {
+        for (const [id, src] of Object.entries(srcMap)) {
+          if (src === 'openai') this.openAiModelSet.add(id)
+          else this.localModelSet.add(id)
+        }
+      }
       this.widget_llm.options = { values: this.models }
       if (!this.models.includes(this.properties.model)) {
         this.properties.model = this.models[0]
