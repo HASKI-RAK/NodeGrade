@@ -60,7 +60,12 @@ export {
   ImageNode,
   LiteGraph,
   LGraphRegisterCustomNodes,
-  KeywordCheckNode
+  KeywordCheckNode,
+  TFIDF,
+  ExtractNumberNode,
+  MathOperationNode,
+  StringArrayToString,
+  StringsToArray
 }
 
 export { LGraphNode } from './litegraph-extensions/LGraphNode'
