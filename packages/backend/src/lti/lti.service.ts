@@ -44,11 +44,35 @@ export class LtiService {
         throw new Error(errorMsg);
       }
 
+      // Validate FRONTEND_URL format to prevent open redirect vulnerabilities
+      try {
+        const url = new URL(frontendUrl.trim());
+        // Ensure the URL scheme is http or https
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          throw new Error('Invalid URL protocol');
+        }
+      } catch (error) {
+        const errorMsg = `Invalid FRONTEND_URL: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        this.logger.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+
       const userType = isEditor ? 'editor' : 'student';
       const activityName = payload.custom_activityname || 'default';
 
       if (!activityName) {
         this.logger.warn('No activity name provided, using default');
+      }
+
+      // Validate activityName to prevent path traversal attacks
+      if (
+        activityName.includes('..') ||
+        activityName.includes('/') ||
+        activityName.includes('\\')
+      ) {
+        const errorMsg = 'Invalid activity name: contains illegal characters';
+        this.logger.error(errorMsg, { activityName });
+        throw new Error(errorMsg);
       }
 
       const redirectUrl = `${frontendUrl.trim()}/ws/${userType}/${activityName}/1/1?user_id=${payload.user_id}&resource_link_title=${encodeURIComponent(

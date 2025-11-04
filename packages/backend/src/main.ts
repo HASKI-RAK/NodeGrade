@@ -10,9 +10,13 @@ async function bootstrap() {
   // Use our custom WebSocketCookieAdapter
   app.useWebSocketAdapter(new WebSocketCookieAdapter(app));
 
-  // Enable CORS for development
+  // Enable CORS with configurable origin
+  const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+    : ['https://nodegrade.haski.app'];
+
   app.enableCors({
-    origin: 'https://nodegrade.haski.app',
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -20,7 +24,7 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 5000);
   console.log(
-    `NestJS server running on port ${process.env.PORT ?? 5000} with CORS enabled`,
+    `NestJS server running on port ${process.env.PORT ?? 5000} with CORS enabled for origins: ${allowedOrigins.join(', ')}`,
   );
 }
-bootstrap();
+void bootstrap();

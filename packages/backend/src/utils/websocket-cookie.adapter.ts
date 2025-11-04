@@ -21,14 +21,31 @@ export class WebSocketCookieAdapter extends IoAdapter {
           const ltiCookieStr = parsedCookies['lti_nodegrade_cookie'];
           if (ltiCookieStr) {
             try {
+              const decodedCookie = decodeURIComponent(ltiCookieStr);
+
+              // Validate the decoded cookie is not too large (prevent DoS attacks)
+              if (decodedCookie.length > 10000) {
+                this.logger.warn('LTI cookie too large, rejecting');
+                next();
+                return;
+              }
+
               // Use type assertion to ensure type safety with JSON.parse
-              const ltiCookie = JSON.parse(
-                decodeURIComponent(ltiCookieStr),
-              ) as LtiCookie;
-              socket.handshake.auth.ltiCookie = ltiCookie;
-              this.logger.debug(
-                `LTI cookie parsed for socket: ${ltiCookie.user_id}`,
-              );
+              const ltiCookie = JSON.parse(decodedCookie) as LtiCookie;
+
+              // Validate the parsed cookie has the expected structure
+              if (
+                typeof ltiCookie === 'object' &&
+                ltiCookie !== null &&
+                typeof ltiCookie.user_id === 'string'
+              ) {
+                socket.handshake.auth.ltiCookie = ltiCookie;
+                this.logger.debug(
+                  `LTI cookie parsed for socket: ${ltiCookie.user_id}`,
+                );
+              } else {
+                this.logger.warn('Invalid LTI cookie structure');
+              }
             } catch (error) {
               this.logger.error('Error parsing LTI cookie:', error);
             }
