@@ -19,6 +19,7 @@ export class CleanNode extends LGraphNode {
     lower: boolean
     upper: boolean
     stem: boolean
+    removeEnclosingSpecialChars: boolean
   }
   constructor() {
     super()
@@ -31,7 +32,8 @@ export class CleanNode extends LGraphNode {
       comma: false, // remove commas
       lower: false, // lowercase
       upper: false, // uppercase
-      stem: false // porter stemmer
+      stem: false, // porter stemmer
+      removeEnclosingSpecialChars: false // remove special chars at start and end
     }
     this.addIn('string')
     this.addWidget('toggle', 'trim start and end', this.properties.trim, (v) => {
@@ -58,6 +60,14 @@ export class CleanNode extends LGraphNode {
     this.addWidget('toggle', 'porter stemmer', this.properties.stem, (v) => {
       this.properties.stem = v
     })
+    this.addWidget(
+      'toggle',
+      'remove enclosing special chars',
+      this.properties.removeEnclosingSpecialChars,
+      (v) => {
+        this.properties.removeEnclosingSpecialChars = v
+      }
+    )
     this.addOut('string')
     this.serialize_widgets = true
     this.title = 'clean'
@@ -100,6 +110,13 @@ export class CleanNode extends LGraphNode {
     }
     if (this.properties.stem) {
       this.properties.value = stemmer(this.properties.value)
+    }
+    if (this.properties.removeEnclosingSpecialChars) {
+      // Remove special characters from start and end (quotes, colons, etc.)
+      this.properties.value = this.properties.value.replace(
+        /^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g,
+        ''
+      )
     }
 
     this.setOutputData(0, this.properties.value)
