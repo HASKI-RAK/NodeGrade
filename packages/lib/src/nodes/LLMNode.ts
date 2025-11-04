@@ -281,7 +281,7 @@ export class LLMNode extends LGraphNode {
     }
     // Note: Responses API may not accept presence_penalty; omit here
 
-    // First try the modern Responses API
+    // Try the modern Responses API with retry loop for parameter errors
     let response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -291,7 +291,44 @@ export class LLMNode extends LGraphNode {
       body: JSON.stringify(body)
     })
 
-    // If not available or invalid params, fallback to legacy chat/completions
+    // Retry loop: remove problematic parameters one by one (max 10 attempts)
+    const maxRetries = 10
+    let retryCount = 0
+    while (!response.ok && response.status === 400 && retryCount < maxRetries) {
+      const errorText = await response.text().catch(() => '')
+      let errorData: any = {}
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        // ignore parse errors
+        break
+      }
+
+      // Extract the problematic parameter from error message
+      const badParam = errorData?.error?.param as string | undefined
+      if (badParam && body[badParam] !== undefined) {
+        console.warn(
+          `OpenAI rejected parameter '${badParam}', retrying without it: ${errorData?.error?.message || ''}`
+        )
+        delete body[badParam]
+        retryCount++
+
+        // Retry Responses API without the bad parameter
+        response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(body)
+        })
+      } else {
+        // No param to remove, stop retrying
+        break
+      }
+    }
+
+    // If not available or still invalid params, fallback to legacy chat/completions
     if (!response.ok && (response.status === 404 || response.status === 400)) {
       const legacyBody: Record<string, unknown> = {
         model,
@@ -310,6 +347,38 @@ export class LLMNode extends LGraphNode {
         },
         body: JSON.stringify(legacyBody)
       })
+
+      // Retry loop for legacy endpoint too
+      let legacyRetryCount = 0
+      while (!response.ok && response.status === 400 && legacyRetryCount < maxRetries) {
+        const errorText = await response.text().catch(() => '')
+        let errorData: any = {}
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          break
+        }
+
+        const badParam = errorData?.error?.param as string | undefined
+        if (badParam && legacyBody[badParam] !== undefined) {
+          console.warn(
+            `OpenAI legacy rejected parameter '${badParam}', retrying without it: ${errorData?.error?.message || ''}`
+          )
+          delete legacyBody[badParam]
+          legacyRetryCount++
+
+          response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(legacyBody)
+          })
+        } else {
+          break
+        }
+      }
     }
 
     if (!response.ok) {
@@ -320,11 +389,15 @@ export class LLMNode extends LGraphNode {
     }
 
     const data: any = await response.json()
+
+    // Add debug logging to understand response structure
+    console.log('OpenAI response structure:', JSON.stringify(data).substring(0, 500))
+
     // Prefer output_text if present (Responses API)
     if (typeof data?.output_text === 'string' && data.output_text.length) {
       return data.output_text
     }
-    // Try to aggregate textual outputs
+    // Try to aggregate textual outputs (Responses API array format)
     if (Array.isArray(data?.output)) {
       const parts: string[] = []
       for (const item of data.output) {
@@ -338,10 +411,30 @@ export class LLMNode extends LGraphNode {
       if (parts.length) return parts.join('')
     }
     // Legacy chat/completions style
-    if (Array.isArray(data?.choices) && data.choices[0]?.message?.content) {
-      return data.choices[0].message.content as string
+    if (Array.isArray(data?.choices) && data.choices.length > 0) {
+      const firstChoice = data.choices[0]
+      // Handle both message.content and text formats (allow empty strings)
+      if (firstChoice?.message?.content !== undefined) {
+        return firstChoice.message.content as string
+      }
+      if (typeof firstChoice?.text === 'string') {
+        return firstChoice.text
+      }
     }
-    throw new Error('OpenAI response parsing failed')
+    // Fallback: check if there's any text-like content we can extract
+    if (data?.content !== undefined && typeof data.content === 'string') {
+      return data.content
+    }
+    if (data?.text !== undefined && typeof data.text === 'string') {
+      return data.text
+    }
+
+    // Log the full response for debugging before failing
+    console.error(
+      'Failed to parse OpenAI response. Full data:',
+      JSON.stringify(data, null, 2)
+    )
+    throw new Error('OpenAI response parsing failed - no recognized content field found')
   }
 
   //name of the function to call when executing

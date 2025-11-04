@@ -241,4 +241,122 @@ describe('LLMNode OpenAI integration', () => {
       'presence_penalty',
     );
   });
+
+  it('retries without problematic parameter when OpenAI returns 400 with param error', async () => {
+    const node = new LLMNode();
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const message = { role: 'user', content: 'Test' } as any;
+    (node as any).getInputData = jest
+      .fn()
+      .mockReturnValueOnce(message)
+      .mockReturnValueOnce(undefined);
+
+    const calls: Array<{ url: string; body?: any }> = [];
+    let responseCallCount = 0;
+
+    (global as any).fetch = jest.fn(async (url: string, options?: any) => {
+      const bodyObj = options?.body ? JSON.parse(options.body) : {};
+      calls.push({ url, body: bodyObj });
+
+      if (url === 'http://local-worker/v1/models') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ object: 'list', data: [] }),
+        } as any;
+      }
+      if (url === 'https://api.openai.com/v1/models') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ object: 'list', data: [{ id: 'o3-mini' }] }),
+        } as any;
+      }
+      if (url === 'https://api.openai.com/v1/responses') {
+        responseCallCount++;
+        // First call: reject temperature
+        if (responseCallCount === 1) {
+          expect(bodyObj.temperature).toBeDefined();
+          return {
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            text: async () =>
+              JSON.stringify({
+                error: {
+                  message:
+                    "Unsupported value: 'temperature' does not support 0 with this model.",
+                  type: 'invalid_request_error',
+                  param: 'temperature',
+                  code: 'unsupported_value',
+                },
+              }),
+          } as any;
+        }
+        // Second call: reject top_p
+        if (responseCallCount === 2) {
+          expect(bodyObj.temperature).toBeUndefined();
+          expect(bodyObj.top_p).toBeDefined();
+          return {
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            text: async () =>
+              JSON.stringify({
+                error: {
+                  message:
+                    "Unsupported parameter: 'top_p' is not supported with this model.",
+                  type: 'invalid_request_error',
+                  param: 'top_p',
+                  code: 'unsupported_parameter',
+                },
+              }),
+          } as any;
+        }
+        // Third call: should succeed without temperature and top_p
+        expect(bodyObj.temperature).toBeUndefined();
+        expect(bodyObj.top_p).toBeUndefined();
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            output_text: 'Success after removing multiple params',
+          }),
+        } as any;
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    });
+
+    await node.init({
+      MODEL_WORKER_URL: 'http://local-worker',
+      OPENAI_API_KEY: 'sk-test',
+    });
+    (node as any).properties.model = 'o3-mini';
+    await node.onExecute();
+
+    expect((node as any).properties.value).toBe(
+      'Success after removing multiple params',
+    );
+    expect(responseCallCount).toBe(3);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(2);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("rejected parameter 'temperature'"),
+    );
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("rejected parameter 'top_p'"),
+    );
+
+    const responsesCalls = calls.filter(
+      (c) => c.url === 'https://api.openai.com/v1/responses',
+    );
+    expect(responsesCalls).toHaveLength(3);
+    expect(responsesCalls[0].body.temperature).toBeDefined();
+    expect(responsesCalls[1].body.temperature).toBeUndefined();
+    expect(responsesCalls[1].body.top_p).toBeDefined();
+    expect(responsesCalls[2].body.temperature).toBeUndefined();
+    expect(responsesCalls[2].body.top_p).toBeUndefined();
+
+    consoleWarnSpy.mockRestore();
+  });
 });
