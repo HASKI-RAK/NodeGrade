@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common';
 import { LGraph, AnswerInputNode, SerializedGraph } from '@haski/ta-lib';
 import { emitEvent } from 'utils/socket-emitter';
 import * as GraphCore from 'src/core/Graph';
+import { XapiService } from '../xapi.service';
 
 jest.mock('utils/socket-emitter', () => ({
   emitEvent: jest.fn(),
@@ -42,6 +43,14 @@ describe('GraphHandlerService', () => {
           useValue: {
             saveGraph: jest.fn(),
             getGraph: jest.fn(),
+          },
+        },
+        {
+          provide: XapiService,
+          useValue: {
+            getXapi: () => ({
+              sendStatement: jest.fn().mockResolvedValue(undefined),
+            }),
           },
         },
       ],

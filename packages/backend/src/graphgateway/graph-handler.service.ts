@@ -34,7 +34,7 @@ export class GraphHandlerService {
    * @param client Socket client for communication
    * @param benchmark Flag to disable reporting for benchmarking
    */
-  private addOnNodeAdded = (
+  private readonly addOnNodeAdded = (
     lgraph: LGraph,
     client: Socket,
     benchmark = false,
@@ -46,6 +46,26 @@ export class GraphHandlerService {
         ) => {
           client.emit(event.eventName, event.payload);
         };
+      }
+
+      // Hydrate node environment on load so nodes can initialize themselves
+      try {
+        node.env = {
+          // Backend nodes talk directly to the model worker via internal network
+          MODEL_WORKER_URL:
+            (process.env.MODEL_WORKER_URL as unknown as string) ||
+            'http://193.174.195.36:8000',
+        };
+        // Call init without changing onNodeAdded signature (void)
+        Promise.resolve(node.init?.(node.env)).catch((e) =>
+          this.logger.debug(
+            `Node hydration skipped/failed for ${node.title}: ${String(e)}`,
+          ),
+        );
+      } catch (e) {
+        this.logger.debug(
+          `Node hydration skipped/failed for ${node.title}: ${String(e)}`,
+        );
       }
 
       const onExecute = node.onExecute?.bind(node) as typeof node.onExecute;
@@ -78,22 +98,22 @@ export class GraphHandlerService {
     };
   };
 
-  private sendImages = (client: Socket, lgraph: LGraph): void => {
-    lgraph.findNodesByClass(ImageNode).forEach((node) => {
-      if (!node.properties.imageUrl) return;
+  private readonly sendImages = (client: Socket, lgraph: LGraph): void => {
+    for (const node of lgraph.findNodesByClass(ImageNode)) {
+      if (!node.properties.imageUrl) continue;
       const imageUrl = node.properties.imageUrl;
       this.logger.debug(`Sending image: ${node.title}`);
       emitEvent(client, 'questionImageSet', imageUrl);
-    });
+    }
   };
 
-  private sendQuestion = (client: Socket, lgraph: LGraph): void => {
-    lgraph.findNodesByClass(QuestionNode).forEach((node) => {
-      if (!node.properties.value) return;
+  private readonly sendQuestion = (client: Socket, lgraph: LGraph): void => {
+    for (const node of lgraph.findNodesByClass(QuestionNode)) {
+      if (!node.properties.value) continue;
       const question = node.properties.value;
       this.logger.debug(`Sending question: ${node.title}`);
       emitEvent(client, 'questionSet', question);
-    });
+    }
   };
 
   /**
@@ -127,21 +147,21 @@ export class GraphHandlerService {
     // Start measuring execution time
     const startTime = Date.now();
 
-    lgraph
-      .findNodesByClass<AnswerInputNode>(AnswerInputNode)
-      .forEach((node) => {
-        node.properties.value = payload.answer.substring(0, 1500);
-      });
+    for (const node of lgraph.findNodesByClass<AnswerInputNode>(
+      AnswerInputNode,
+    )) {
+      node.properties.value = payload.answer.substring(0, 1500);
+    }
     const answer = lgraph
       .findNodesByClass<AnswerInputNode>(AnswerInputNode)
       .map((node) => node.properties.value)
       .join(' ');
 
     try {
-      // Extract LtiCookie data from the client's handshake
-      const ltiCookie: LtiCookie | undefined = (
-        client.handshake.auth as { ltiCookie?: LtiCookie }
-      ).ltiCookie;
+      // Extract LtiCookie data from the client's handshake (guarded for tests)
+      const auth = (client as unknown as { handshake?: { auth?: unknown } })
+        ?.handshake?.auth as { ltiCookie?: LtiCookie } | undefined;
+      const ltiCookie: LtiCookie | undefined = auth?.ltiCookie;
 
       // Send initial xAPI statement before executing the graph
       if (ltiCookie && payload.xapi) {

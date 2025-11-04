@@ -127,7 +127,6 @@ export function useServerEvents({
         setImage(imageBase64)
       },
       graphLoaded(payload) {
-        console.log('Graph loaded: ', payload)
         lgraph.configure(JSON.parse(payload))
         lgraph.setDirtyCanvas(true, true)
       }

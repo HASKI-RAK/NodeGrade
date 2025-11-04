@@ -62,7 +62,9 @@ export const AppBar = (props: AppBarProps) => {
   }
 
   useEffect(() => {
-    fetch(getConfig().API + 'graphs')
+    fetch((getConfig().API || '').replace(/\/$/, '/') + 'graphs', {
+      credentials: 'include'
+    })
       .then((res) => {
         if (!res.ok) {
           // If response is not OK (e.g., 404 Not Found)

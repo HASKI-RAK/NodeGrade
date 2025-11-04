@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LtiController } from './lti.controller';
 import { LtiService } from './lti.service';
 import { LtiBasicLaunchRequest } from '@haski/lti';
+import { Response, Request } from 'express';
 import { BadRequestException } from '@nestjs/common';
 
 describe('LtiController', () => {
   let controller: LtiController;
   let service: LtiService;
   let responseMock: Response;
+  let requestMock: Request;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -30,6 +32,7 @@ describe('LtiController', () => {
       cookie: jest.fn(),
       redirect: jest.fn(),
     } as unknown as Response;
+    requestMock = {} as unknown as Request;
   });
 
   it('should be defined', () => {
@@ -37,7 +40,7 @@ describe('LtiController', () => {
   });
 
   it('should set cookies and redirect', () => {
-    const mockPayload: LtiBasicLaunchRequest = {
+    const mockPayload = {
       user_id: '123',
       roles: 'Student',
       context_id: '456',
@@ -47,19 +50,24 @@ describe('LtiController', () => {
       lti_version: '1.3.0',
       resource_link_id: '789',
       custom_activityname: 'math101',
-    };
+      // extra optional fields that might be referenced in controller
+      tool_consumer_instance_guid: 'tc-guid',
+      tool_consumer_instance_name: 'tc-name',
+      lis_person_name_full: 'John Doe',
+      lis_person_contact_email_primary: 'john@example.com',
+    } as Partial<LtiBasicLaunchRequest>;
 
-    controller.handleBasicLogin(mockPayload, responseMock);
+    controller.handleBasicLogin(
+      mockPayload as unknown as LtiBasicLaunchRequest,
+      requestMock,
+      responseMock,
+    );
 
-    expect(responseMock.cookie).toHaveBeenCalledWith('ltiUserId', '123', {
-      httpOnly: true,
-    });
-    expect(responseMock.cookie).toHaveBeenCalledWith('ltiRoles', 'Student', {
-      httpOnly: true,
-    });
-    expect(responseMock.cookie).toHaveBeenCalledWith('ltiContextId', '456', {
-      httpOnly: true,
-    });
+    expect(responseMock.cookie).toHaveBeenCalledWith(
+      'lti_nodegrade_cookie',
+      expect.any(String),
+      expect.objectContaining({ httpOnly: true, maxAge: expect.any(Number) }),
+    );
     expect(responseMock.redirect).toHaveBeenCalledWith(
       302,
       'http://example.com',
@@ -69,7 +77,7 @@ describe('LtiController', () => {
   describe('handleBasicLogin', () => {
     it('should return a redirect response with the correct URL', async () => {
       const mockPayload = {
-        user_id: 123,
+        user_id: '123',
         roles: 'Student',
         custom_activityname: 'math101',
       } as LtiBasicLaunchRequest;
@@ -82,18 +90,18 @@ describe('LtiController', () => {
         timestamp: '123456',
       });
 
-      const result = controller.handleBasicLogin(mockPayload);
-
+      controller.handleBasicLogin(
+        mockPayload as unknown as LtiBasicLaunchRequest,
+        requestMock,
+        responseMock,
+      );
       expect(service.handleBasicLogin).toHaveBeenCalledWith(mockPayload);
-      expect(result).toEqual({
-        statusCode: 302,
-        url: mockRedirectUrl,
-      });
+      expect(responseMock.redirect).toHaveBeenCalledWith(302, mockRedirectUrl);
     });
 
     it('should throw error when service fails', () => {
       const mockPayload = {
-        user_id: 123,
+        user_id: '123',
         roles: 'Student',
       } as LtiBasicLaunchRequest;
 
@@ -102,8 +110,16 @@ describe('LtiController', () => {
         throw testError;
       });
 
-      expect(() => controller.handleBasicLogin(mockPayload)).toThrow(testError);
-      expect(service.handleBasicLogin).toHaveBeenCalledWith(mockPayload);
+      expect(() =>
+        controller.handleBasicLogin(
+          mockPayload as unknown as LtiBasicLaunchRequest,
+          requestMock,
+          responseMock,
+        ),
+      ).toThrow('Failed to process LTI request: Test error');
+      expect(service.handleBasicLogin).toHaveBeenCalledWith(
+        mockPayload as unknown as LtiBasicLaunchRequest,
+      );
     });
   });
 });

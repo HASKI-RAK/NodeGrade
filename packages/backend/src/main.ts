@@ -12,14 +12,22 @@ async function bootstrap() {
 
   // Enable CORS with configurable origin
   const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+    ? process.env.CORS_ORIGIN.split(',').map((origin) =>
+        origin.trim().replace(/^"|"$/g, ''),
+      )
     : ['https://nodegrade.haski.app'];
 
   app.enableCors({
     origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Origin',
+      'X-Requested-With',
+      'Accept',
+    ],
   });
 
   await app.listen(process.env.PORT ?? 5000);

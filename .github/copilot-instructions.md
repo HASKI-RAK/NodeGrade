@@ -17,9 +17,14 @@ If we are using windows powershell, keep in mind that you cant use operators lik
 ## Alyways do the following
 
 Before starting to work, briefly summarize your task in one short sentence!
+Always check the problems of a given file.
 After implementing a feature, run the tests. If they fail, try to fix them based on the Test failures.
 Only focus on the task given to you, do not modify unrelated code.
 If you are not sure about something, ask for help. Do not hesitate to ask for clarification or help if you are stuck.
 
-## Coding style
+## Coding guidelines
+
 - Avoid casting types. Use the correct type from the beginning.
+- Use best practices for the given language.
+- Write clean code and use design patterns if appropriate to fix common problems.
+- Write comments if the code is complex or not self-explanatory.

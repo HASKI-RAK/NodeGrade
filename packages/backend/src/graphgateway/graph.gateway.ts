@@ -13,11 +13,25 @@ import {
 import { Server, Socket } from 'socket.io';
 import { GraphHandlerService } from './graph-handler.service';
 
+// Resolve allowed CORS origins for Socket.IO from env, fallback to production frontend
+const allowedSocketOrigins = (
+  process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',')
+    : ['https://nodegrade.haski.app']
+).map((o) => o.trim().replace(/^"|"$/g, ''));
+
 @WebSocketGateway({
   cors: {
-    origin: 'https://nodegrade.haski.app',
+    origin: allowedSocketOrigins,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Origin',
+      'X-Requested-With',
+      'Accept',
+    ],
   },
   path: '/socket.io',
 })

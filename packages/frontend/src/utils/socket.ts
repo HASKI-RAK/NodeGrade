@@ -13,10 +13,12 @@ let socket: Socket | null = null
 export const getSocket = (path?: string): Socket => {
   if (!socket) {
     const url = getConfig().API || 'http://localhost:5000'
-    const fullUrl = path ? `${url}/${path}` : url
+    const fullUrl = path ? `${url.replace(/\/$/, '')}/${path}` : url
     console.log('Connecting to socket at:', fullUrl)
     socket = io(url, {
-      withCredentials: true
+      withCredentials: true,
+      path: '/socket.io',
+      transports: ['websocket']
     })
 
     // Add global error handler

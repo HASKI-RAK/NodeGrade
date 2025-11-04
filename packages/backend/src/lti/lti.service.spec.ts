@@ -18,7 +18,7 @@ describe('LtiService', () => {
   });
 
   it('should handle basic login', () => {
-    const mockPayload: LtiBasicLaunchRequest = {
+    const mockPayload = {
       user_id: '123',
       roles: 'Student',
       context_id: '456',
@@ -28,20 +28,26 @@ describe('LtiService', () => {
       lti_version: '1.3.0',
       resource_link_id: '789',
       custom_activityname: 'math101',
-    };
+    } as Partial<LtiBasicLaunchRequest>;
 
-    const result = service.handleBasicLogin(mockPayload);
+    const result = service.handleBasicLogin(
+      mockPayload as unknown as LtiBasicLaunchRequest,
+    );
 
-    expect(result).toEqual({
-      redirectUrl: expect.any(String),
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        redirectUrl: expect.any(String),
+        isEditor: expect.any(Boolean),
+        timestamp: expect.any(String),
+      }),
+    );
   });
 
   describe('handleBasicLogin', () => {
     it('should return redirect URL for student role', async () => {
       // Mock LTI basic launch request for student
       const mockPayload: Partial<LtiBasicLaunchRequest> = {
-        user_id: 123,
+        user_id: '123',
         roles: 'Student',
         custom_activityname: 'math101',
         lis_person_contact_email_primary: 'student@example.com',
@@ -60,7 +66,7 @@ describe('LtiService', () => {
     it('should return redirect URL for instructor role', async () => {
       // Mock LTI basic launch request for instructor
       const mockPayload: Partial<LtiBasicLaunchRequest> = {
-        user_id: 456,
+        user_id: '456',
         roles: 'Instructor',
         custom_activityname: 'math101',
         lis_person_contact_email_primary: 'instructor@example.com',

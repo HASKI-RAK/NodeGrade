@@ -141,7 +141,9 @@ export class LLMNode extends LGraphNode {
       presence_penalty: 0,
       repetition_penalty: 0,
       repetition_penalty_range: 512,
-      guidance_scale: 1
+      guidance_scale: 1,
+      // carry available models in serializable properties so frontend can populate the widget
+      available_models: []
     }
     this.title = 'LLM'
     this.env = {}
@@ -160,18 +162,25 @@ export class LLMNode extends LGraphNode {
 
   async init(_env: Record<string, unknown>) {
     this.env = _env
-    try {
-      const models = await this.fetchModels(
-        (this.env.MODEL_WORKER_URL ?? 'http://193.174.195.36:8000') + '/v1/models'
-      )
-      this.initModels(models)
-    } catch (error) {
-      console.error('Failed to fetch models:', error)
+    // Only fetch models if we're running on the backend (node has fetch in env or is in Node.js)
+    // Frontend nodes will get models from serialized properties
+    if (typeof window === 'undefined' && this.env.MODEL_WORKER_URL) {
+      try {
+        const models = await this.fetchModels(
+          (this.env.MODEL_WORKER_URL as string) + '/v1/models'
+        )
+        this.initModels(models)
+      } catch (error) {
+        console.error('Failed to fetch models:', error)
+      }
     }
   }
 
   initModels(models: string[]) {
     this.models = models
+    // store also in properties so it survives serialization to the frontend
+    // eslint-disable-next-line immutable/no-mutation
+    ;(this.properties as any).available_models = models
     this.widget_llm.options = { values: this.models }
     // check if old model is still available, otherwise set to first model
     if (!this.models.includes(this.properties.model)) {
@@ -209,6 +218,11 @@ export class LLMNode extends LGraphNode {
 
   //name of the function to call when executing
   async onExecute() {
+    // Only execute on the backend - frontend nodes should never call this
+    if (typeof window !== 'undefined') {
+      throw new Error('LLMNode can only execute on the backend')
+    }
+
     //get inputs
     const message = this.getInputData<PromptMessageType | undefined>(0)
     const messages = this.getInputData<PromptMessageType[] | undefined>(1)
@@ -225,36 +239,41 @@ export class LLMNode extends LGraphNode {
       guidance_scale: this.properties.guidance_scale
     }
 
-    // TODO: sanity check input
     const required_input = JSON.stringify(input)
-    // console.log(required_input)
-    // fetch from server
-    console.log(this.env.MODEL_WORKER_URL)
-    const response = await fetch(
-      (this.env.MODEL_WORKER_URL ?? 'http://193.174.195.36:8000') +
-        '/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: required_input
-      }
-    )
+    const workerUrl =
+      (this.env.MODEL_WORKER_URL as string) ?? 'http://193.174.195.36:8000'
+
+    const response = await fetch(workerUrl + '/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: required_input
+    })
     if (!response.ok) {
-      // console log the error
-      console.log(response.statusText)
-      throw new Error('Network response was not ok')
+      console.error(`LLM API error: ${response.statusText}`)
+      throw new Error(`LLM API request failed: ${response.status} ${response.statusText}`)
     }
 
     // get response
     const data = await response.json()
     const choices = data.choices
-    // console.log(choices)
-    //send output to the output
-    // console.log(choices[0].message.content)
     this.properties.value = choices[0].message.content
     this.setOutputData(0, choices[0].message.content)
+  }
+
+  // ensure that when a node is configured (e.g. on the frontend after receiving a serialized graph)
+  // the combo widget gets its values from the serialized properties
+  onConfigure(o: unknown): void {
+    const available = (this.properties as any).available_models as string[] | undefined
+    if (Array.isArray(available) && available.length) {
+      this.models = available
+      this.widget_llm.options = { values: this.models }
+      if (!this.models.includes(this.properties.model)) {
+        this.properties.model = this.models[0]
+        this.widget_llm.value = this.models[0]
+      }
+    }
   }
 
   //register in the system
