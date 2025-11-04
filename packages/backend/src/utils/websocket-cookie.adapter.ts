@@ -21,14 +21,42 @@ export class WebSocketCookieAdapter extends IoAdapter {
           const ltiCookieStr = parsedCookies['lti_nodegrade_cookie'];
           if (ltiCookieStr) {
             try {
-              // Use type assertion to ensure type safety with JSON.parse
-              const ltiCookie = JSON.parse(
-                decodeURIComponent(ltiCookieStr),
-              ) as LtiCookie;
-              socket.handshake.auth.ltiCookie = ltiCookie;
-              this.logger.debug(
-                `LTI cookie parsed for socket: ${ltiCookie.user_id}`,
-              );
+              const decodedCookie = decodeURIComponent(ltiCookieStr);
+
+              // Validate the decoded cookie is not too large (prevent DoS attacks)
+              if (decodedCookie.length > 10000) {
+                this.logger.warn('LTI cookie too large, rejecting');
+                next();
+                return;
+              }
+
+              // Parse JSON without premature type casting
+              const parsedCookie = JSON.parse(decodedCookie) as unknown;
+
+              // Validate the parsed cookie has all required fields
+              if (
+                typeof parsedCookie === 'object' &&
+                parsedCookie !== null &&
+                typeof (parsedCookie as LtiCookie).user_id === 'string' &&
+                typeof (parsedCookie as LtiCookie).timestamp === 'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .tool_consumer_instance_guid === 'string' &&
+                typeof (parsedCookie as LtiCookie).isEditor === 'boolean' &&
+                typeof (parsedCookie as LtiCookie).lis_person_name_full ===
+                  'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .tool_consumer_instance_name === 'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .lis_person_contact_email_primary === 'string'
+              ) {
+                const ltiCookie = parsedCookie as LtiCookie;
+                socket.handshake.auth.ltiCookie = ltiCookie;
+                this.logger.debug(
+                  `LTI cookie parsed for socket: ${ltiCookie.user_id}`,
+                );
+              } else {
+                this.logger.warn('Invalid LTI cookie structure');
+              }
             } catch (error) {
               this.logger.error('Error parsing LTI cookie:', error);
             }

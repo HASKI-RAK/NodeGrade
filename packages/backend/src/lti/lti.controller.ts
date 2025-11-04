@@ -46,6 +46,8 @@ export class LtiController {
       response.cookie('lti_nodegrade_cookie', JSON.stringify(cookie), {
         maxAge: 5 * 60 * 60 * 1000, // 5 hours
         httpOnly: true,
+        secure: true, // Only send cookie over HTTPS
+        sameSite: 'lax', // Protect against CSRF attacks
       });
       this.logger.debug(
         `Set cookie lti_nodegrade_cookie with user_id: ${payload.user_id}`,
