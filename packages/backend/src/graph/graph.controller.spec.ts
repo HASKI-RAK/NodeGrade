@@ -16,6 +16,8 @@ describe('GraphController', () => {
     const res: Partial<Response> = {};
     res.status = jest.fn().mockReturnValue(res);
     res.json = jest.fn().mockReturnValue(res);
+    res.header = jest.fn().mockReturnValue(res);
+    res.send = jest.fn().mockReturnValue(res);
     return res as Response;
   };
 
@@ -36,8 +38,9 @@ describe('GraphController', () => {
     ];
     mockGraphService.findAllGraphs.mockResolvedValue(mockGraphs);
 
+    const req = { headers: { origin: 'http://localhost:3000' } } as any;
     const res = mockResponse();
-    await graphController.findAllGraphs(res);
+    await graphController.findAllGraphs(req, res);
 
     expect(graphService.findAllGraphs).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);

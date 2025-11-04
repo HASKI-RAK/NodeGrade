@@ -40,6 +40,10 @@ export class GraphHandlerService {
     benchmark = false,
   ): void => {
     lgraph.onNodeAdded = (node: LGraphNode) => {
+      this.logger.debug(
+        `Node added to graph: ${node.title} (id: ${node.id}, type: ${node.type})`,
+      );
+
       if (!benchmark && client) {
         node.emitEventCallback = (
           event: ServerEvent<keyof ServerEventPayload>,
@@ -50,21 +54,24 @@ export class GraphHandlerService {
 
       // Hydrate node environment on load so nodes can initialize themselves
       try {
+        const modelWorkerUrl =
+          (process.env.MODEL_WORKER_URL as unknown as string) ||
+          'http://193.174.195.36:8000';
+
         node.env = {
           // Backend nodes talk directly to the model worker via internal network
-          MODEL_WORKER_URL:
-            (process.env.MODEL_WORKER_URL as unknown as string) ||
-            'http://193.174.195.36:8000',
+          MODEL_WORKER_URL: modelWorkerUrl,
         };
-        // Call init without changing onNodeAdded signature (void)
-        Promise.resolve(node.init?.(node.env)).catch((e) =>
-          this.logger.debug(
-            `Node hydration skipped/failed for ${node.title}: ${String(e)}`,
-          ),
-        );
-      } catch (e) {
+
         this.logger.debug(
-          `Node hydration skipped/failed for ${node.title}: ${String(e)}`,
+          `Set env for node ${node.title} with MODEL_WORKER_URL: ${modelWorkerUrl}`,
+        );
+
+        // Note: We don't call init() here because onNodeAdded is synchronous
+        // init() will be called in hydrateExistingNodes() after configure() completes
+      } catch (e) {
+        this.logger.error(
+          `Node env setup error for ${node.title} (${node.type}): ${String(e)}`,
         );
       }
 
@@ -107,6 +114,67 @@ export class GraphHandlerService {
     }
   };
 
+  /**
+   * Hydrate all existing nodes in the graph with environment variables.
+   * This is called after loading a graph to ensure all nodes have access to backend resources.
+   */
+  private readonly hydrateExistingNodes = async (
+    lgraph: LGraph,
+  ): Promise<void> => {
+    const modelWorkerUrl =
+      (process.env.MODEL_WORKER_URL as unknown as string) ||
+      'http://193.174.195.36:8000';
+
+    // Access _nodes via any cast since findNodesByType doesn't support wildcard
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const nodes = (lgraph as any)._nodes as LGraphNode[];
+    this.logger.debug(`Hydrating ${nodes.length} existing nodes in graph`);
+
+    const hydrationPromises: Promise<void>[] = [];
+
+    for (const node of nodes) {
+      if (!node) continue;
+
+      try {
+        // Use any to access dynamic properties not in LGraphNode type definition
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+        const nodeAny = node as any;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        nodeAny.env = {
+          MODEL_WORKER_URL: modelWorkerUrl,
+        };
+
+        this.logger.debug(
+          `Hydrating existing node: ${node.title} (${node.type}) with MODEL_WORKER_URL: ${modelWorkerUrl}`,
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        if (typeof nodeAny.init === 'function') {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          const promise = Promise.resolve(nodeAny.init(nodeAny.env))
+            .then(() => {
+              this.logger.debug(
+                `Existing node ${node.title} (${node.type}) successfully initialized`,
+              );
+            })
+            .catch((e) => {
+              this.logger.warn(
+                `Failed to initialize existing node ${node.title} (${node.type}): ${String(e)}`,
+              );
+            });
+          hydrationPromises.push(promise);
+        }
+      } catch (e) {
+        this.logger.error(
+          `Error hydrating existing node ${node.title} (${node.type}): ${String(e)}`,
+        );
+      }
+    }
+
+    // Wait for all hydrations to complete
+    await Promise.all(hydrationPromises);
+  };
+
   private readonly sendQuestion = (client: Socket, lgraph: LGraph): void => {
     for (const node of lgraph.findNodesByClass(QuestionNode)) {
       if (!node.properties.value) continue;
@@ -140,9 +208,19 @@ export class GraphHandlerService {
   ) {
     this.logger.log(`RunGraph event received from client id: ${client.id}`);
     const lgraph = new LGraph();
-    // Add the node execution handling
+
+    // Add the node execution handling BEFORE configuring
     this.addOnNodeAdded(lgraph, client);
+
+    this.logger.debug('Configuring graph from client payload');
     lgraph.configure(JSON.parse(payload.graph));
+
+    // Hydrate all nodes that were added during configure
+    await this.hydrateExistingNodes(lgraph);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const nodes = (lgraph as any)._nodes as LGraphNode[];
+    this.logger.debug(`Graph configured with ${nodes.length} nodes`);
 
     // Start measuring execution time
     const startTime = Date.now();
@@ -384,11 +462,25 @@ export class GraphHandlerService {
       const graph = await this.graphService.getGraph(pathname);
       if (graph) {
         const lgraph = new LGraph();
-        lgraph.configure(JSON.parse(graph.graph));
+
+        // Set up the node addition handler BEFORE configuring the graph
+        // This ensures new nodes added during configure() get hydrated
         this.addOnNodeAdded(lgraph, client);
+
         this.logger.debug(
-          `Graph loaded successfully with pathname: ${pathname}`,
+          `Configuring graph from DB for pathname: ${pathname}`,
         );
+        lgraph.configure(JSON.parse(graph.graph));
+
+        // Hydrate all existing nodes that were added during configure()
+        await this.hydrateExistingNodes(lgraph);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+        const nodeCount = ((lgraph as any)._nodes as LGraphNode[]).length;
+        this.logger.debug(
+          `Graph loaded successfully with pathname: ${pathname}, nodes: ${nodeCount}`,
+        );
+
         emitEvent(
           client,
           'graphLoaded',

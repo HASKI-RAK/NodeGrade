@@ -21,6 +21,7 @@ Always check the problems of a given file.
 After implementing a feature, run the tests. If they fail, try to fix them based on the Test failures.
 Only focus on the task given to you, do not modify unrelated code.
 If you are not sure about something, ask for help. Do not hesitate to ask for clarification or help if you are stuck.
+Dont create summary documents.
 
 ## Coding guidelines
 

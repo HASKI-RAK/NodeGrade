@@ -45,10 +45,7 @@ export class GraphController {
   }
 
   @Options()
-  handleOptions(
-    @Req() request: Request,
-    @Res() response: Response,
-  ): void {
+  handleOptions(@Req() request: Request, @Res() response: Response): void {
     this.setCorsHeaders(request, response);
     response.status(HttpStatus.NO_CONTENT).send();
   }
