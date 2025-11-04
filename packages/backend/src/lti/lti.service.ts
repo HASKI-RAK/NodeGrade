@@ -60,10 +60,6 @@ export class LtiService {
       const userType = isEditor ? 'editor' : 'student';
       const activityName = payload.custom_activityname || 'default';
 
-      if (!activityName) {
-        this.logger.warn('No activity name provided, using default');
-      }
-
       // Validate activityName to prevent path traversal attacks
       if (
         activityName.includes('..') ||

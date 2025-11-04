@@ -30,21 +30,26 @@ export class WebSocketCookieAdapter extends IoAdapter {
                 return;
               }
 
-              // Use type assertion to ensure type safety with JSON.parse
-              const ltiCookie = JSON.parse(decodedCookie) as LtiCookie;
+              // Parse JSON without premature type casting
+              const parsedCookie = JSON.parse(decodedCookie) as unknown;
 
               // Validate the parsed cookie has all required fields
               if (
-                typeof ltiCookie === 'object' &&
-                ltiCookie !== null &&
-                typeof ltiCookie.user_id === 'string' &&
-                typeof ltiCookie.timestamp === 'string' &&
-                typeof ltiCookie.tool_consumer_instance_guid === 'string' &&
-                typeof ltiCookie.isEditor === 'boolean' &&
-                typeof ltiCookie.lis_person_name_full === 'string' &&
-                typeof ltiCookie.tool_consumer_instance_name === 'string' &&
-                typeof ltiCookie.lis_person_contact_email_primary === 'string'
+                typeof parsedCookie === 'object' &&
+                parsedCookie !== null &&
+                typeof (parsedCookie as LtiCookie).user_id === 'string' &&
+                typeof (parsedCookie as LtiCookie).timestamp === 'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .tool_consumer_instance_guid === 'string' &&
+                typeof (parsedCookie as LtiCookie).isEditor === 'boolean' &&
+                typeof (parsedCookie as LtiCookie).lis_person_name_full ===
+                  'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .tool_consumer_instance_name === 'string' &&
+                typeof (parsedCookie as LtiCookie)
+                  .lis_person_contact_email_primary === 'string'
               ) {
+                const ltiCookie = parsedCookie as LtiCookie;
                 socket.handshake.auth.ltiCookie = ltiCookie;
                 this.logger.debug(
                   `LTI cookie parsed for socket: ${ltiCookie.user_id}`,
