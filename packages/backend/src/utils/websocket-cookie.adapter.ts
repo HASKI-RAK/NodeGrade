@@ -33,11 +33,17 @@ export class WebSocketCookieAdapter extends IoAdapter {
               // Use type assertion to ensure type safety with JSON.parse
               const ltiCookie = JSON.parse(decodedCookie) as LtiCookie;
 
-              // Validate the parsed cookie has the expected structure
+              // Validate the parsed cookie has all required fields
               if (
                 typeof ltiCookie === 'object' &&
                 ltiCookie !== null &&
-                typeof ltiCookie.user_id === 'string'
+                typeof ltiCookie.user_id === 'string' &&
+                typeof ltiCookie.timestamp === 'string' &&
+                typeof ltiCookie.tool_consumer_instance_guid === 'string' &&
+                typeof ltiCookie.isEditor === 'boolean' &&
+                typeof ltiCookie.lis_person_name_full === 'string' &&
+                typeof ltiCookie.tool_consumer_instance_name === 'string' &&
+                typeof ltiCookie.lis_person_contact_email_primary === 'string'
               ) {
                 socket.handshake.auth.ltiCookie = ltiCookie;
                 this.logger.debug(
