@@ -208,9 +208,16 @@ export class LLMNode extends LGraphNode {
   async fetchModels(endpoint: string): Promise<string[]> {
     try {
       // Fetch the data from the specified endpoint
-
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      const bearerToken = this.env.BEARER_TOKEN as string | undefined
+      if (bearerToken) {
+        headers['Authorization'] = `Bearer ${bearerToken}`
+      }
       const response = await fetch(endpoint, {
-        method: 'GET'
+        method: 'GET',
+        headers
       })
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -476,11 +483,18 @@ export class LLMNode extends LGraphNode {
     const workerUrl =
       (this.env.MODEL_WORKER_URL as string) ?? 'http://193.174.195.36:8000'
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+
+    const bearerToken = this.env.BEARER_TOKEN as string | undefined
+    if (bearerToken) {
+      headers['Authorization'] = `Bearer ${bearerToken}`
+    }
+
     const response = await fetch(workerUrl + '/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: required_input
     })
     if (!response.ok) {

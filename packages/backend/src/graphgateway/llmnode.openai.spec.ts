@@ -65,6 +65,7 @@ describe('LLMNode OpenAI integration', () => {
     await node.init({
       MODEL_WORKER_URL: 'http://local-worker',
       OPENAI_API_KEY: 'sk-test',
+      BEARER_TOKEN: 'test-token',
     });
 
     const models = (node as any).models as string[];
@@ -144,6 +145,7 @@ describe('LLMNode OpenAI integration', () => {
     await node.init({
       MODEL_WORKER_URL: 'http://local-worker',
       OPENAI_API_KEY: 'sk-test',
+      BEARER_TOKEN: 'test-token',
     });
 
     // Route to OpenAI when selecting OpenAI model
@@ -222,6 +224,7 @@ describe('LLMNode OpenAI integration', () => {
     await node.init({
       MODEL_WORKER_URL: 'http://local-worker',
       OPENAI_API_KEY: 'sk-test',
+      BEARER_TOKEN: 'test-token',
     });
     (node as any).properties.model = 'gpt-5';
     await node.onExecute();
@@ -331,6 +334,7 @@ describe('LLMNode OpenAI integration', () => {
     await node.init({
       MODEL_WORKER_URL: 'http://local-worker',
       OPENAI_API_KEY: 'sk-test',
+      BEARER_TOKEN: 'test-token',
     });
     (node as any).properties.model = 'o3-mini';
     await node.onExecute();

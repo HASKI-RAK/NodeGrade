@@ -63,6 +63,7 @@ export class GraphHandlerService {
           MODEL_WORKER_URL: modelWorkerUrl,
           // Optionally allow nodes to use OpenAI when key is set
           OPENAI_API_KEY: process.env.OPENAI_API_KEY as unknown as string,
+          BEARER_TOKEN: process.env.BEARER_TOKEN as unknown as string,
         };
 
         this.logger.debug(
@@ -145,6 +146,7 @@ export class GraphHandlerService {
         nodeAny.env = {
           MODEL_WORKER_URL: modelWorkerUrl,
           OPENAI_API_KEY: process.env.OPENAI_API_KEY as unknown as string,
+          BEARER_TOKEN: process.env.BEARER_TOKEN as unknown as string,
         };
 
         this.logger.debug(
