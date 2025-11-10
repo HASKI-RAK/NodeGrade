@@ -463,17 +463,14 @@ export class LLMNode extends LGraphNode {
     }
 
     // Default: local model worker (OpenAI-compatible proxy)
+    // VLLM only supports standard OpenAI parameters: model, messages, max_tokens, temperature, top_p
+    // Non-standard parameters like top_k, presence_penalty, repetition_penalty cause 400 errors
     const input = {
       model: selectedModel,
       messages: message ? [message] : messages,
       max_tokens: this.properties.max_tokens,
       temperature: this.properties.temperature,
-      top_p: this.properties.top_p,
-      top_k: this.properties.top_k,
-      presence_penalty: this.properties.presence_penalty,
-      repetition_penalty: this.properties.repetition_penalty,
-      repetition_penalty_range: this.properties.repetition_penalty_range,
-      guidance_scale: this.properties.guidance_scale
+      top_p: this.properties.top_p
     }
     const required_input = JSON.stringify(input)
     const workerUrl =
