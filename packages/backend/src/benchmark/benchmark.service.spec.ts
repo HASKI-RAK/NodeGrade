@@ -18,10 +18,26 @@ jest.mock('src/core/Graph', () => ({
 describe('BenchmarkService', () => {
   let service: BenchmarkService;
   let prismaService: PrismaService;
+  const prismaMock = {
+    graph: {
+      findFirst: jest.fn(),
+      findFirstOrThrow: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+    },
+  };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BenchmarkService, PrismaService],
+      providers: [
+        BenchmarkService,
+        {
+          provide: PrismaService,
+          useValue: prismaMock,
+        },
+      ],
     }).compile();
 
     service = module.get<BenchmarkService>(BenchmarkService);
