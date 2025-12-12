@@ -13,7 +13,8 @@
     "setup": "yarn workspace @haski/ta-server setup",
     "lint": "yarn workspaces foreach --parallel --all run lint",
     "test": "yarn workspaces foreach --parallel --all run jest",
-    "build": "yarn workspaces foreach --parallel --all run build"
+    "build": "yarn workspaces foreach --parallel --all run build",
+    "test:report": "yarn workspace backend test:report"
   },
   "pre-commit": "lint",
   "license": "MIT",

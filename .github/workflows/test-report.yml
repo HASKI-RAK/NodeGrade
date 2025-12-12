@@ -1,0 +1,34 @@
+name: Test Report
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "yarn"
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run tests with JSON report
+        run: yarn test:report
+
+      - name: Upload Jest JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodegrade-jest-results
+          path: reports/jest-results.json
+          retention-days: 30
