@@ -16,8 +16,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "yarn"
-          cache-dependency-path: yarn.lock
 
       - name: Enable Corepack (Yarn 4)
         run: |
