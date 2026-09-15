@@ -19,7 +19,11 @@ import {
   WorkspaceScoped,
 } from '../workspace/decorators/current-workspace.decorator.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
-import { CreateWorkflowDto, UpdateWorkflowDto } from './dto/workflow.dto.js';
+import {
+  CreateFromTemplateDto,
+  CreateWorkflowDto,
+  UpdateWorkflowDto,
+} from './dto/workflow.dto.js';
 import { parseIfMatch, versionToEtag } from './workflow-etag.js';
 import type { WorkflowDetail, WorkflowSummary } from './workflow.service.js';
 import { WorkflowService } from './workflow.service.js';
@@ -73,6 +77,46 @@ export class WorkflowController {
     const workflow = await this.workflows.create(workspace, body);
     response.setHeader('ETag', versionToEtag(workflow.version));
     return serializeDetail(workflow);
+  }
+
+  /**
+   * "Use template" (SPEC-0003/FR-006).
+   *
+   * Each call produces a distinct copy — repeated clicks make repeated workflows rather
+   * than overwriting the first, which is the documented edge case and the safe reading
+   * of an impatient double click.
+   */
+  @Post('from-template')
+  async createFromTemplate(
+    @CurrentWorkspace() workspace: ResolvedWorkspace,
+    @Body() body: CreateFromTemplateDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const workflow = await this.workflows.createFromTemplateSlug(
+      workspace,
+      body.templateSlug,
+      body.name,
+    );
+    response.setHeader('ETag', versionToEtag(workflow.version));
+    return serializeDetail(workflow);
+  }
+
+  /**
+   * "Reset to template" (SPEC-0003/FR-008).
+   *
+   * Confirmation is the client's job (AC-003): a server-side confirmation step would
+   * mean a second round trip and a token to carry between them, for a decision the user
+   * has already made in a dialog.
+   */
+  @Post(':id/reset')
+  async reset(
+    @CurrentWorkspace() workspace: ResolvedWorkspace,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const workflow = await this.workflows.reset(workspace.id, id);
+    response.setHeader('ETag', versionToEtag(workflow.version));
+    return serializeSummary(workflow);
   }
 
   /**

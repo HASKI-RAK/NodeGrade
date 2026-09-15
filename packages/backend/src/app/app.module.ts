@@ -5,6 +5,7 @@ import { configuration } from '../config/configuration.js';
 import { GraphModule } from '../graphgateway/graph.module.js';
 import { ContentMigrationModule } from '../migration/content-migration.module.js';
 import { PrismaModule } from '../prisma.module.js';
+import { TemplateModule } from '../template/template.module.js';
 import { WorkflowModule } from '../workflow/workflow.module.js';
 import { WorkspaceModule } from '../workspace/workspace.module.js';
 import { GraphController } from '../graph/graph.controller.js';
@@ -29,6 +30,7 @@ import { HealthService } from '../health/health.service.js';
     ContentMigrationModule,
     AdminAuthModule,
     WorkspaceModule,
+    TemplateModule,
     WorkflowModule,
   ],
   controllers: [

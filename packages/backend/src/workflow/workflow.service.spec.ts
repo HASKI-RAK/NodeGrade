@@ -1,6 +1,17 @@
 import { PrismaService } from '../prisma.service.js';
+import { TemplateService } from '../template/template.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 import { WorkflowService } from './workflow.service.js';
+
+const revision = (overrides: Record<string, unknown> = {}) => ({
+  id: 'rev-1',
+  templateId: 'tpl-1',
+  revision: 1,
+  name: 'Demo workflow',
+  content: '{"nodes":[{"id":1,"type":"input/answer"}]}',
+  contentSchema: 2,
+  ...overrides,
+});
 
 const workspaceA: ResolvedWorkspace = {
   id: 'ws-a',
@@ -34,10 +45,16 @@ describe('WorkflowService', () => {
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       count: jest.fn().mockResolvedValue(0),
     };
-    const service = new WorkflowService({
-      workflow,
-    } as unknown as PrismaService);
-    return { service, workflow };
+    const templates = {
+      findBySlug: jest.fn().mockResolvedValue({ id: 'tpl-1' }),
+      getCurrentRevision: jest.fn().mockResolvedValue(revision()),
+      getRevision: jest.fn().mockResolvedValue(revision()),
+    };
+    const service = new WorkflowService(
+      { workflow } as unknown as PrismaService,
+      templates as unknown as TemplateService,
+    );
+    return { service, workflow, templates };
   };
 
   describe('list', () => {
@@ -258,6 +275,135 @@ describe('WorkflowService', () => {
       expect(workflow.updateMany.mock.calls[0][0].where.workspaceId).toBe(
         'ws-a',
       );
+    });
+  });
+
+  describe('createFromTemplateSlug', () => {
+    it('records the source template and revision (AC-001, FR-018)', async () => {
+      const { service, workflow } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo-workflow');
+
+      expect(workflow.create.mock.calls[0][0].data).toMatchObject({
+        workspaceId: 'ws-a',
+        name: 'Demo workflow',
+        content: '{"nodes":[{"id":1,"type":"input/answer"}]}',
+        sourceTemplateId: 'tpl-1',
+        sourceTemplateRevisionId: 'rev-1',
+      });
+    });
+
+    it('only resolves published templates (FR-017)', async () => {
+      const { service, templates } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo-workflow');
+
+      expect(templates.findBySlug).toHaveBeenCalledWith('demo-workflow', true);
+    });
+
+    it('lets the caller name their copy', async () => {
+      const { service, workflow } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo', 'My attempt');
+
+      expect(workflow.create.mock.calls[0][0].data.name).toBe('My attempt');
+    });
+
+    it('carries the revision’s content schema so migrations still see it', async () => {
+      const { service, workflow, templates } = build();
+      templates.getCurrentRevision.mockResolvedValue(
+        revision({ contentSchema: 1 }),
+      );
+
+      await service.createFromTemplateSlug(workspaceA, 'demo');
+
+      expect(workflow.create.mock.calls[0][0].data.contentSchema).toBe(1);
+    });
+
+    it('never writes to the template (FR-007)', async () => {
+      const { service, templates } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo');
+
+      // The service is read-only against templates by construction: it holds no write
+      // method for them at all.
+      expect(Object.keys(templates)).toEqual([
+        'findBySlug',
+        'getCurrentRevision',
+        'getRevision',
+      ]);
+    });
+
+    it('is still subject to the workspace cap', async () => {
+      const { service, workflow } = build();
+      workflow.count.mockResolvedValue(50);
+
+      await expect(
+        service.createFromTemplateSlug(workspaceA, 'demo'),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
+  describe('reset', () => {
+    it('restores the revision the workflow came from, not the current one (AC-002)', async () => {
+      const { service, workflow, templates } = build();
+      workflow.findFirst
+        .mockResolvedValueOnce({ sourceTemplateRevisionId: 'rev-1' })
+        .mockResolvedValueOnce(row());
+      templates.getRevision.mockResolvedValue(
+        revision({ content: 'revision-1-content' }),
+      );
+
+      await service.reset(workspaceA.id, 'wf-1');
+
+      expect(templates.getRevision).toHaveBeenCalledWith('rev-1');
+      expect(workflow.updateMany).toHaveBeenCalledWith({
+        where: { id: 'wf-1', workspaceId: 'ws-a' },
+        data: {
+          content: 'revision-1-content',
+          contentSchema: 2,
+          version: { increment: 1 },
+        },
+      });
+    });
+
+    it('bumps the version so another tab conflicts instead of clobbering', async () => {
+      const { service, workflow } = build();
+      workflow.findFirst
+        .mockResolvedValueOnce({ sourceTemplateRevisionId: 'rev-1' })
+        .mockResolvedValueOnce(row());
+
+      await service.reset(workspaceA.id, 'wf-1');
+
+      expect(workflow.updateMany.mock.calls[0][0].data.version).toEqual({
+        increment: 1,
+      });
+    });
+
+    it('refuses a workflow that has no source template', async () => {
+      const { service, workflow } = build();
+      workflow.findFirst.mockResolvedValue({
+        sourceTemplateRevisionId: null,
+      });
+
+      await expect(service.reset(workspaceA.id, 'wf-1')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'workflow_has_no_template' },
+      });
+      expect(workflow.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('is workspace-scoped', async () => {
+      const { service, workflow } = build();
+      workflow.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.reset(workspaceA.id, 'wf-other'),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(workflow.findFirst.mock.calls[0][0].where).toEqual({
+        id: 'wf-other',
+        workspaceId: 'ws-a',
+      });
     });
   });
 

@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TemplateModule } from '../template/template.module.js';
 import { WorkspaceModule } from '../workspace/workspace.module.js';
 import { WorkflowController } from './workflow.controller.js';
 import { WorkflowService } from './workflow.service.js';
 
 @Module({
-  imports: [WorkspaceModule],
+  imports: [WorkspaceModule, TemplateModule],
   controllers: [WorkflowController],
   providers: [WorkflowService],
-  // The template and workshop modules create workflows from revisions.
+  // The workshop module creates workflows from a pinned revision on join.
   exports: [WorkflowService],
 })
 export class WorkflowModule {}
