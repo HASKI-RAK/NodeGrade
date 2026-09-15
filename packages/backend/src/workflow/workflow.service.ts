@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { positiveNumber } from '../common/env.js';
 import { PrismaService } from '../prisma.service.js';
+import { TemplateService } from '../template/template.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 import type {
   CreateWorkflowDto,
@@ -68,7 +69,10 @@ const isUniqueViolation = (error: unknown): boolean =>
 export class WorkflowService {
   private readonly logger = new Logger(WorkflowService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly templates: TemplateService,
+  ) {}
 
   private get maxWorkflows(): number {
     return positiveNumber(
@@ -102,38 +106,126 @@ export class WorkflowService {
     workspace: ResolvedWorkspace,
     dto: CreateWorkflowDto,
   ): Promise<WorkflowDetail> {
+    await this.assertRoom(workspace);
+    return this.insert(workspace.id, dto.name, dto.content);
+  }
+
+  /**
+   * "Use template" (SPEC-0003/FR-006, FR-018).
+   *
+   * The copy is the user's from the moment it exists; the template is untouched, which
+   * is FR-007 by construction rather than by a check. The source revision id is recorded
+   * because reset has to reproduce *that* revision later, even after the template has
+   * moved on (AC-002) or been unpublished or deleted (AC-014a, AC-017).
+   */
+  /**
+   * Resolves a published template by slug and instantiates its current revision.
+   *
+   * publishedOnly is true because this is the participant-facing path: an unpublished
+   * template must not be reachable by guessing its slug (FR-017). A workshop join binds
+   * to a pinned revision and calls createFromTemplate directly, so it is unaffected by
+   * the template being unpublished later (FR-017a).
+   */
+  async createFromTemplateSlug(
+    workspace: ResolvedWorkspace,
+    templateSlug: string,
+    nameOverride?: string,
+  ): Promise<WorkflowDetail> {
+    const template = await this.templates.findBySlug(templateSlug, true);
+    const revision = await this.templates.getCurrentRevision(template.id);
+
+    return this.createFromTemplate(
+      workspace,
+      {
+        templateId: template.id,
+        revisionId: revision.id,
+        revision: revision.revision,
+        name: revision.name,
+        content: revision.content,
+        contentSchema: revision.contentSchema,
+      },
+      nameOverride,
+    );
+  }
+
+  async createFromTemplate(
+    workspace: ResolvedWorkspace,
+    source: {
+      templateId: string;
+      revisionId: string;
+      revision: number;
+      name: string;
+      content: string;
+      contentSchema: number;
+    },
+    nameOverride?: string,
+  ): Promise<WorkflowDetail> {
+    await this.assertRoom(workspace);
+
+    const workflow = await this.insert(
+      workspace.id,
+      nameOverride ?? source.name,
+      source.content,
+      {
+        sourceTemplateId: source.templateId,
+        sourceTemplateRevisionId: source.revisionId,
+        // Carried over rather than stamped current: a revision written before a content
+        // migration must still be picked up by it once it is a workflow.
+        contentSchema: source.contentSchema,
+      },
+    );
+
+    this.logger.log(
+      `Created workflow ${workflow.id} from template ${source.templateId} revision ${source.revision}`,
+    );
+    return workflow;
+  }
+
+  private async assertRoom(workspace: ResolvedWorkspace): Promise<void> {
     // LTI workspaces are instructor-controlled and hold a course's content; the cap
     // exists to bound anonymous participants, not the institution.
-    if (workspace.type !== 'LTI') {
-      const count = await this.prisma.workflow.count({
-        where: { workspaceId: workspace.id },
-      });
-      if (count >= this.maxWorkflows) {
-        throw new ForbiddenException({
-          code: 'workflow_limit_reached',
-          message: `A workspace may hold at most ${this.maxWorkflows} workflows.`,
-        });
-      }
-    }
+    if (workspace.type === 'LTI') return;
 
-    const base = slugify(dto.name);
+    const count = await this.prisma.workflow.count({
+      where: { workspaceId: workspace.id },
+    });
+    if (count >= this.maxWorkflows) {
+      throw new ForbiddenException({
+        code: 'workflow_limit_reached',
+        message: `A workspace may hold at most ${this.maxWorkflows} workflows.`,
+      });
+    }
+  }
+
+  private async insert(
+    workspaceId: string,
+    name: string,
+    content: string,
+    provenance: {
+      sourceTemplateId?: string;
+      sourceTemplateRevisionId?: string;
+      contentSchema?: number;
+    } = {},
+  ): Promise<WorkflowDetail> {
+    const base = slugify(name);
 
     for (let attempt = 0; attempt < SLUG_RETRIES; attempt += 1) {
       const taken = await this.prisma.workflow.findMany({
-        where: { workspaceId: workspace.id, slug: { startsWith: base } },
+        where: { workspaceId, slug: { startsWith: base } },
         select: { slug: true },
       });
 
       try {
         return await this.prisma.workflow.create({
           data: {
-            workspaceId: workspace.id,
-            name: dto.name,
+            workspaceId,
+            name,
             slug: dedupeSlug(
               base,
               taken.map((row) => row.slug),
             ),
-            content: dto.content,
+            content,
+            ...provenance,
           },
           select: { ...SUMMARY_SELECT, content: true },
         });
@@ -196,6 +288,52 @@ export class WorkflowService {
       });
     }
 
+    return this.summary(workspaceId, id);
+  }
+
+  /**
+   * "Reset to template" (SPEC-0003/FR-008, AC-002).
+   *
+   * Restores the revision the workflow was *created from*, not the template's current
+   * revision. That distinction is the whole requirement: a facilitator fixing a typo
+   * mid-workshop must not silently change what everyone's reset button does.
+   *
+   * No If-Match. The user has just confirmed they want their edits discarded, so a
+   * stale-version guard would only block the thing they asked for. The version still
+   * increments, so another open tab collides on its next save rather than quietly
+   * writing the broken graph back.
+   */
+  async reset(workspaceId: string, id: string): Promise<WorkflowSummary> {
+    const workflow = await this.prisma.workflow.findFirst({
+      where: { id, workspaceId },
+      select: { sourceTemplateRevisionId: true },
+    });
+    if (!workflow) throw this.notFound();
+
+    if (!workflow.sourceTemplateRevisionId) {
+      throw new ConflictException({
+        code: 'workflow_has_no_template',
+        message: 'This workflow was not created from a template.',
+      });
+    }
+
+    const revision = await this.templates.getRevision(
+      workflow.sourceTemplateRevisionId,
+    );
+
+    const { count } = await this.prisma.workflow.updateMany({
+      where: { id, workspaceId },
+      data: {
+        content: revision.content,
+        contentSchema: revision.contentSchema,
+        version: { increment: 1 },
+      },
+    });
+    if (count === 0) throw this.notFound();
+
+    this.logger.log(
+      `Reset workflow ${id} to template revision ${revision.revision}`,
+    );
     return this.summary(workspaceId, id);
   }
 
