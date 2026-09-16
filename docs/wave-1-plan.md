@@ -16,7 +16,7 @@ _Last updated: 2026-09-16._
 | 3 | `agent/admin-auth` | `bea339a` | Merged |
 | 4a | `agent/workspace-core` | `38b71df` | Merged |
 | 5 | `agent/template-subsystem` | `e5f208b` | Merged |
-| 4b, 6, F1–F5, 7, 8, 9 | `agent/wave1-completion` | pending merge | Complete |
+| 4b, 6, F1–F5, 7, 8, 9 | `agent/wave1-completion` | `8ae277e` | Merged |
 
 Baseline on `dev` after slice 5: backend 32 suites / 265 tests, frontend 3 files /
 8 tests, `tsc --noEmit` clean, `build` clean, `lint:check` clean.
