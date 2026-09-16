@@ -1,5 +1,34 @@
 # Specification index
 
+## Dependency-ordered implementation plan
+
+Implementation follows dependency gates. Specification numbering remains an
+identifier.
+Specs within the same wave may proceed in parallel when their listed
+dependencies have met their acceptance criteria. An implemented spec remains in
+its dependency slot and acts as a completed gate. Earlier draft dependencies of
+an implemented spec receive an acceptance review before the downstream feature
+is included in a release.
+
+| Wave                         | Specifications                  | Dependency gate                                                                                                                | Completion outcome                                                                                                                             |
+| ---------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Foundations              | SPEC-0004, SPEC-0013            | Both features are dependency roots.                                                                                            | Workspace isolation and facilitator authentication contracts are accepted.                                                                     |
+| 2 — Core capabilities        | SPEC-0003, SPEC-0006, SPEC-0011 | SPEC-0003 follows SPEC-0004 and SPEC-0013. SPEC-0006 follows SPEC-0004. SPEC-0011 follows SPEC-0013.                           | Templates, workspace-scoped traces, and authenticated provider administration are available. SPEC-0006 and SPEC-0011 are already implemented.  |
+| 3 — Composition              | SPEC-0005, SPEC-0010, SPEC-0014 | SPEC-0005 follows SPEC-0003 and SPEC-0004. SPEC-0010 follows SPEC-0011. SPEC-0014 follows SPEC-0003, SPEC-0004, and SPEC-0013. | The editor, provider runtime, and workshop join domain compose the foundational capabilities. SPEC-0005 and SPEC-0010 are already implemented. |
+| 4 — Entry and policy         | SPEC-0002, SPEC-0012            | SPEC-0002 follows SPEC-0004 and SPEC-0014. SPEC-0012 follows SPEC-0010 and SPEC-0011.                                          | Participants can enter workshops and facilitators can govern the models exposed to them.                                                       |
+| 5 — Workshop experience      | SPEC-0007                       | SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0010, SPEC-0012, and SPEC-0014 are accepted.                                             | The canonical WAIE flow supports editing, preflight validation, execution, and preview.                                                        |
+| 6 — Release confidence       | SPEC-0008                       | SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0007, and SPEC-0014 are accepted.                                             | CI, deterministic browser coverage, documentation, and the conference happy path form the release gate.                                        |
+| 7 — Specification governance | SPEC-0015                       | The SPEC-0008 CI pipeline is available for the linting gate.                                                                   | Specification validation runs locally and in CI.                                                                                               |
+
+SPEC-0009 closes after SPEC-0010, SPEC-0011, and SPEC-0012 satisfy the epic's
+success criteria. SPEC-0001 closes after its child features (SPEC-0002 through
+SPEC-0008 and SPEC-0014) satisfy the workshop-readiness success criteria and
+the required provider-management capabilities from SPEC-0009 are available.
+
+SPEC-0015's Dependencies section names SPEC-0008. Its frontmatter currently
+declares `depends_on: []`. This plan uses the explicit prose dependency; align
+the frontmatter when SPEC-0015 implementation begins.
+
 | ID        | Type    | Title                                                | Parent    | Status      |
 | --------- | ------- | ---------------------------------------------------- | --------- | ----------- |
 | SPEC-0001 | Epic    | NodeGrade workshop readiness                         | null      | Draft       |
