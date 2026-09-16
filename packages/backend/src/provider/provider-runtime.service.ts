@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
 import {
   MODEL_PARAMETERS,
@@ -13,12 +18,27 @@ import {
 } from '@haski/ta-lib';
 import { generateText, type ModelMessage } from 'ai';
 import {
+  ConcurrencyGate,
+  ConcurrencyLimitError,
+} from '../common/concurrency-gate.js';
+import {
+  DEFAULT_EXECUTION_LIMITS,
+  ExecutionLimitsService,
+} from './execution-limits.service.js';
+import { permitsModel } from './model-policy.js';
+import {
   ProviderService,
   type RuntimeProviderConfig,
 } from './provider.service.js';
 
 const CATALOG_TTL_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
+/**
+ * How long a request may wait for a deployment-wide permit before it is rejected. Long
+ * enough to ride out a neighbouring run, short enough that a participant is told what
+ * happened instead of watching a spinner.
+ */
+const GATE_WAIT_MS = 10_000;
 const isModelParameter = (value: unknown): value is ModelParameter =>
   typeof value === 'string' &&
   MODEL_PARAMETERS.some((parameter) => parameter === value);
@@ -75,13 +95,25 @@ const capabilities = (
 @Injectable()
 export class ProviderRuntimeService implements ModelCompletionRuntime {
   private cached?: { expiresAt: number; value: ModelCatalog };
+  private readonly gate = new ConcurrencyGate(
+    DEFAULT_EXECUTION_LIMITS.providerConcurrentRequests,
+    GATE_WAIT_MS,
+  );
 
-  constructor(private readonly providers: ProviderService) {}
+  constructor(
+    private readonly providers: ProviderService,
+    private readonly limits: ExecutionLimitsService,
+  ) {}
 
   invalidateCatalog(): void {
     this.cached = undefined;
   }
 
+  /**
+   * The user-visible catalog. Models a provider's policy does not permit are dropped
+   * here, which is also what makes an allowlisted id that has vanished from the provider
+   * simply stop appearing (SPEC-0012/FR-005, FR-006, FR-008).
+   */
   async catalog(): Promise<ModelCatalog> {
     if (this.cached && this.cached.expiresAt > Date.now())
       return this.cached.value;
@@ -93,7 +125,11 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
       })),
     );
     const value: ModelCatalog = {
-      models: results.flatMap(({ probe }) => probe.models),
+      models: results.flatMap(({ provider, probe }) =>
+        probe.models.filter((model) =>
+          permitsModel(provider.policy, model.ref.modelId),
+        ),
+      ),
       providers: results.map(({ provider, probe }) => ({
         providerKey: provider.key,
         providerName: provider.displayName,
@@ -102,6 +138,27 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
     };
     this.cached = { expiresAt: Date.now() + CATALOG_TTL_MS, value };
     return value;
+  }
+
+  /**
+   * The facilitator's view: the provider's live catalog unfiltered, with the currently
+   * allowed ids marked, so a policy can be edited against what the provider really offers
+   * (SPEC-0012/FR-004).
+   */
+  async providerCatalog(id: string): Promise<{
+    status: ProviderStatusCode;
+    models: { modelId: string; label: string; allowed: boolean }[];
+  }> {
+    const provider = await this.providers.runtimeById(id);
+    const probe = await this.probe(provider);
+    return {
+      status: probe.status,
+      models: probe.models.map((model) => ({
+        modelId: model.ref.modelId,
+        label: model.label,
+        allowed: permitsModel(provider.policy, model.ref.modelId),
+      })),
+    };
   }
 
   async test(id: string): Promise<{ status: ProviderStatusCode }> {
@@ -170,6 +227,13 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
         code: 'PROVIDER_DISABLED',
         message: 'Selected provider is disabled.',
       });
+    // Checked before the catalog is touched, so a request for a model the policy
+    // excludes never reaches the provider at all (SPEC-0012/FR-007).
+    if (!permitsModel(provider.policy, request.modelRef.modelId))
+      throw new BadRequestException({
+        code: 'MODEL_UNAVAILABLE',
+        message: 'Selected model is unavailable.',
+      });
     const catalog = await this.catalog();
     const model = catalog.models.find(
       (entry) =>
@@ -220,16 +284,44 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
           : 'user',
       content: message.content,
     }));
-    const result = await generateText({
-      model: openai.chat(model.ref.modelId),
-      messages,
-      abortSignal: request.signal,
-      maxOutputTokens: allowed('max_tokens'),
-      temperature: allowed('temperature'),
-      topP: allowed('top_p'),
-      topK: allowed('top_k'),
-      presencePenalty: allowed('presence_penalty'),
-    });
-    return { text: result.text, warnings };
+    const release = await this.acquireProviderPermit();
+    try {
+      const result = await generateText({
+        model: openai.chat(model.ref.modelId),
+        messages,
+        abortSignal: request.signal,
+        maxOutputTokens: allowed('max_tokens'),
+        temperature: allowed('temperature'),
+        topP: allowed('top_p'),
+        topK: allowed('top_k'),
+        presencePenalty: allowed('presence_penalty'),
+      });
+      return { text: result.text, warnings };
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Bounds how many provider requests the deployment has in flight at once, protecting a
+   * shared key from saturation (SPEC-0012/FR-011).
+   */
+  private async acquireProviderPermit(): Promise<() => void> {
+    const { providerConcurrentRequests } = await this.limits.get();
+    this.gate.setLimit(providerConcurrentRequests);
+    try {
+      return await this.gate.acquire();
+    } catch (error) {
+      if (error instanceof ConcurrencyLimitError)
+        throw new HttpException(
+          {
+            code: 'PROVIDER_RATE_LIMITED',
+            message:
+              'The deployment is busy. Wait a moment and run the workflow again.',
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      throw error;
+    }
   }
 }

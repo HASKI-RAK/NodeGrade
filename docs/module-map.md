@@ -101,10 +101,13 @@ Responsibilities:
 - AES-256-GCM credential storage and masked hints
 - model catalog probing with a short TTL, provider status codes
 - `ModelCompletionRuntime` implementation handed to nodes at execution time
-- model allowlist policy records
+- per-provider model policy (DENY_ALL / ALLOWLIST / ALLOW_ALL), enforced on the model
+  catalog and on execution
+- deployment-global concurrency guards protecting a shared provider key
 
 Primary entry points: `provider.service.ts`, `provider-runtime.service.ts`,
-`provider.controller.ts`, `model.controller.ts`, `provider-credential-cipher.ts`
+`provider.controller.ts`, `model.controller.ts`, `provider-credential-cipher.ts`,
+`model-policy.ts`, `execution-limits.service.ts`, `execution-limits.controller.ts`
 
 Related: shared types in `packages/lib/src/nodes/types/ModelRef.ts`; admin UI in
 `packages/frontend/src/pages/admin/AdminPage.tsx`

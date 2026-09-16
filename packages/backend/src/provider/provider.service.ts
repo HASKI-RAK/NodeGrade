@@ -16,8 +16,15 @@ import { PrismaService } from '../prisma.service.js';
 import type {
   CreateProviderDto,
   CredentialUpdateDto,
+  ModelPolicyDto,
   UpdateProviderDto,
 } from './dto/provider.dto.js';
+import {
+  isCloudProvider,
+  toModelPolicy,
+  UNCHOSEN_POLICY,
+  type ModelPolicy,
+} from './model-policy.js';
 import {
   ProviderCredentialCipher,
   ProviderEncryptionUnavailableError,
@@ -39,8 +46,23 @@ export type RuntimeProviderConfig = {
   displayName: string;
   baseUrl: string;
   enabled: boolean;
+  policy: ModelPolicy;
   apiKey?: string;
 };
+
+const providerSummary = {
+  id: true,
+  key: true,
+  type: true,
+  displayName: true,
+  baseUrl: true,
+  apiKeyEnc: true,
+  apiKeyHint: true,
+  enabled: true,
+  createdAt: true,
+  updatedAt: true,
+  modelPolicy: { select: { mode: true, allowedModels: true } },
+} as const;
 
 const safeHint = (value: string): string => `••••${value.slice(-4)}`;
 
@@ -122,12 +144,18 @@ export class ProviderService implements OnApplicationBootstrap {
           enabled: seed.enabled,
           apiKeyEnc,
           apiKeyHint: seed.apiKey ? safeHint(seed.apiKey) : null,
+          // A seeded cloud provider starts closed: an environment key says a credential
+          // exists, not that every model it can reach may be spent (SPEC-0012/FR-002).
           modelPolicy: {
-            create: { mode: seed.enabled ? 'ALLOW_ALL' : 'DENY_ALL' },
+            create: {
+              mode: isCloudProvider(seed.type) ? 'DENY_ALL' : 'ALLOW_ALL',
+            },
           },
         },
       });
     }
+
+    await this.backfillMissingPolicies();
 
     const encrypted = await this.prisma.provider.findMany({
       where: { apiKeyEnc: { not: null } },
@@ -136,36 +164,46 @@ export class ProviderService implements OnApplicationBootstrap {
     for (const provider of encrypted) this.cipher.decrypt(provider.apiKeyEnc!);
   }
 
+  /**
+   * Providers stored before model policies existed carry no policy row. Give them the
+   * unchosen state rather than an implicit allow, so the facilitator has to decide.
+   */
+  private async backfillMissingPolicies(): Promise<void> {
+    const orphans = await this.prisma.provider.findMany({
+      where: { modelPolicy: { is: null } },
+      select: { id: true },
+    });
+    if (orphans.length === 0) return;
+    await this.prisma.modelPolicy.createMany({
+      data: orphans.map((provider) => ({ providerId: provider.id })),
+      skipDuplicates: true,
+    });
+  }
+
   async list() {
     const providers = await this.prisma.provider.findMany({
-      select: {
-        id: true,
-        key: true,
-        type: true,
-        displayName: true,
-        baseUrl: true,
-        apiKeyEnc: true,
-        apiKeyHint: true,
-        enabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: providerSummary,
       orderBy: { displayName: 'asc' },
     });
-    return providers.map(({ apiKeyEnc, ...provider }) => ({
+    return providers.map(({ apiKeyEnc, modelPolicy, ...provider }) => ({
       ...provider,
       hasApiKey: Boolean(apiKeyEnc),
+      policy: toModelPolicy(modelPolicy),
     }));
   }
 
   async create(body: CreateProviderDto) {
     const credential = this.credentialFields(body.credential);
     const baseUrl = body.baseUrl.trim();
+    const policy = body.policy
+      ? this.policyFields(body.policy)
+      : UNCHOSEN_POLICY;
     this.validate(
       'OPENAI_COMPATIBLE',
       body.enabled ?? false,
       baseUrl,
       credential.apiKeyEnc ?? null,
+      policy,
     );
     const created = await this.prisma.provider.create({
       data: {
@@ -175,14 +213,17 @@ export class ProviderService implements OnApplicationBootstrap {
         baseUrl,
         enabled: body.enabled ?? false,
         ...credential,
-        modelPolicy: { create: { mode: 'ALLOW_ALL' } },
+        modelPolicy: { create: policy },
       },
     });
     return this.safeById(created.id);
   }
 
   async update(id: string, body: UpdateProviderDto) {
-    const current = await this.prisma.provider.findUnique({ where: { id } });
+    const current = await this.prisma.provider.findUnique({
+      where: { id },
+      include: { modelPolicy: { select: { mode: true, allowedModels: true } } },
+    });
     if (!current)
       throw new NotFoundException({
         code: 'PROVIDER_NOT_FOUND',
@@ -195,7 +236,10 @@ export class ProviderService implements OnApplicationBootstrap {
       credential.apiKeyEnc === undefined
         ? current.apiKeyEnc
         : credential.apiKeyEnc;
-    this.validate(current.type, enabled, baseUrl, effectiveCredential);
+    const policy = body.policy
+      ? this.policyFields(body.policy)
+      : toModelPolicy(current.modelPolicy);
+    this.validate(current.type, enabled, baseUrl, effectiveCredential, policy);
     await this.prisma.provider.update({
       where: { id },
       data: {
@@ -203,9 +247,29 @@ export class ProviderService implements OnApplicationBootstrap {
         baseUrl,
         enabled,
         ...credential,
+        ...(body.policy
+          ? {
+              modelPolicy: {
+                upsert: { create: policy, update: policy },
+              },
+            }
+          : {}),
       },
     });
     return this.safeById(id);
+  }
+
+  /**
+   * An allowlist is only meaningful in ALLOWLIST mode, so other modes store none.
+   * Enforcement re-reads the stored policy on every listing and execution, so a saved
+   * policy applies without a restart (SPEC-0012/FR-009).
+   */
+  private policyFields(body: ModelPolicyDto): ModelPolicy {
+    return {
+      mode: body.mode,
+      allowedModels:
+        body.mode === 'ALLOWLIST' ? [...new Set(body.allowedModels ?? [])] : [],
+    };
   }
 
   private credentialFields(update?: CredentialUpdateDto): {
@@ -240,8 +304,14 @@ export class ProviderService implements OnApplicationBootstrap {
     enabled: boolean,
     baseUrl: string | null,
     changedCredential: string | null | undefined,
+    policy: ModelPolicy,
   ): void {
     if (!enabled) return;
+    if (isCloudProvider(type) && policy.mode === null)
+      throw new BadRequestException({
+        code: 'PROVIDER_POLICY_MODE_REQUIRED',
+        message: 'Enabled provider requires a model policy mode.',
+      });
     if (!baseUrl)
       throw new BadRequestException({
         code: 'PROVIDER_BASE_URL_REQUIRED',
@@ -260,25 +330,21 @@ export class ProviderService implements OnApplicationBootstrap {
   private async safeById(id: string) {
     const provider = await this.prisma.provider.findUniqueOrThrow({
       where: { id },
-      select: {
-        id: true,
-        key: true,
-        type: true,
-        displayName: true,
-        baseUrl: true,
-        apiKeyEnc: true,
-        apiKeyHint: true,
-        enabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: providerSummary,
     });
-    const { apiKeyEnc, ...safe } = provider;
-    return { ...safe, hasApiKey: Boolean(apiKeyEnc) };
+    const { apiKeyEnc, modelPolicy, ...safe } = provider;
+    return {
+      ...safe,
+      hasApiKey: Boolean(apiKeyEnc),
+      policy: toModelPolicy(modelPolicy),
+    };
   }
 
   async runtimeById(id: string): Promise<RuntimeProviderConfig> {
-    const provider = await this.prisma.provider.findUnique({ where: { id } });
+    const provider = await this.prisma.provider.findUnique({
+      where: { id },
+      include: { modelPolicy: { select: { mode: true, allowedModels: true } } },
+    });
     if (!provider)
       throw new NotFoundException({
         code: 'PROVIDER_NOT_FOUND',
@@ -288,7 +354,10 @@ export class ProviderService implements OnApplicationBootstrap {
   }
 
   async runtimeByKey(key: string): Promise<RuntimeProviderConfig> {
-    const provider = await this.prisma.provider.findUnique({ where: { key } });
+    const provider = await this.prisma.provider.findUnique({
+      where: { key },
+      include: { modelPolicy: { select: { mode: true, allowedModels: true } } },
+    });
     if (!provider)
       throw new NotFoundException({
         code: 'PROVIDER_NOT_FOUND',
@@ -300,6 +369,7 @@ export class ProviderService implements OnApplicationBootstrap {
   async enabledRuntimeProviders(): Promise<RuntimeProviderConfig[]> {
     const providers = await this.prisma.provider.findMany({
       where: { enabled: true },
+      include: { modelPolicy: { select: { mode: true, allowedModels: true } } },
       orderBy: { displayName: 'asc' },
     });
     return providers.map((provider) => this.runtimeConfig(provider));
@@ -313,6 +383,7 @@ export class ProviderService implements OnApplicationBootstrap {
     baseUrl: string | null;
     enabled: boolean;
     apiKeyEnc: string | null;
+    modelPolicy?: ModelPolicy | null;
   }): RuntimeProviderConfig {
     if (!provider.baseUrl)
       throw new BadRequestException({
@@ -326,6 +397,7 @@ export class ProviderService implements OnApplicationBootstrap {
       displayName: provider.displayName,
       baseUrl: provider.baseUrl,
       enabled: provider.enabled,
+      policy: toModelPolicy(provider.modelPolicy ?? null),
       apiKey: provider.apiKeyEnc
         ? this.cipher.decrypt(provider.apiKeyEnc)
         : undefined,

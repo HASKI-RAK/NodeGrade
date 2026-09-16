@@ -24,6 +24,7 @@ import { XapiService } from '../xapi.service.js';
 import { LtiCookie } from '../utils/LtiCookie.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
+import { ExecutionLimitsService } from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 
 type ActiveRun = {
@@ -44,6 +45,7 @@ export class GraphHandlerService {
     private readonly workflows: WorkflowService,
     private readonly xapiService: XapiService,
     private readonly modelRuntime: ProviderRuntimeService,
+    private readonly limits: ExecutionLimitsService,
   ) {}
 
   /**
@@ -107,6 +109,53 @@ export class GraphHandlerService {
       }
     };
   };
+
+  /**
+   * Caps how many runs one workspace may have in flight, so a participant leaning on the
+   * Run button cannot spend the shared provider key on their own (SPEC-0012/FR-010).
+   *
+   * Reports the rejection and returns true rather than throwing: no run was started, so
+   * the generic run-failure path would misreport it.
+   */
+  private async isWorkspaceSaturated(
+    client: Socket,
+    workspaceId: string,
+    payload: ClientEventPayload['runGraph'],
+  ): Promise<boolean> {
+    const { workspaceConcurrentRuns } = await this.limits.get();
+    const inFlight = [...this.activeRuns.values()].filter(
+      (active) => active.workspaceId === workspaceId,
+    ).length;
+    if (inFlight < workspaceConcurrentRuns) return false;
+
+    const runId = randomUUID();
+    const timestamp = new Date().toISOString();
+    const message =
+      workspaceConcurrentRuns === 1
+        ? 'A run is already in progress. Wait for it to finish and try again.'
+        : `This workspace already has ${workspaceConcurrentRuns} runs in progress. Wait for one to finish and try again.`;
+    this.logger.warn(
+      `Run rejected: workspace ${workspaceId} is at its concurrency limit`,
+    );
+    emitEvent(client, 'runStateChanged', {
+      requestId: payload.requestId,
+      runId,
+      workflowId: payload.workflowId,
+      state: 'failed',
+      timestamp,
+      error: { code: 'rate_limited', message },
+    });
+    emitEvent(client, 'graphOperationFailed', {
+      operation: 'run',
+      code: 'rate-limited',
+      message,
+      retryable: true,
+      runId,
+      workflowId: payload.workflowId,
+      timestamp,
+    });
+    return true;
+  }
 
   cancelRun(client: Socket, payload: ClientEventPayload['cancelRun']): void {
     const workspace = (client.data as { workspace?: ResolvedWorkspace })
@@ -235,6 +284,8 @@ export class GraphHandlerService {
       if (!workspace) {
         throw new Error('A workspace-authenticated socket is required.');
       }
+      if (await this.isWorkspaceSaturated(client, workspace.id, payload))
+        return;
       run = {
         runId: randomUUID(),
         requestId: payload.requestId,

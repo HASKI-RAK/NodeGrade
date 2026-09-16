@@ -31,6 +31,11 @@ export class ProviderController {
     return { provider };
   }
 
+  @Get(':id/models')
+  catalog(@Param('id') id: string) {
+    return this.runtime.providerCatalog(id);
+  }
+
   @Post(':id/test')
   test(@Param('id') id: string) {
     return this.runtime.test(id);

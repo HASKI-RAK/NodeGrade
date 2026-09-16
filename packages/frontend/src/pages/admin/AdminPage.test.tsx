@@ -17,7 +17,16 @@ const provider = {
   baseUrl: 'https://api.openai.com/v1',
   enabled: true,
   hasApiKey: true,
-  apiKeyHint: '••••cret'
+  apiKeyHint: '••••cret',
+  policy: { mode: 'ALLOW_ALL' as const, allowedModels: [] as string[] }
+}
+
+const catalog = {
+  status: 'AVAILABLE',
+  models: [
+    { modelId: 'gpt-5', label: 'GPT-5', allowed: false },
+    { modelId: 'gpt-5-mini', label: 'GPT-5 mini', allowed: false }
+  ]
 }
 
 const renderProviders = () =>
@@ -38,6 +47,13 @@ describe('provider administration', () => {
         }
       if (path === '/admin/providers' && options?.method !== 'POST')
         return { data: { providers: [provider] }, response: new Response() }
+      if (path === '/admin/providers/provider-id/models')
+        return { data: catalog, response: new Response() }
+      if (path === '/admin/execution-limits' && options?.method !== 'PUT')
+        return {
+          data: { limits: { workspaceConcurrentRuns: 2, providerConcurrentRequests: 8 } },
+          response: new Response()
+        }
       return { data: { provider }, response: new Response() }
     })
   })
@@ -63,6 +79,47 @@ describe('provider administration', () => {
         expect.objectContaining({
           method: 'PUT',
           body: expect.objectContaining({ credential: { mode: 'KEEP' } })
+        })
+      )
+    )
+  })
+
+  it('curates an allowlist from the live catalog and saves it with the provider', async () => {
+    renderProviders()
+    await screen.findByRole('heading', { name: 'OpenAI' })
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Model policy' }))
+    await userEvent.click(
+      screen.getByRole('option', { name: 'Allowlist — only the models I pick' })
+    )
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'GPT-5' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/admin/providers/provider-id',
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.objectContaining({
+            policy: { mode: 'ALLOWLIST', allowedModels: ['gpt-5'] }
+          })
+        })
+      )
+    )
+  })
+
+  it('saves the deployment concurrency guards', async () => {
+    renderProviders()
+
+    // The fields only render once the stored limits arrive.
+    await userEvent.click(await screen.findByRole('button', { name: 'Save limits' }))
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/admin/execution-limits',
+        expect.objectContaining({
+          method: 'PUT',
+          body: { workspaceConcurrentRuns: 2, providerConcurrentRequests: 8 }
         })
       )
     )

@@ -130,8 +130,9 @@ export function useServerEvents({
         setQuestion(payload)
       },
       runStateChanged(payload) {
-        if (payload.state === 'queued') {
-          if (payload.requestId !== requestIdRef.current) return
+        // Correlate on the request id whenever it is still the attempt in flight: a run
+        // the server refuses outright reports a terminal state without ever queueing.
+        if (payload.requestId === requestIdRef.current) {
           runIdRef.current = payload.runId
           setRunId(payload.runId)
         } else if (payload.runId !== runIdRef.current) return

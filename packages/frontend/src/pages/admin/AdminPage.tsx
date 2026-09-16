@@ -3,9 +3,12 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
+  Divider,
   FormControlLabel,
+  FormGroup,
   MenuItem,
   Stack,
   Switch,
@@ -26,6 +29,7 @@ type Workshop = {
 }
 type Template = { id: string; name: string }
 type Revision = { id: string; name: string; revision: number }
+type PolicyMode = 'DENY_ALL' | 'ALLOWLIST' | 'ALLOW_ALL'
 type Provider = {
   id: string
   key: string
@@ -35,7 +39,22 @@ type Provider = {
   enabled: boolean
   hasApiKey: boolean
   apiKeyHint: string | null
+  policy: { mode: PolicyMode | null; allowedModels: string[] }
 }
+type ProviderCatalog = {
+  status: string
+  models: { modelId: string; label: string; allowed: boolean }[]
+}
+type ExecutionLimits = {
+  workspaceConcurrentRuns: number
+  providerConcurrentRequests: number
+}
+
+const policyModes: { value: PolicyMode; label: string }[] = [
+  { value: 'DENY_ALL', label: 'Deny all — no models offered' },
+  { value: 'ALLOWLIST', label: 'Allowlist — only the models I pick' },
+  { value: 'ALLOW_ALL', label: 'Allow all — every catalog model' }
+]
 
 const csrf = () =>
   document.cookie
@@ -242,6 +261,7 @@ const ProviderAdmin = () => {
           }}
         />
       ))}
+      <ExecutionLimitsCard onSaved={setMessage} />
       {message && <Typography color="success.main">{message}</Typography>}
       {error && <Typography color="error">{error}</Typography>}
     </Stack>
@@ -260,6 +280,9 @@ const ProviderCard = ({
   const [enabled, setEnabled] = useState(provider.enabled)
   const [replacement, setReplacement] = useState('')
   const [removeCredential, setRemoveCredential] = useState(false)
+  const [mode, setMode] = useState<PolicyMode | ''>(provider.policy.mode ?? '')
+  const [allowed, setAllowed] = useState<string[]>(provider.policy.allowedModels)
+  const [catalog, setCatalog] = useState<ProviderCatalog | null>(null)
   const [testStatus, setTestStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -269,7 +292,21 @@ const ProviderCard = ({
     setEnabled(provider.enabled)
     setReplacement('')
     setRemoveCredential(false)
+    setMode(provider.policy.mode ?? '')
+    setAllowed(provider.policy.allowedModels)
   }, [provider])
+  // The allowlist is curated against what the provider really offers right now, so the
+  // catalog is fetched the moment that mode is chosen.
+  useEffect(() => {
+    if (mode !== 'ALLOWLIST' || catalog) return
+    void apiRequest<ProviderCatalog>(`/admin/providers/${provider.id}/models`)
+      .then(({ data }) => setCatalog(data))
+      .catch(() => setCatalog({ status: 'UNREACHABLE', models: [] }))
+  }, [mode, catalog, provider.id])
+  const toggleModel = (modelId: string, checked: boolean) =>
+    setAllowed((current) =>
+      checked ? [...current, modelId] : current.filter((id) => id !== modelId)
+    )
   const save = async () => {
     const credential = removeCredential
       ? { mode: 'REMOVE' }
@@ -283,10 +320,12 @@ const ProviderCard = ({
         displayName: name,
         baseUrl: url,
         enabled,
-        credential
+        credential,
+        ...(mode ? { policy: { mode, allowedModels: allowed } } : {})
       })
       setReplacement('')
       setRemoveCredential(false)
+      setCatalog(null)
       await onSaved(`${name} saved.`)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Provider save failed.')
@@ -353,6 +392,47 @@ const ProviderCard = ({
               label="Remove stored API key"
             />
           )}
+          <Divider />
+          <TextField
+            select
+            label="Model policy"
+            value={mode}
+            helperText="Participants can only select and run models this policy permits."
+            onChange={(event) => setMode(event.target.value as PolicyMode)}
+          >
+            <MenuItem value="" disabled>
+              Choose a policy
+            </MenuItem>
+            {policyModes.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          {mode === 'ALLOWLIST' &&
+            (catalog === null ? (
+              <CircularProgress size={20} />
+            ) : catalog.status === 'AVAILABLE' ? (
+              <FormGroup sx={{ maxHeight: 260, overflowY: 'auto' }}>
+                {catalog.models.map((model) => (
+                  <FormControlLabel
+                    key={model.modelId}
+                    control={
+                      <Checkbox
+                        checked={allowed.includes(model.modelId)}
+                        onChange={(_, checked) => toggleModel(model.modelId, checked)}
+                      />
+                    }
+                    label={model.label}
+                  />
+                ))}
+              </FormGroup>
+            ) : (
+              <Typography color="warning.main">
+                The provider catalog is unavailable ({catalog.status}). The saved
+                allowlist stays in force; {allowed.length} model(s) are allowed.
+              </Typography>
+            ))}
           <Stack direction="row" spacing={1}>
             <Button variant="contained" disabled={busy} onClick={() => void save()}>
               Save
@@ -362,6 +442,77 @@ const ProviderCard = ({
             </Button>
             {testStatus && <Chip label={testStatus} />}
           </Stack>
+          {error && <Typography color="error">{error}</Typography>}
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
+const ExecutionLimitsCard = ({ onSaved }: { onSaved: (message: string) => void }) => {
+  const [limits, setLimits] = useState<ExecutionLimits | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void apiRequest<{ limits: ExecutionLimits }>('/admin/execution-limits')
+      .then(({ data }) => setLimits(data.limits))
+      .catch((limitsError: unknown) =>
+        setError(
+          limitsError instanceof Error ? limitsError.message : 'Limit load failed.'
+        )
+      )
+  }, [])
+  const save = async () => {
+    if (!limits) return
+    setBusy(true)
+    setError(null)
+    try {
+      await adminPut('/admin/execution-limits', limits)
+      onSaved('Concurrency limits saved.')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Limit save failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card>
+      <CardContent>
+        <Stack spacing={2}>
+          <Typography variant="h6">Concurrency guards</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Caps protecting a shared provider key from saturation. They apply to new runs
+            immediately.
+          </Typography>
+          {limits && (
+            <>
+              <TextField
+                label="Concurrent runs per workspace"
+                type="number"
+                value={limits.workspaceConcurrentRuns}
+                onChange={(event) =>
+                  setLimits({
+                    ...limits,
+                    workspaceConcurrentRuns: Number(event.target.value)
+                  })
+                }
+              />
+              <TextField
+                label="Concurrent provider requests (deployment-wide)"
+                type="number"
+                value={limits.providerConcurrentRequests}
+                onChange={(event) =>
+                  setLimits({
+                    ...limits,
+                    providerConcurrentRequests: Number(event.target.value)
+                  })
+                }
+              />
+              <Button variant="contained" disabled={busy} onClick={() => void save()}>
+                Save limits
+              </Button>
+            </>
+          )}
           {error && <Typography color="error">{error}</Typography>}
         </Stack>
       </CardContent>

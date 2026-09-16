@@ -20,9 +20,9 @@ is included in a release.
 | 6 — Release confidence       | SPEC-0008                       | SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0007, and SPEC-0014 are accepted.                                             | CI, deterministic browser coverage, documentation, and the conference happy path form the release gate.                                        |
 | 7 — Specification governance | SPEC-0015                       | The SPEC-0008 CI pipeline is available for the linting gate.                                                                   | Specification validation runs locally and in CI.                                                                                               |
 
-Waves 1 to 3 are implemented. In wave 4, SPEC-0002 is implemented and SPEC-0012 is
-outstanding; waves 5 to 7 have not started. The Status column of the specification table
-below is authoritative and must match each specification's frontmatter `status`.
+Waves 1 to 4 are implemented; waves 5 to 7 have not started. The Status column of
+the specification table below is authoritative and must match each
+specification's frontmatter `status`.
 
 SPEC-0009 closes after SPEC-0010, SPEC-0011, and SPEC-0012 satisfy the epic's
 success criteria. SPEC-0001 closes after its child features (SPEC-0002 through
@@ -43,10 +43,10 @@ the frontmatter when SPEC-0015 implementation begins.
 | SPEC-0006 | Feature | Run and trace observability                          | SPEC-0001 | Implemented |
 | SPEC-0007 | Feature | WAIE workshop experience and preview                 | SPEC-0001 | Draft       |
 | SPEC-0008 | Feature | Reliability, CI and documentation                    | SPEC-0001 | Deferred    |
-| SPEC-0009 | Epic    | LLM provider management and model governance         | null      | Draft       |
+| SPEC-0009 | Epic    | LLM provider management and model governance         | null      | Implemented |
 | SPEC-0010 | Feature | Multi-provider LLM execution                         | SPEC-0009 | Implemented |
 | SPEC-0011 | Feature | Provider configuration admin UI                      | SPEC-0009 | Implemented |
-| SPEC-0012 | Feature | Model allowlist governance                           | SPEC-0009 | Draft       |
+| SPEC-0012 | Feature | Model allowlist governance                           | SPEC-0009 | Implemented |
 | SPEC-0013 | Feature | Facilitator authentication and administrative access | null      | Implemented |
 | SPEC-0014 | Feature | Workshop entity and join flow                        | SPEC-0001 | Implemented |
 | SPEC-0015 | Feature | Automated specification linting                      | SPEC-0008 | Draft       |

@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import type { ModelPolicyMode } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma.service.js';
 import { ProviderCredentialCipher } from './provider-credential-cipher.js';
 import { ProviderService } from './provider.service.js';
@@ -16,6 +17,7 @@ const storedProvider = (
     apiKeyEnc: string | null;
     apiKeyHint: string | null;
     enabled: boolean;
+    modelPolicy: { mode: ModelPolicyMode | null; allowedModels: string[] };
   }> = {},
 ) => ({
   id: 'provider-id',
@@ -28,6 +30,10 @@ const storedProvider = (
   enabled: true,
   createdAt: now,
   updatedAt: now,
+  modelPolicy: {
+    mode: 'ALLOW_ALL' as ModelPolicyMode | null,
+    allowedModels: [] as string[],
+  },
   ...overrides,
 });
 
@@ -44,6 +50,7 @@ describe('ProviderService', () => {
   const findMany = jest.fn();
   const create = jest.fn();
   const update = jest.fn();
+  const createManyPolicies = jest.fn();
   let service: ProviderService;
   let cipher: ProviderCredentialCipher;
 
@@ -58,6 +65,7 @@ describe('ProviderService', () => {
     findMany.mockReset();
     create.mockReset();
     update.mockReset();
+    createManyPolicies.mockReset();
     const module = await Test.createTestingModule({
       providers: [
         ProviderService,
@@ -72,6 +80,7 @@ describe('ProviderService', () => {
               create,
               update,
             },
+            modelPolicy: { createMany: createManyPolicies },
           },
         },
       ],
@@ -229,5 +238,83 @@ describe('ProviderService', () => {
       }),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('seeds a cloud provider closed and the local worker open', async () => {
+    process.env.MODEL_WORKER_URL = 'http://model-worker:8000';
+    process.env.OPENAI_API_KEY = 'seeded-openai-key';
+    findUnique.mockResolvedValue(null);
+    findMany.mockResolvedValue([]);
+    create.mockResolvedValue({ id: 'created-id' });
+
+    await service.ensureInitialized();
+
+    const modes = Object.fromEntries(
+      create.mock.calls.map(([call]) => [
+        call.data.key,
+        call.data.modelPolicy.create.mode,
+      ]),
+    );
+    expect(modes).toEqual({
+      local: 'ALLOW_ALL',
+      openai: 'DENY_ALL',
+      openrouter: 'DENY_ALL',
+    });
+  });
+
+  it('refuses to enable a cloud provider before a policy mode is chosen', async () => {
+    findUnique.mockResolvedValue(
+      storedProvider({
+        enabled: false,
+        modelPolicy: { mode: null, allowedModels: [] },
+      }),
+    );
+
+    await expect(
+      service.update('provider-id', { enabled: true }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'PROVIDER_POLICY_MODE_REQUIRED',
+      }),
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('enables a cloud provider when the same save chooses a mode', async () => {
+    const current = storedProvider({
+      enabled: false,
+      modelPolicy: { mode: null, allowedModels: [] },
+    });
+    findUnique.mockResolvedValue(current);
+    findUniqueOrThrow.mockResolvedValue(current);
+    update.mockResolvedValue(current);
+
+    await service.update('provider-id', {
+      enabled: true,
+      policy: { mode: 'ALLOWLIST', allowedModels: ['gpt-5', 'gpt-5'] },
+    });
+
+    expect(update.mock.calls[0][0].data.modelPolicy).toEqual({
+      upsert: {
+        create: { mode: 'ALLOWLIST', allowedModels: ['gpt-5'] },
+        update: { mode: 'ALLOWLIST', allowedModels: ['gpt-5'] },
+      },
+    });
+  });
+
+  it('keeps an allowlist only while the mode is ALLOWLIST', async () => {
+    const current = storedProvider();
+    findUnique.mockResolvedValue(current);
+    findUniqueOrThrow.mockResolvedValue(current);
+    update.mockResolvedValue(current);
+
+    await service.update('provider-id', {
+      policy: { mode: 'ALLOW_ALL', allowedModels: ['stale-entry'] },
+    });
+
+    expect(update.mock.calls[0][0].data.modelPolicy.upsert.update).toEqual({
+      mode: 'ALLOW_ALL',
+      allowedModels: [],
+    });
   });
 });

@@ -96,6 +96,15 @@ runtime resolves a `ModelRef` (`providerKey` + model id) to a provider and its d
 key (ADR-0005). Trace outputs pass through `core/trace-sanitizer.ts` before leaving the
 process. A socket disconnect aborts that client's runs.
 
+Two server-side gates sit on that path. Each provider carries a model policy, and
+`ProviderRuntimeService` applies it twice: the catalog `GET /api/models` returns only
+permitted models, and `complete()` refuses a `ModelRef` the policy excludes before any
+request leaves the process, so client-side filtering is never the enforcement. Concurrency
+is bounded on both sides of the socket: `GraphHandlerService` caps the runs one workspace
+may have in flight, and `ProviderRuntimeService` holds a deployment-wide permit gate in
+front of provider requests. Both limits live in the `ExecutionLimits` singleton row and are
+re-read per request, so a facilitator change applies without a restart.
+
 ## Participant entry flow
 
 ```mermaid
@@ -136,7 +145,8 @@ limit, the global `api` prefix (excluding `GET /health` and `POST /lti/basiclogi
 whitelisting `ValidationPipe`, and CORS with credentials.
 
 `OnApplicationBootstrap` work, all idempotent: `ProviderService` loads provider runtime
-config, `TemplateSeedService` seeds bundled templates, `ContentMigrationService` backfills
+config and gives any policy-less provider the unchosen state, `ExecutionLimitsService`
+materializes the limits row, `TemplateSeedService` seeds bundled templates, `ContentMigrationService` backfills
 stored content to the current `contentSchema`, `RetentionService` starts its six-hour
 sweep. Prisma connects on module init; `XapiService` opens its client on module init.
 

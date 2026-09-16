@@ -2,6 +2,10 @@ import { LGraph } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { XapiService } from '../xapi.service.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
+import {
+  DEFAULT_EXECUTION_LIMITS,
+  ExecutionLimitsService,
+} from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 import { GraphHandlerService } from './graph-handler.service.js';
 
@@ -20,7 +24,7 @@ const payload = (requestId: string) => ({
   graph: JSON.stringify(new LGraph().serialize()),
 });
 
-const service = () =>
+const service = (workspaceConcurrentRuns = DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns) =>
   new GraphHandlerService(
     {
       getExecutionContent: jest
@@ -29,6 +33,12 @@ const service = () =>
     } as unknown as WorkflowService,
     {} as XapiService,
     {} as ProviderRuntimeService,
+    {
+      get: jest.fn().mockResolvedValue({
+        ...DEFAULT_EXECUTION_LIMITS,
+        workspaceConcurrentRuns,
+      }),
+    } as unknown as ExecutionLimitsService,
   );
 
 describe('GraphHandlerService run ownership', () => {
@@ -56,6 +66,67 @@ describe('GraphHandlerService run ownership', () => {
       unknown
     >;
     expect(activeRuns.size).toBe(0);
+  });
+
+  it('rejects a run once the workspace is at its concurrency limit', async () => {
+    const handler = service(1);
+    const socket = client('client-1', 'workspace-1');
+    const activeRuns = Reflect.get(handler, 'activeRuns') as Map<
+      string,
+      object
+    >;
+    activeRuns.set('run-1', {
+      runId: 'run-1',
+      requestId: 'request-0',
+      clientId: 'client-1',
+      workspaceId: 'workspace-1',
+      workflowId: 'workflow-1',
+      controller: new AbortController(),
+    });
+
+    await handler.handleRunGraph(socket, payload('request-1'));
+
+    const emitted = jest.mocked(socket.emit).mock.calls;
+    expect(
+      emitted
+        .filter(([eventName]) => eventName === 'runStateChanged')
+        .map(([, eventPayload]) => eventPayload),
+    ).toEqual([
+      expect.objectContaining({
+        requestId: 'request-1',
+        state: 'failed',
+        error: expect.objectContaining({ code: 'rate_limited' }),
+      }),
+    ]);
+    expect(
+      emitted
+        .filter(([eventName]) => eventName === 'graphOperationFailed')
+        .map(([, eventPayload]) => eventPayload),
+    ).toEqual([
+      expect.objectContaining({
+        operation: 'run',
+        code: 'rate-limited',
+        retryable: true,
+      }),
+    ]);
+    // The refused attempt must not occupy a slot of its own.
+    expect(activeRuns.size).toBe(1);
+  });
+
+  it('runs concurrently up to the workspace limit', async () => {
+    const handler = service(2);
+    const socket = client('client-1', 'workspace-1');
+
+    await Promise.all([
+      handler.handleRunGraph(socket, payload('request-1')),
+      handler.handleRunGraph(socket, payload('request-2')),
+    ]);
+
+    const states = jest
+      .mocked(socket.emit)
+      .mock.calls.filter(([eventName]) => eventName === 'runStateChanged')
+      .map(([, eventPayload]) => eventPayload.state);
+    expect(states).not.toContain('failed');
   });
 
   it('validates socket, workspace, and workflow before cancellation', () => {

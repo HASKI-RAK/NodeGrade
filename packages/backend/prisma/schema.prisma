@@ -281,10 +281,22 @@ model ModelPolicy {
   providerId String   @unique
   provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
-  mode          ModelPolicyMode @default(DENY_ALL)
-  allowedModels String[]        @default([])
+  /// Null means the facilitator has not chosen a mode yet. A cloud provider cannot be
+  /// enabled while it is null, so no enabled provider ever falls back to an implicit
+  /// allow (SPEC-0012/FR-002).
+  mode          ModelPolicyMode?
+  allowedModels String[]         @default([])
 
   updatedAt DateTime @updatedAt
+}
+
+/// Deployment-global concurrency guards protecting a shared provider key
+/// (SPEC-0012/FR-010..FR-012). Exactly one row, keyed by SINGLETON_ID.
+model ExecutionLimits {
+  id                         String   @id
+  workspaceConcurrentRuns    Int
+  providerConcurrentRequests Int
+  updatedAt                  DateTime @updatedAt
 }
 
 // LTI Platform Registration

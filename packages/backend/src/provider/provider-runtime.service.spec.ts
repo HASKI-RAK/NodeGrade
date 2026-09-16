@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import {
+  DEFAULT_EXECUTION_LIMITS,
+  ExecutionLimitsService,
+} from './execution-limits.service.js';
 import { ProviderRuntimeService } from './provider-runtime.service.js';
 import {
   ProviderService,
@@ -16,6 +20,7 @@ const provider = (
   displayName: key,
   baseUrl: `https://${key}.example/v1`,
   enabled: true,
+  policy: { mode: 'ALLOW_ALL', allowedModels: [] },
   ...overrides,
 });
 
@@ -24,12 +29,15 @@ describe('ProviderRuntimeService', () => {
   const enabledRuntimeProviders = jest.fn();
   const runtimeById = jest.fn();
   const runtimeByKey = jest.fn();
+  const readLimits = jest.fn();
   let service: ProviderRuntimeService;
 
   beforeEach(async () => {
     enabledRuntimeProviders.mockReset();
     runtimeById.mockReset();
     runtimeByKey.mockReset();
+    readLimits.mockReset();
+    readLimits.mockResolvedValue(DEFAULT_EXECUTION_LIMITS);
     const module = await Test.createTestingModule({
       providers: [
         ProviderRuntimeService,
@@ -40,6 +48,10 @@ describe('ProviderRuntimeService', () => {
             runtimeById,
             runtimeByKey,
           },
+        },
+        {
+          provide: ExecutionLimitsService,
+          useValue: { get: readLimits },
         },
       ],
     }).compile();
@@ -95,6 +107,76 @@ describe('ProviderRuntimeService', () => {
         ref: { providerKey: 'also-working', modelId: 'shared-model' },
       }),
     ]);
+  });
+
+  it('offers only the models each provider policy permits', async () => {
+    enabledRuntimeProviders.mockResolvedValue([
+      provider('curated', {
+        policy: { mode: 'ALLOWLIST', allowedModels: ['kept', 'vanished'] },
+      }),
+      provider('closed', { policy: { mode: 'DENY_ALL', allowedModels: [] } }),
+      provider('open'),
+      provider('unchosen', { policy: { mode: null, allowedModels: [] } }),
+    ]);
+    global.fetch = jest.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: [{ id: 'kept' }, { id: 'other' }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    );
+
+    const catalog = await service.catalog();
+
+    expect(catalog.models.map((model) => model.ref)).toEqual([
+      { providerKey: 'curated', modelId: 'kept' },
+      { providerKey: 'open', modelId: 'kept' },
+      { providerKey: 'open', modelId: 'other' },
+    ]);
+    // Every provider keeps reporting its reachability, policy notwithstanding.
+    expect(catalog.providers).toHaveLength(4);
+  });
+
+  it('shows the facilitator the unfiltered catalog with allowed models marked', async () => {
+    runtimeById.mockResolvedValue(
+      provider('curated', {
+        policy: { mode: 'ALLOWLIST', allowedModels: ['kept'] },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: 'kept' }, { id: 'other' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(service.providerCatalog('curated-id')).resolves.toEqual({
+      status: 'AVAILABLE',
+      models: [
+        { modelId: 'kept', label: 'kept', allowed: true },
+        { modelId: 'other', label: 'other', allowed: false },
+      ],
+    });
+  });
+
+  it('rejects a policy-excluded model without contacting the provider', async () => {
+    runtimeByKey.mockResolvedValue(
+      provider('curated', {
+        policy: { mode: 'ALLOWLIST', allowedModels: ['kept'] },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.complete({
+        modelRef: { providerKey: 'curated', modelId: 'excluded' },
+        messages: [],
+        parameters: {},
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'MODEL_UNAVAILABLE' }),
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('caches discovery until invalidated', async () => {
@@ -193,6 +275,71 @@ describe('ProviderRuntimeService', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'MODEL_UNAVAILABLE' }),
     });
+  });
+
+  it('holds provider requests to the deployment-wide limit', async () => {
+    readLimits.mockResolvedValue({
+      ...DEFAULT_EXECUTION_LIMITS,
+      providerConcurrentRequests: 1,
+    });
+    const local = provider('local', {
+      type: 'MODEL_WORKER',
+      baseUrl: 'http://model-worker:8000',
+    });
+    runtimeByKey.mockResolvedValue(local);
+    enabledRuntimeProviders.mockResolvedValue([local]);
+    let inFlight = 0;
+    let peak = 0;
+    let releaseFirst: (() => void) | undefined;
+    const firstInFlight = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let started = 0;
+    global.fetch = jest.fn(async (input) => {
+      const url = input.toString();
+      if (url.endsWith('/models'))
+        return new Response(JSON.stringify({ data: [{ id: 'local-model' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      started += 1;
+      if (started === 1) await firstInFlight;
+      inFlight -= 1;
+      return new Response(
+        JSON.stringify({
+          id: 'completion-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'local-model',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'answer' },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    const request = {
+      modelRef: { providerKey: 'local', modelId: 'local-model' },
+      messages: [{ role: 'user', content: 'Question' }],
+      parameters: {},
+    };
+    const runs = Promise.all([
+      service.complete(request),
+      service.complete(request),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(started).toBe(1);
+
+    releaseFirst!();
+    await runs;
+    expect(peak).toBe(1);
   });
 
   it('executes through the AI SDK and reports ignored parameters', async () => {

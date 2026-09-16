@@ -88,6 +88,9 @@ a stale `dist` produces failures that look like code bugs.
   `ContentMigrationService` and stamped with `contentSchema` (ADR-0005).
 - Provider API keys live encrypted in `Provider.apiKeyEnc` and are never returned by an
   API. Nodes receive credentials only through the injected `ModelCompletionRuntime`.
+- Which models a participant may pick and run is decided server-side by the provider's
+  `ModelPolicy`, enforced in `ProviderRuntimeService` on both the catalog and execution.
+  Filtering in the editor is presentation, never enforcement (ADR-0008).
 - Node types exist once, in `packages/lib`. Frontend and backend both import them from
   `@haski/ta-lib`; neither defines its own.
 - Backend is ESM: relative imports carry a `.js` extension even in TypeScript.

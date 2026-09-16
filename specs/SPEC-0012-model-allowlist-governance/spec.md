@@ -2,11 +2,11 @@
 id: SPEC-0012
 type: feature
 title: Model allowlist governance
-status: draft
+status: implemented
 parent: SPEC-0009
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-17
 depends_on:
   - SPEC-0011
   - SPEC-0010
@@ -337,3 +337,4 @@ Then excess runs are rejected with a rate-limit error instead of saturating the 
 | 2026-09-15 | Unsafe default-allow replaced with explicit policy modes DENY_ALL | ALLOWLIST | ALLOW_ALL (FR-001), mode selection required on first cloud-provider enablement (FR-002, AC-005), per-mode enforcement (FR-005..FR-007, AC-003/004). Dependency cycle fixed: depends on SPEC-0011 only. |
 | 2026-09-15 | Added minimal concurrency guards protecting the shared key: per-workspace concurrent LLM execution limit (FR-010, AC-009/011) and deployment-wide concurrent provider request limit (FR-011, AC-010), facilitator-configurable (FR-012). Billing/token accounting remain out of scope. |
 | 2026-09-15 | Review revision: SPEC-0010 added to depends_on and Dependencies — policy enforcement needs the live catalog and execution routing from 0010; dependency chain is now 0013 → 0011 → 0010 → 0012 |
+| 2026-09-17 | Implemented. `ModelPolicy.mode` became nullable so "not yet chosen" is distinct from DENY_ALL; enforcement lives in `ProviderRuntimeService` (catalog filter and pre-flight check in `complete()`); concurrency guards added as the `ExecutionLimits` singleton with a per-workspace run cap in `GraphHandlerService` and a deployment-wide permit gate around provider requests. Open question on friendly display names left open — the catalog label is used as-is. |

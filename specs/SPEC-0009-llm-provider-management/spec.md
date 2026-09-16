@@ -2,11 +2,11 @@
 id: SPEC-0009
 type: epic
 title: LLM provider management and model governance
-status: draft
+status: implemented
 parent: null
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-17
 depends_on:
   - SPEC-0013
 related:
@@ -60,9 +60,9 @@ client.
 
 | ID | Feature | Status |
 |---|---|---|
-| SPEC-0010 | Multi-provider LLM execution | Draft |
-| SPEC-0011 | Provider configuration admin UI | Draft |
-| SPEC-0012 | Model allowlist governance | Draft |
+| SPEC-0010 | Multi-provider LLM execution | Implemented |
+| SPEC-0011 | Provider configuration admin UI | Implemented |
+| SPEC-0012 | Model allowlist governance | Implemented |
 
 ## Cross-feature business rules
 
@@ -113,3 +113,4 @@ client.
 | 2026-09-15 | Initial specification created; classified as epic (provider execution, admin configuration UI, and allowlist governance are independently deliverable) |
 | 2026-09-15 | Dependency re-pointed to SPEC-0013 (facilitator auth foundation). Default-allow rule replaced with explicit policy modes. Vercel AI SDK recorded as the provider integration constraint. Priorities set (P1). |
 | 2026-09-15 | Concurrency guards protecting the shared key added to scope via SPEC-0012 (FR-010..FR-012); billing/token accounting remain out of scope. |
+| 2026-09-17 | Closed: SPEC-0012 completes the last child feature, so every epic success criterion is met. |
