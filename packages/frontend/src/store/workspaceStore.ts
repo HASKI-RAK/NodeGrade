@@ -1,11 +1,12 @@
 import type { WorkspaceSession } from '@/api/http'
+import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
 type StoredSession = WorkspaceSession & { token: string }
 
 const BROWSER_KEY = 'nodegrade.browser-workspace'
 const ACTIVE_KEY = 'nodegrade.active-workspace'
 const workshopKey = (code: string) =>
-  `nodegrade.workshop-workspace.${code.toUpperCase().replace(/[^0-9A-Z]/g, '')}`
+  `nodegrade.workshop-workspace.${normalizeWorkshopCode(code)}`
 
 const read = (key: string): StoredSession | null => {
   try {
@@ -17,7 +18,12 @@ const read = (key: string): StoredSession | null => {
 }
 
 const write = (key: string, session: StoredSession): void => {
-  localStorage.setItem(key, JSON.stringify(session))
+  try {
+    localStorage.setItem(key, JSON.stringify(session))
+  } catch {
+    // A profile with storage disabled or full still gets a usable session for this page
+    // view; it just will not survive the reload (SPEC-0004/NFR-001 caveat).
+  }
 }
 
 export const workspaceStore = {
@@ -36,6 +42,18 @@ export const workspaceStore = {
     write(ACTIVE_KEY, session)
   },
   clearActive() {
-    localStorage.removeItem(ACTIVE_KEY)
+    try {
+      localStorage.removeItem(ACTIVE_KEY)
+    } catch {
+      // Same reasoning as write().
+    }
+  },
+  clearBrowser() {
+    try {
+      localStorage.removeItem(BROWSER_KEY)
+      localStorage.removeItem(ACTIVE_KEY)
+    } catch {
+      // Same reasoning as write().
+    }
   }
 }

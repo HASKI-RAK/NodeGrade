@@ -1,47 +1,51 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-import { api, type WorkspaceSession } from '@/api/http'
-import { workspaceStore } from '@/store/workspaceStore'
+import {
+  type ActiveSession,
+  ensureWorkspaceSession,
+  resetWorkspaceSession
+} from '@/store/workspaceSession'
 
 type State = {
-  session: (WorkspaceSession & { token: string }) | null
+  session: ActiveSession | null
   loading: boolean
   error: string | null
 }
 
-export function useWorkspaceSession(): State {
-  const [state, setState] = useState<State>({ session: null, loading: true, error: null })
+export type WorkspaceSessionState = State & { retry: () => void }
+
+export function useWorkspaceSession(): WorkspaceSessionState {
+  const [attempt, setAttempt] = useState(0)
+  const [state, setState] = useState<State>({
+    session: null,
+    loading: true,
+    error: null
+  })
 
   useEffect(() => {
     let active = true
-    const establish = async () => {
-      try {
-        const stored = workspaceStore.active() ?? workspaceStore.browser()
-        if (stored) {
-          await api.workspace(stored.token)
-          if (active) setState({ session: stored, loading: false, error: null })
-          return
-        }
-        const created = await api.createWorkspace()
-        const session = { ...created, token: created.token as string }
-        workspaceStore.saveBrowser(session)
+    if (attempt > 0) setState({ session: null, loading: true, error: null })
+    ensureWorkspaceSession()
+      .then((session) => {
         if (active) setState({ session, loading: false, error: null })
-      } catch (error) {
-        if (active) {
-          setState({
-            session: null,
-            loading: false,
-            error:
-              error instanceof Error ? error.message : 'Could not establish workspace.'
-          })
-        }
-      }
-    }
-    void establish()
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setState({
+          session: null,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Could not establish workspace.'
+        })
+      })
     return () => {
       active = false
     }
+  }, [attempt])
+
+  const retry = useCallback(() => {
+    resetWorkspaceSession()
+    setAttempt((value) => value + 1)
   }, [])
 
-  return state
+  return { ...state, retry }
 }

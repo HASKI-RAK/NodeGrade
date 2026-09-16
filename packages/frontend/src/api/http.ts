@@ -99,16 +99,17 @@ export type TemplateRevision = {
 
 export const api = {
   models: async () => (await apiRequest<ModelCatalog>('/models')).data,
-  createWorkspace: async () =>
-    (
-      await apiRequest<{ workspace: WorkspaceSession }>('/workspaces', {
-        method: 'POST',
-        body: {}
-      })
-    ).data.workspace,
+  createWorkspace: async () => {
+    const { data } = await apiRequest<{ workspace: WorkspaceSession; token: string }>(
+      '/workspaces',
+      { method: 'POST', body: {} }
+    )
+    // The token is a sibling of the workspace, not a field on it, and is never returned
+    // again. Folding it in here is the only chance to keep it.
+    return { ...data.workspace, token: data.token }
+  },
   workspace: async (token: string) =>
-    (await apiRequest<{ workspace: WorkspaceSession }>('/workspaces/me', { token })).data
-      .workspace,
+    (await apiRequest<WorkspaceSession>('/workspaces/me', { token })).data,
   workflows: async (token?: string | null) =>
     (await apiRequest<{ workflows: Workflow[] }>('/workflows', { token })).data.workflows,
   workflow: async (id: string, token?: string | null) => {

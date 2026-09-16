@@ -2,11 +2,11 @@
 id: SPEC-0002
 type: feature
 title: Landing page and workshop entry
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0004
   - SPEC-0014
@@ -251,4 +251,5 @@ Then the workshop is not accessible and a "workshop unavailable" state is shown
 |---|---|
 | 2026-09-15 | Initial specification created |
 | 2026-09-15 | Added facilitator (admin) ownership of workshop codes: creation restricted to facilitator, revocation support (FR-007..FR-009, AC-006..AC-007) |
+| 2026-09-16 | Implemented: start page code entry now resolves through the `/workshop/:code` join route so FR-001a and FR-002 share one flow; `/editor` and `/student` without a workflow redirect to the start page (FR-005); workspace bootstrap failures are retryable (edge case); `POST /api/workspaces` token and `GET /api/workspaces/me` response shapes corrected in the HTTP client, which had been dropping the workspace token |
 | 2026-09-15 | Review revision: workshop code lifecycle FRs (FR-007..FR-009) removed — normatively defined by SPEC-0014 (avoids drift); AC-006 replaced with Start-workshop code-entry behavior (FR-001a), AC-007 now traces to SPEC-0014/FR-008; SPEC-0014 added to frontmatter depends_on |
