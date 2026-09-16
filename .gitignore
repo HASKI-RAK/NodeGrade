@@ -31,3 +31,4 @@ reports/
 playwright-report/
 test-results/
 .rtk/
+.rotaris/

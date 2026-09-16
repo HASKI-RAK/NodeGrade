@@ -18,7 +18,7 @@
     "debug:reset": "node tools/debug/stack.mjs reset",
     "setup": "yarn workspace backend setup",
     "lint": "yarn workspaces foreach --parallel --all run lint",
-    "test": "yarn workspace backend test && yarn workspace @haski/ta-frontend test:run",
+    "test": "yarn test:backend && yarn test:frontend",
     "build": "yarn workspaces foreach --topological --all run build",
     "test:report": "yarn workspace backend test:report",
     "test:e2e": "playwright test",
@@ -26,7 +26,6 @@
     "test:e2e:debug": "playwright test --debug --project=chromium",
     "test:backend": "yarn workspace backend test",
     "test:frontend": "yarn workspace @haski/ta-frontend test:run",
-    "test": "yarn test:backend && yarn test:frontend",
     "test:int": "yarn workspace backend test:int",
     "lint:check": "yarn workspace backend lint:check && yarn workspace @haski/ta-frontend lint:check",
     "typecheck": "yarn workspace backend typecheck && yarn workspace @haski/ta-frontend type-check"
