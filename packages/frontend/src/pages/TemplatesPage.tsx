@@ -9,7 +9,7 @@ import {
   Typography
 } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { api } from '@/api/http'
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
@@ -20,6 +20,8 @@ export const TemplatesPage = () => {
   const { session } = useWorkspaceSession()
   const [templates, setTemplates] = useState<Template[] | null>(null)
   const navigate = useNavigate()
+  const [search] = useSearchParams()
+  const returnTo = search.get('returnTo')
   useEffect(() => {
     void api.templates().then(setTemplates)
   }, [])
@@ -31,7 +33,7 @@ export const TemplatesPage = () => {
     )
   return (
     <Box p={4}>
-      <Button component={Link} to="/">
+      <Button component={Link} to={returnTo?.startsWith('/') ? returnTo : '/'}>
         Back
       </Button>
       <Typography variant="h4" mb={2}>

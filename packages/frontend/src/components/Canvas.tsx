@@ -1,13 +1,15 @@
 import { LGraph } from '@haski/ta-lib'
-import { LGraphCanvas } from 'litegraph.js'
+import { LGraphCanvas, type LGraphNode } from 'litegraph.js'
 import { useEffect, useRef } from 'react'
 
 import { installDebugBridge } from '@/utils/debugBridge'
 
 type CanvasProps = {
-  width: number
-  height: number
   lgraph: LGraph
+  readOnly?: boolean
+  developerTools?: boolean
+  onReady?: (canvas: LGraphCanvas) => void
+  onSelectionChange?: (nodes: LGraphNode[]) => void
 }
 
 const Canvas = (props: CanvasProps) => {
@@ -21,14 +23,19 @@ const Canvas = (props: CanvasProps) => {
       if (!lcanvas.current) {
         // Initialize canvas if it doesn't exist
         lcanvas.current = new LGraphCanvas(canvasRef.current, props.lgraph)
-        lcanvas.current.allow_interaction = true
+        lcanvas.current.allow_interaction = !props.readOnly
+        lcanvas.current.allow_dragnodes = !props.readOnly
+        lcanvas.current.allow_reconnect_links = !props.readOnly
         installDebugBridge(props.lgraph, lcanvas.current)
       } else {
         // Update the graph reference if canvas already exists
         lcanvas.current.setGraph(props.lgraph)
       }
 
-      // Force a redraw
+      lcanvas.current.allow_searchbox = !!props.developerTools
+      lcanvas.current.onSelectionChange = (nodes) =>
+        props.onSelectionChange?.(Object.values(nodes))
+      props.onReady?.(lcanvas.current)
       props.lgraph.setDirtyCanvas(true, true)
     }
 
@@ -38,17 +45,51 @@ const Canvas = (props: CanvasProps) => {
         props.lgraph.stop()
       }
     }
-  }, [props.lgraph, canvasRef.current])
+  }, [
+    props.developerTools,
+    props.lgraph,
+    props.onReady,
+    props.onSelectionChange,
+    props.readOnly
+  ])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry || !lcanvas.current) return
+      const { width, height } = entry.contentRect
+      lcanvas.current.resize(width, height)
+      props.lgraph.setDirtyCanvas(true, true)
+    })
+    observer.observe(canvas.parentElement ?? canvas)
+    return () => observer.disconnect()
+  }, [props.lgraph])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || props.developerTools) return
+    const stopContextMenu = (event: MouseEvent) => event.preventDefault()
+    canvas.addEventListener('contextmenu', stopContextMenu, { capture: true })
+    return () =>
+      canvas.removeEventListener('contextmenu', stopContextMenu, { capture: true })
+  }, [props.developerTools])
 
   return (
-    <canvas
-      ref={canvasRef}
-      tabIndex={0}
-      width={props.width}
-      height={props.height}
-      id="mycanvas"
-      style={{ border: '1px solid' }}
-    />
+    <div style={{ width: '100%', height: '100%', minHeight: 360, overflow: 'hidden' }}>
+      <canvas
+        ref={canvasRef}
+        tabIndex={0}
+        id="mycanvas"
+        aria-label="Workflow canvas"
+        style={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          border: '1px solid #d8dce6'
+        }}
+      />
+    </div>
   )
 }
 

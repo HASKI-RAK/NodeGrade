@@ -10,7 +10,7 @@ export class DocumentLoader extends LGraphNode {
   constructor() {
     super()
     this.addOut('string')
-    this.properties = { value: '' } // uploaded text
+    this.properties = { value: '', documentName: '' } // uploaded text
     this.addWidget('button', 'Upload file', '', () => {
       const input = document.createElement('input')
       input.type = 'file'
@@ -29,6 +29,7 @@ export class DocumentLoader extends LGraphNode {
     })
     this.addWidget('button', 'Clear', '', () => {
       this.properties.value = ''
+      this.properties.documentName = ''
     })
 
     this.serialize_widgets = true

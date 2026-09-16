@@ -2,11 +2,11 @@
 id: SPEC-0005
 type: feature
 title: Editor shell and node UX
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -371,8 +371,9 @@ And the newer stored state is not silently overwritten
 
 ## Change history
 
-| Date | Change |
-|---|---|
-| 2026-09-15 | Initial specification created |
-| 2026-09-15 | Added node property metadata model (FR-011, AC-007), editor-wide undo/redo (FR-012, AC-008), autosave with save-state display and failure recovery (FR-013..FR-015, AC-009..AC-011) — closes the persistence gap with SPEC-0008's reload-persistence smoke test |
+| Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-16 | Implemented editor shell, palette and blocks, property inspector, graph history, autosave recovery, responsive canvas sizing, Preview-based Run, student read-only mode, and LTI instructor publishing in overflow.                                                                                                                                                                                                                      |
+| 2026-09-15 | Initial specification created                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 2026-09-15 | Added node property metadata model (FR-011, AC-007), editor-wide undo/redo (FR-012, AC-008), autosave with save-state display and failure recovery (FR-013..FR-015, AC-009..AC-011) — closes the persistence gap with SPEC-0008's reload-persistence smoke test                                                                                                                                                                          |
 | 2026-09-15 | Review revision 2: explicit Save removed from the toolbar — save status (Saving…/Saved/Save failed) occupies that position, Save as… remains in overflow (FR-001/FR-002, AC-001); Publish removed (its old editor → student URL semantics are undefined in the new domain; no current spec requires publishing a normal workflow); save conflict from optimistic concurrency surfaced via status and resolution action (FR-013a, AC-012) |

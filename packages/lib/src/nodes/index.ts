@@ -69,3 +69,11 @@ export {
 }
 
 export { LGraphNode } from './litegraph-extensions/LGraphNode'
+export * from './NodeDefinition'
+export {
+  compactNodeWidgets,
+  getDefinedNodeConstructors,
+  getNodeDefinition,
+  getNodeDefinitions,
+  loadLegacyWidgetProperties
+} from './NodeDefinitionRegistry'

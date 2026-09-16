@@ -2,7 +2,7 @@ import { ServerEventPayload } from '@haski/ta-lib'
 import { Alert, Button, FormControl, Stack, TextField, Typography } from '@mui/material'
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
 import { styled } from '@mui/material/styles'
-import { memo, useState } from 'react'
+import { forwardRef, memo, useImperativeHandle, useRef, useState } from 'react'
 
 interface MyThemeComponentProps {
   color?: 'primary' | 'secondary'
@@ -25,184 +25,216 @@ const BorderLinearProgress = styled(LinearProgress)<
   }
 }))
 
-const TaskView = ({
-  onSubmit,
-  outputs,
-  question,
-  questionImage,
-  maxInputChars = 1200,
-  disabled = false
-}: {
-  onSubmit: (answer: string) => void
-  outputs?: Record<string, ServerEventPayload['outputSet']>
-  question: string
-  questionImage?: string
-  maxInputChars?: number
-  disabled?: boolean
-}) => {
-  const [error, setError] = useState<string | null>(null)
-  const [answer, setAnswer] = useState<string>('')
-  const handleSetAnswer = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextAnswer = event.target.value
-    setAnswer(nextAnswer)
-    if (error) validateAnswer(nextAnswer)
-  }
+export type TaskViewHandle = {
+  submit: () => boolean
+  focusAnswer: () => void
+}
 
-  const validateAnswer = (value: string): boolean => {
-    if (value.trim().length < 10) {
-      setError('Answer must be at least 10 characters long')
-      return false
-    } else if (value.length > maxInputChars) {
-      // TODO: find optimal length based on literature
-      // to ensure the user doesnt paste a lot of text containing the answer
-      setError('Answer must be at most ' + maxInputChars + ' characters long')
-      return false
-    } else {
-      setError(null)
+const TaskView = forwardRef<
+  TaskViewHandle,
+  {
+    onSubmit: (answer: string) => void
+    outputs?: Record<string, ServerEventPayload['outputSet']>
+    question: string
+    questionImage?: string
+    maxInputChars?: number
+    disabled?: boolean
+  }
+>(
+  (
+    {
+      onSubmit,
+      outputs,
+      question,
+      questionImage,
+      maxInputChars = 1200,
+      disabled = false
+    },
+    ref
+  ) => {
+    const [error, setError] = useState<string | null>(null)
+    const [answer, setAnswer] = useState<string>('')
+    const answerRef = useRef<HTMLInputElement | null>(null)
+    const handleSetAnswer = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const nextAnswer = event.target.value
+      setAnswer(nextAnswer)
+      if (error) validateAnswer(nextAnswer)
+    }
+
+    const validateAnswer = (value: string): boolean => {
+      if (value.trim().length < 10) {
+        setError('Answer must be at least 10 characters long')
+        return false
+      } else if (value.length > maxInputChars) {
+        // TODO: find optimal length based on literature
+        // to ensure the user doesnt paste a lot of text containing the answer
+        setError('Answer must be at most ' + maxInputChars + ' characters long')
+        return false
+      } else {
+        setError(null)
+        return true
+      }
+    }
+
+    const keyDownHandler = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault()
+        handleSubmit()
+      }
+    }
+
+    const submit = (): boolean => {
+      if (disabled || !validateAnswer(answer)) return false
+      onSubmit(answer)
       return true
     }
-  }
 
-  const keyDownHandler = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault()
-      handleSubmit()
+    const handleSubmit = (event?: React.FormEvent<HTMLFormElement>): void => {
+      event?.preventDefault()
+      submit()
     }
-  }
 
-  const handleSubmit = (event?: React.FormEvent<HTMLFormElement>): void => {
-    event?.preventDefault()
-    if (disabled || !validateAnswer(answer)) return
-    onSubmit(answer)
-  }
+    useImperativeHandle(ref, () => ({
+      submit,
+      focusAnswer: () => answerRef.current?.focus()
+    }))
 
-  return (
-    <Stack spacing={2} padding={2}>
-      <span id="rewardId" />
-      <Typography variant="h4">Aufgabe:</Typography>
-      {questionImage && (
-        <img
-          src={questionImage}
-          alt="Question"
+    return (
+      <Stack spacing={2} padding={2}>
+        <span id="rewardId" />
+        <Typography variant="h4">Aufgabe:</Typography>
+        {questionImage && (
+          <img
+            src={questionImage}
+            alt="Question"
+            style={{
+              maxWidth: '100%',
+              height: 'auto'
+            }}
+          />
+        )}
+        <Typography
           style={{
-            maxWidth: '100%',
-            height: 'auto'
+            maxWidth: '60rem' // Set a maximum width
           }}
-        />
-      )}
-      <Typography
-        style={{
-          maxWidth: '60rem' // Set a maximum width
-        }}
-        variant="body1"
-      >
-        {question}
-      </Typography>
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        autoComplete="off"
-        style={{ width: '100%' }}
-      >
-        <FormControl fullWidth error={!!error}>
-          <Stack spacing={2}>
-            <TextField
-              id="outlined-multiline-static"
-              label="Antwort"
-              multiline
-              error={!!error}
-              helperText={error}
-              rows={6}
-              placeholder="Gib hier deine Antwort ein..."
-              onChange={handleSetAnswer}
-              onKeyDown={keyDownHandler}
-              disabled={disabled}
-            />
-            <Stack direction="row" spacing={2}>
-              <Button variant="contained" type="submit" disabled={disabled}>
-                {disabled ? 'Wird ausgewertet...' : 'Absenden'}
-              </Button>
-              <Typography variant="caption">
-                Hinweis: Die Auswertung kann bis zu zwei Minuten dauern. Bitte die Seite
-                nicht neu laden.
-              </Typography>
-            </Stack>
-            {/* Map over all outputs and display them */}
-            {outputs &&
-              Object.values(outputs).map((out) => {
-                console.log('output: ', out)
-                switch (out.type) {
-                  case 'text':
-                    return (
-                      <>
-                        <Typography variant="h6">{out.label}</Typography>
-                        <Typography
-                          style={{
-                            maxWidth: '50rem' // Set a maximum width
-                          }}
-                          variant="body1"
-                        >
-                          {out.value}
-                        </Typography>
-                        <Typography variant="body2">
-                          Please note that answered generated by the system may be
-                          incorrect or contain misleading information.
-                        </Typography>
-                      </>
-                    )
-                  case 'score':
-                    // assert that output.value is a number
-                    if (typeof out.value !== 'number') {
-                      console.error(
-                        'output.value is not a number, but of type: ',
-                        typeof out.value
-                      )
-                      return null
-                    }
-                    return (
-                      <>
-                        {out.value >= 60 && <Alert severity="success">Bestanden!</Alert>}
-                        <Typography variant="h6">
-                          {out.label}: {out.value}
-                        </Typography>
-                        {out.value >= 0 && out.value <= 100 && (
-                          <BorderLinearProgress variant="determinate" value={out.value} />
-                        )}
-                      </>
-                    )
-                  case 'classifications':
-                    // assert that output.value is an array of strings
-                    if (!Array.isArray(out.value)) {
-                      console.error(
-                        'output.value is not an array, but of type: ',
-                        typeof out.value
-                      )
-                      return null
-                    }
-                    // display chips with classifications
-                    return (
-                      <>
-                        <Typography variant="h6">Classifications:</Typography>
-                        {out.value.map((classification) => (
-                          <Typography variant="body1" key={classification}>
-                            {classification}
+          variant="body1"
+        >
+          {question}
+        </Typography>
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          autoComplete="off"
+          style={{ width: '100%' }}
+        >
+          <FormControl fullWidth error={!!error}>
+            <Stack spacing={2}>
+              <TextField
+                id="outlined-multiline-static"
+                label="Antwort"
+                multiline
+                error={!!error}
+                helperText={error}
+                rows={6}
+                placeholder="Gib hier deine Antwort ein..."
+                value={answer}
+                inputRef={answerRef}
+                onChange={handleSetAnswer}
+                onKeyDown={keyDownHandler}
+                disabled={disabled}
+              />
+              <Stack direction="row" spacing={2}>
+                <Button variant="contained" type="submit" disabled={disabled}>
+                  {disabled ? 'Wird ausgewertet...' : 'Absenden'}
+                </Button>
+                <Typography variant="caption">
+                  Hinweis: Die Auswertung kann bis zu zwei Minuten dauern. Bitte die Seite
+                  nicht neu laden.
+                </Typography>
+              </Stack>
+              {/* Map over all outputs and display them */}
+              {outputs &&
+                Object.values(outputs).map((out) => {
+                  console.log('output: ', out)
+                  switch (out.type) {
+                    case 'text':
+                      return (
+                        <>
+                          <Typography variant="h6">{out.label}</Typography>
+                          <Typography
+                            style={{
+                              maxWidth: '50rem' // Set a maximum width
+                            }}
+                            variant="body1"
+                          >
+                            {out.value}
                           </Typography>
-                        ))}
-                      </>
-                    )
-                }
-              })}
-            {/* {outputs &&
+                          <Typography variant="body2">
+                            Please note that answered generated by the system may be
+                            incorrect or contain misleading information.
+                          </Typography>
+                        </>
+                      )
+                    case 'score':
+                      // assert that output.value is a number
+                      if (typeof out.value !== 'number') {
+                        console.error(
+                          'output.value is not a number, but of type: ',
+                          typeof out.value
+                        )
+                        return null
+                      }
+                      return (
+                        <>
+                          {out.value >= 60 && (
+                            <Alert severity="success">Bestanden!</Alert>
+                          )}
+                          <Typography variant="h6">
+                            {out.label}: {out.value}
+                          </Typography>
+                          {out.value >= 0 && out.value <= 100 && (
+                            <BorderLinearProgress
+                              variant="determinate"
+                              value={out.value}
+                            />
+                          )}
+                        </>
+                      )
+                    case 'classifications':
+                      // assert that output.value is an array of strings
+                      if (!Array.isArray(out.value)) {
+                        console.error(
+                          'output.value is not an array, but of type: ',
+                          typeof out.value
+                        )
+                        return null
+                      }
+                      // display chips with classifications
+                      return (
+                        <>
+                          <Typography variant="h6">Classifications:</Typography>
+                          {out.value.map((classification) => (
+                            <Typography variant="body1" key={classification}>
+                              {classification}
+                            </Typography>
+                          ))}
+                        </>
+                      )
+                  }
+                })}
+              {/* {outputs &&
               Object.values(outputs).map((out) => {
                 if (out.type === 'score') {
                   if (typeof out.value !== 'number') return null
                   if (out.value >= 70) return <div key={out.label} />
                 }
               })} */}
-          </Stack>
-        </FormControl>
-      </form>
-    </Stack>
-  )
-}
+            </Stack>
+          </FormControl>
+        </form>
+      </Stack>
+    )
+  }
+)
+TaskView.displayName = 'TaskView'
 export default memo(TaskView)

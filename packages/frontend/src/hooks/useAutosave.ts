@@ -23,12 +23,14 @@ export function useAutosave({
   const baseline = useRef('')
   const dirtySince = useRef<number | null>(null)
   const lastChange = useRef(0)
+  const observed = useRef('')
   const saving = useRef(false)
 
   const acceptCurrent = useCallback(
     (nextVersion = version.current) => {
       version.current = nextVersion
       baseline.current = JSON.stringify(graph.serialize())
+      observed.current = baseline.current
       dirtySince.current = null
       setStatus('saved')
     },
@@ -69,13 +71,20 @@ export function useAutosave({
       const now = Date.now()
       if (current !== baseline.current) {
         if (dirtySince.current === null) dirtySince.current = now
-        if (status === 'saved') {
+        if (current !== observed.current) {
+          observed.current = current
           lastChange.current = now
+        }
+        if (status === 'saved') {
           setStatus('dirty')
         }
         const idleFor = now - lastChange.current
         const dirtyFor = now - dirtySince.current
-        if (idleFor >= 1500 || dirtyFor >= 10_000) void saveNow()
+        if (
+          (status === 'saved' || status === 'dirty') &&
+          (idleFor >= 1500 || dirtyFor >= 10_000)
+        )
+          void saveNow()
       }
     }, 1000)
     return () => window.clearInterval(timer)
@@ -83,11 +92,21 @@ export function useAutosave({
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (status === 'dirty' || status === 'saving') event.preventDefault()
+      if (['dirty', 'saving', 'error', 'conflict'].includes(status))
+        event.preventDefault()
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [status])
 
-  return { status, saveNow, acceptCurrent }
+  const replaceWithLatest = useCallback(
+    (content: string, nextVersion: number) => {
+      graph.configure(JSON.parse(content || '{}'))
+      graph.setDirtyCanvas(true, true)
+      acceptCurrent(nextVersion)
+    },
+    [acceptCurrent, graph]
+  )
+
+  return { status, saveNow, acceptCurrent, replaceWithLatest }
 }

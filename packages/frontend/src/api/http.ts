@@ -62,6 +62,39 @@ export type Workflow = {
   updatedAt?: string
 }
 
+export type TemplateKind = 'WORKFLOW' | 'BLOCK'
+export type TemplateInterfacePort = {
+  nodeId: number
+  slot: number
+  name: string
+  type: string
+}
+export type TemplateInterfaces = {
+  inputs?: TemplateInterfacePort[]
+  outputs?: TemplateInterfacePort[]
+}
+export type WorkflowTemplate = {
+  id: string
+  slug: string
+  kind: TemplateKind
+  name: string
+  description: string | null
+  category: string | null
+  tags: string[]
+  currentRevision: number
+}
+export type TemplateRevision = {
+  id: string
+  revision: number
+  name: string
+  description: string | null
+  category: string | null
+  tags: string[]
+  content: string
+  interfaces: TemplateInterfaces | null
+  requiredNodeTypes: string[]
+}
+
 export const api = {
   createWorkspace: async () =>
     (
@@ -112,17 +145,18 @@ export const api = {
         body: {}
       })
     ).data,
-  templates: async () =>
+  templates: async (kind?: TemplateKind) =>
     (
-      await apiRequest<{
-        templates: {
-          id: string
-          slug: string
-          name: string
-          description: string | null
-        }[]
-      }>('/templates')
+      await apiRequest<{ templates: WorkflowTemplate[] }>(
+        `/templates${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`
+      )
     ).data.templates,
+  template: async (slug: string) =>
+    (
+      await apiRequest<{ template: WorkflowTemplate; revision: TemplateRevision }>(
+        `/templates/${encodeURIComponent(slug)}`
+      )
+    ).data,
   fromTemplate: async (token: string, templateSlug: string) =>
     (
       await apiRequest<Workflow>('/workflows/from-template', {
