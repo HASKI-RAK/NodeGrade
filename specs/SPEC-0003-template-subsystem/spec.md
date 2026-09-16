@@ -112,6 +112,9 @@ The system SHALL support template definitions consisting of metadata (unique id,
 description, category, tags, type: workflow or block) and graph content (nodes and
 links).
 
+Verification: template store tests validate seeded and authored templates against the
+template definition (metadata fields and graph content) before persisting them.
+
 ### FR-002 — Persistent template store
 
 The system SHALL persist template definitions server-side as first-class entities.
@@ -202,6 +205,9 @@ WHEN a user opens the insert palette in the editor,
 the system SHALL offer tabs for Nodes, Blocks, and Templates, and searchable entries
 with workshop-friendly categories and descriptions.
 
+Verification: editor test that opens the insert palette and asserts the Nodes, Blocks
+and Templates tabs with searchable, categorised entries.
+
 ### FR-014 — Template administration restricted to facilitator
 
 WHEN a user who is not a facilitator attempts to create, modify, publish, or unpublish
@@ -259,6 +265,9 @@ second check), and optional consistency check (compare/validate generated result
 ### NFR-001 — Insert latency
 
 Block insertion SHALL complete within 500 ms for blocks of up to 20 nodes.
+
+Verification: timed insertion of a 20-node block in the editor; completion within 500
+ms.
 
 ## Acceptance criteria
 

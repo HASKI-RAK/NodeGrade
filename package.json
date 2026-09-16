@@ -27,7 +27,9 @@
     "test:backend": "yarn workspace backend test",
     "test:frontend": "yarn workspace @haski/ta-frontend test:run",
     "test:int": "yarn workspace backend test:int",
+    "test:specs": "node --test tools/spec-lint/lint.test.mjs",
     "lint:check": "yarn workspace backend lint:check && yarn workspace @haski/ta-frontend lint:check",
+    "lint:specs": "node tools/spec-lint/cli.mjs",
     "typecheck": "yarn workspace backend typecheck && yarn workspace @haski/ta-frontend type-check"
   },
   "license": "MIT",

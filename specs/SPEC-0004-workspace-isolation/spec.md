@@ -170,6 +170,10 @@ the system SHALL delete that workspace together with all workflows it contains.
 WHILE a workspace is of type LTI,
 the system SHALL NOT auto-delete it under the retention policy.
 
+Verification: retention test that runs the retention job over an inactive LTI workspace
+and asserts it is retained while EPHEMERAL and WORKSHOP workspaces past their thresholds
+are deleted.
+
 ### FR-010 — Activity tracking
 
 WHEN a workspace is created or any authenticated workspace-scoped operation succeeds,
@@ -200,6 +204,9 @@ overwrite the newer stored state.
 
 An anonymous workspace identity SHALL survive page reloads within the same browser
 profile for the duration of the workshop.
+
+Verification: browser test reloading the page repeatedly within one profile and
+asserting the same workspace identity is resolved each time.
 
 ## Acceptance criteria
 

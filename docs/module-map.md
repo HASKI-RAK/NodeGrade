@@ -236,6 +236,18 @@ range with a fake model worker (`fake-model.mjs`), seeded demo graph
 (`demo-graph.json`) and a published workshop code. Playwright (`e2e/`,
 `playwright.config.ts`) boots it via `yarn debug:serve`.
 
+## Specification linter
+
+Location: `tools/spec-lint/`
+
+`cli.mjs` runs `lint.mjs` over `specs/` (`yarn lint:specs`) and exits non-zero on any
+inconsistency: frontmatter versus `specs/index.md`, `depends_on` versus the
+`## Dependencies` prose, dangling SPEC/FR/AC references, dependency cycles, duplicate
+local IDs, and requirements with neither a tracing acceptance criterion nor a
+`Verification:` note. `parse.mjs` is the markdown/frontmatter reader; `lint.test.mjs`
+(`yarn test:specs`) covers it with node:test and is gated by the `specs` job in
+`.github/workflows/pr.yml`.
+
 ## Embedding worker
 
 Location: `models/`

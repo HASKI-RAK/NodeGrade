@@ -125,6 +125,9 @@ WHEN the editor is opened without a workflow identity in the URL,
 the system SHALL present a user-facing starting point instead of attempting to load a
 graph derived from the URL.
 
+Verification: routing test that opens the editor route without a workflow identity and
+asserts the start page is presented without a graph load attempt.
+
 ### FR-006 — Not-found page
 
 WHEN a user opens an unknown route,
@@ -140,6 +143,9 @@ SPEC-0014; this feature only consumes it for code entry and deep-link resolution
 
 The start page SHALL render its interactive entry actions within 2 seconds on a
 standard conference laptop connection.
+
+Verification: measured load of the start page on a conference laptop profile; the
+interactive entry actions are present within 2 seconds.
 
 ## Acceptance criteria
 

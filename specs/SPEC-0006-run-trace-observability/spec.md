@@ -179,6 +179,9 @@ account identifiers are exposed.
 Trace events for a node SHALL be visible in the client within 1 second of the event
 being emitted by the server.
 
+Verification: timed run measuring the delay between server-side event emission and
+client-side trace display; within 1 second.
+
 ### NFR-002 — Redaction completeness
 
 Trace output SHALL NOT contain API keys or model credentials under any circumstances.
@@ -187,7 +190,7 @@ Trace output SHALL NOT contain API keys or model credentials under any circumsta
 
 ### AC-001 — Trace lists all steps
 
-Traces to: FR-003
+Traces to: FR-001, FR-002, FR-003
 
 ```gherkin
 Given a workflow with three connected nodes
@@ -270,7 +273,7 @@ And the trace view shows the timeout as the failure reason
 
 ### AC-009 — Cancellation marks remaining nodes cancelled
 
-Traces to: FR-012, FR-010
+Traces to: FR-010, FR-010a, FR-012
 
 ```gherkin
 Given a run in progress

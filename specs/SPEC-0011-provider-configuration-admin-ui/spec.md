@@ -169,6 +169,9 @@ specific failure reason.
 
 Saving provider configuration SHALL take effect for new executions within 5 seconds.
 
+Verification: timed test that saves provider configuration and asserts a subsequent
+execution uses the new configuration within 5 seconds.
+
 ## Acceptance criteria
 
 ### AC-001 — Non-facilitator denied

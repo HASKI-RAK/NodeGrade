@@ -93,6 +93,9 @@ The LLM node SHALL execute chat completions through a provider abstraction built
 the Vercel AI SDK, in which each provider is identified by a provider id and supplies
 a model list and a completion endpoint.
 
+Verification: provider runtime tests execute each configured provider through the shared
+abstraction; the LLM node carries no provider-specific completion code.
+
 ### FR-002 — OpenRouter provider
 
 WHEN OpenRouter is configured and enabled,
@@ -141,6 +144,10 @@ NOT prevent listing or execution of models from other providers.
 The LLM node SHALL send provider credentials only in requests to the corresponding
 provider and SHALL NOT expose them in serialized graph data, client-visible model
 lists, or error messages.
+
+Verification: tests asserting that serialized graph data, client-visible model lists and
+error messages carry no credential material; trace output is covered by
+SPEC-0006/AC-005.
 
 ### FR-009 — Model capability metadata
 

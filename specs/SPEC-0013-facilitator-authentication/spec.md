@@ -109,6 +109,9 @@ THEN the system SHALL throttle further login attempts for a defined period.
 WHEN an administrative session is issued,
 the session cookie SHALL be set with HttpOnly, Secure, and SameSite attributes.
 
+Verification: login test asserting the session cookie is set with the HttpOnly, Secure
+and SameSite attributes.
+
 ### FR-006 — Logout
 
 WHEN a facilitator logs out,
@@ -123,6 +126,9 @@ the system SHALL require a valid CSRF token.
 
 The system SHALL NOT write admin credentials, session tokens, or provider secrets to
 logs or error messages.
+
+Verification: test asserting that failed logins, session issuance and provider errors
+emit no credential, token or secret material to logs or responses.
 
 ## Non-functional requirements
 

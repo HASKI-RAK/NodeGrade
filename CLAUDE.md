@@ -47,12 +47,13 @@ Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
 LTI launch and registration       → packages/backend/src/lti/, packages/lti/
+Specification consistency rules   → tools/spec-lint/
 Schema change                     → packages/backend/prisma/schema.prisma + migrations/
 Content schema backfill           → packages/backend/src/migration/
 ```
 
-Specification status: `specs/index.md` holds the authoritative table — waves 1 to 5 are
-implemented; SPEC-0015 is outstanding and SPEC-0008 is deferred.
+Specification status: `specs/index.md` holds the authoritative table — waves 1 to 5 and
+wave 7 are implemented; SPEC-0008 is deferred.
 Wave-1 implementation notes and escalations live in `docs/wave-1-plan.md`.
 
 ## Commands
@@ -65,6 +66,7 @@ yarn debug:up                      # deterministic full stack in Docker (ports 1
 yarn build                         # topological build of all workspaces
 yarn typecheck                     # backend tsc --noEmit + frontend tsc
 yarn lint:check                    # eslint, zero warnings
+yarn lint:specs                    # specs/ consistency linter; yarn test:specs covers it
 yarn test                          # backend jest + frontend vitest
 yarn workspace backend test --testPathPattern workflow-etag              # single backend suite
 yarn workspace @haski/ta-frontend test:run src/pages/StartPage.test.tsx  # single frontend suite
@@ -136,6 +138,9 @@ Update `CLAUDE.md` when task routing, commands, an invariant, or a top-level dir
 purpose changes.
 
 Update `.claude/rules/` when a subsystem gains or loses a persistent local convention.
+
+`yarn lint:specs` checks that agreement mechanically, along with dependency, reference
+and traceability consistency across `specs/`; run it after any change under `specs/`.
 
 Do not touch these files for bug fixes, renames, internal refactors, or implementation
 details. The test: would this change where a future agent looks, what it must understand

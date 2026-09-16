@@ -43,3 +43,22 @@ jobs:
 
       - name: Test
         run: yarn test
+
+  specs:
+    name: Specification lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The linter reads specs/ with the standard library only, so it needs no install.
+      - name: Lint specifications
+        run: node tools/spec-lint/cli.mjs
+
+      - name: Test the specification linter
+        run: node --test tools/spec-lint/lint.test.mjs

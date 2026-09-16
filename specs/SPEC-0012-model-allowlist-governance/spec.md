@@ -155,12 +155,18 @@ rate-limit error.
 WHEN a facilitator configures the concurrency guards,
 the system SHALL persist the limits and apply them without server restart.
 
+Verification: test that changes the configured guard limits and asserts subsequent runs
+are admitted or rejected against the new limits without a server restart.
+
 ## Non-functional requirements
 
 ### NFR-001 — Enforcement completeness
 
 Model policy SHALL be enforced server-side; client-side filtering alone SHALL NOT be
 relied upon for any enforcement requirement in this specification.
+
+Verification: server-side tests asserting that catalog listing and execution reject
+disallowed models independently of any client-side filtering.
 
 ## Acceptance criteria
 

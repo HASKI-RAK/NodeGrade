@@ -181,6 +181,9 @@ the system SHALL display the preflight check results for the workshop.
 Participant-facing preview strings SHALL be extractable for localization (at minimum EN
 and DE).
 
+Verification: inspection of the participant-facing preview strings; each is sourced from
+the extractable EN and DE string tables rather than an inline literal.
+
 ## Acceptance criteria
 
 ### AC-001 — WAIE template available

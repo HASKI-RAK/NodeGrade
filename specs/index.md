@@ -18,20 +18,16 @@ is included in a release.
 | 4 — Entry and policy         | SPEC-0002, SPEC-0012            | SPEC-0002 follows SPEC-0004 and SPEC-0014. SPEC-0012 follows SPEC-0010 and SPEC-0011.                                          | Participants can enter workshops and facilitators can govern the models exposed to them.          |
 | 5 — Workshop experience      | SPEC-0007                       | SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0010, SPEC-0012, and SPEC-0014 are accepted.                                             | The canonical WAIE flow supports editing, preflight validation, execution, and preview.                                                        |
 | 6 — Release confidence       | SPEC-0008                       | SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0007, and SPEC-0014 are accepted.                                             | CI, deterministic browser coverage, documentation, and the conference happy path form the release gate.                                        |
-| 7 — Specification governance | SPEC-0015                       | The SPEC-0008 CI pipeline is available for the linting gate.                                                                   | Specification validation runs locally and in CI.                                                                                               |
+| 7 — Specification governance | SPEC-0015                       | The lint check attaches to the existing pull-request workflow that SPEC-0008 extends.                                          | Specification validation runs locally and in CI.                                                                                               |
 
-Waves 1 to 4 are implemented; waves 5 to 7 have not started. The Status column of
-the specification table below is authoritative and must match each
+Waves 1 to 5 and wave 7 are implemented; wave 6 (SPEC-0008) is deferred. The Status
+column of the specification table below is authoritative and must match each
 specification's frontmatter `status`.
 
 SPEC-0009 closes after SPEC-0010, SPEC-0011, and SPEC-0012 satisfy the epic's
 success criteria. SPEC-0001 closes after its child features (SPEC-0002 through
 SPEC-0008 and SPEC-0014) satisfy the workshop-readiness success criteria and
 the required provider-management capabilities from SPEC-0009 are available.
-
-SPEC-0015's Dependencies section names SPEC-0008. Its frontmatter currently
-declares `depends_on: []`. This plan uses the explicit prose dependency; align
-the frontmatter when SPEC-0015 implementation begins.
 
 | ID        | Type    | Title                                                | Parent    | Status      |
 | --------- | ------- | ---------------------------------------------------- | --------- | ----------- |
@@ -49,4 +45,4 @@ the frontmatter when SPEC-0015 implementation begins.
 | SPEC-0012 | Feature | Model allowlist governance                           | SPEC-0009 | Implemented |
 | SPEC-0013 | Feature | Facilitator authentication and administrative access | null      | Implemented |
 | SPEC-0014 | Feature | Workshop entity and join flow                        | SPEC-0001 | Implemented |
-| SPEC-0015 | Feature | Automated specification linting                      | SPEC-0008 | Draft       |
+| SPEC-0015 | Feature | Automated specification linting                      | SPEC-0008 | Implemented |

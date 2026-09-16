@@ -104,6 +104,9 @@ revision), optional expiry timestamp, and creation/update timestamps.
 WHEN a workshop code is resolved,
 the system SHALL map it to exactly one workshop.
 
+Verification: unique constraint on the workshop code plus a test asserting that
+resolving a code returns exactly one workshop or none.
+
 ### FR-003 — Join resolves published workshop
 
 WHEN a participant opens the workshop deep link containing a code,

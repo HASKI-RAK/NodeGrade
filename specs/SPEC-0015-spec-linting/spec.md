@@ -2,15 +2,15 @@
 id: SPEC-0015
 type: feature
 title: Automated specification linting
-status: draft
+status: implemented
 parent: SPEC-0008
 priority: P2
 created: 2026-09-15
-updated: 2026-09-15
-depends_on: []
+updated: 2026-09-17
+depends_on:
+  - SPEC-0008
 related:
   - SPEC-0001
-  - SPEC-0008
 ---
 
 # Automated specification linting
@@ -38,11 +38,12 @@ content rather than cross-reference bookkeeping.
 ### In scope
 
 - A linter that validates every `specs/SPEC-NNNN-*/spec.md` file and `specs/index.md`.
-- Checks: frontmatter `parent` versus index agreement; `depends_on` versus the
-  `## Dependencies` prose section agreement; existence of all referenced SPEC/FR/AC
-  IDs; circular dependency detection; duplicate FR/AC/US IDs within a specification;
-  `SHALL`-containing functional requirements lacking acceptance-criterion traceability
-  or an explicit verification note; required frontmatter fields present and well-formed.
+- Checks: frontmatter `parent`, `type`, `title` and `status` versus index agreement;
+  `depends_on` versus the `## Dependencies` prose section agreement; existence of all
+  referenced SPEC/FR/AC IDs; circular dependency detection; duplicate FR/AC/US IDs
+  within a specification; `SHALL`-containing functional requirements lacking
+  acceptance-criterion traceability or an explicit verification note; non-functional
+  requirements lacking either; required frontmatter fields present and well-formed.
 - A CLI invocation for local use and a CI step gating pull requests on lint failures.
 - Fixing the currently known NFR verification gaps (NFRs without explicit
   verification, as demonstrated correctly in SPEC-0013 and SPEC-0014).
@@ -85,10 +86,10 @@ Independent value: keeps the quality gate enforceable as the spec set grows.
 
 ## Functional requirements
 
-### FR-001 — Parent/index agreement
+### FR-001 — Index agreement
 
-IF a specification's frontmatter `parent` disagrees with the `Parent` column of its
-`specs/index.md` entry,
+IF a specification's frontmatter `parent`, `type`, `title` or `status` disagrees with
+the corresponding column of its `specs/index.md` entry,
 THEN the linter SHALL report an error identifying both files and values.
 
 ### FR-002 — Dependency section agreement
@@ -143,6 +144,12 @@ WHEN a pull request modifies files under `specs/`,
 CI SHALL run the specification linter and SHALL fail the check if any error is
 reported.
 
+### FR-010 — Non-functional requirement verification
+
+IF a non-functional requirement has no acceptance criterion tracing to it and no
+explicit verification note,
+THEN the linter SHALL report an error naming the unverified requirement.
+
 ## Non-functional requirements
 
 ### NFR-001 — Lint duration
@@ -154,12 +161,12 @@ seconds on a standard development machine.
 
 ## Acceptance criteria
 
-### AC-001 — Parent mismatch detected
+### AC-001 — Index mismatch detected
 
 Traces to: FR-001
 
 ```gherkin
-Given a specification whose frontmatter parent differs from its index entry
+Given a specification whose frontmatter parent or status differs from its index entry
 When the linter runs
 Then an error is reported identifying the specification and both values
 ```
@@ -246,12 +253,22 @@ Then the lint check fails and blocks merge per SPEC-0008/FR-008
 
 ### AC-010 — Current spec set passes
 
-Traces to: FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008
+Traces to: FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-010
 
 ```gherkin
 Given the specification set as of this revision
 When the linter runs
 Then no errors are reported
+```
+
+### AC-011 — Unverified non-functional requirement detected
+
+Traces to: FR-010
+
+```gherkin
+Given a non-functional requirement with no verification note and no tracing acceptance criterion
+When the linter runs
+Then an error is reported naming the unverified requirement
 ```
 
 ## Edge cases
@@ -274,17 +291,19 @@ Then no errors are reported
 
 ## Dependencies
 
-- SPEC-0008 (CI pipeline the lint step gates into).
+- SPEC-0008 (the pull-request pipeline the lint step gates into; the check attaches to
+  the existing PR workflow that SPEC-0008 extends).
 
 ## Assumptions
 
 - Requirement and acceptance-criterion identifiers follow the existing local ID
   conventions (FR-NNN, NFR-NNN, AC-NNN, US-NNN) and the SPEC-NNNN scheme.
+- A `## Dependencies` bullet beginning with "None" declares no dependency, and
+  parenthetical asides in that section give context rather than naming dependencies.
 
 ## Open questions
 
-- Should the linter also check NFRs for explicit verification notes (extending FR-006
-  beyond `SHALL` functional requirements)?
+- None currently.
 
 ## Success criteria
 
@@ -297,3 +316,4 @@ Then no errors are reported
 | Date | Change |
 |---|---|
 | 2026-09-15 | Initial specification created from review feedback (automated spec linting of hierarchy/dependency/traceability consistency) |
+| 2026-09-17 | Implemented. FR-001 extended to type/title/status index agreement; FR-010 and AC-011 added for non-functional requirement verification, resolving the open question; Dependencies-section reading convention recorded under Assumptions |

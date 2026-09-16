@@ -112,7 +112,8 @@ epics and remains a top-level feature; this epic depends on it rather than ownin
 
 ## Dependencies
 
-- None external.
+- SPEC-0013 (facilitator authentication gates every administrative capability this
+  epic requires).
 
 ## Assumptions
 

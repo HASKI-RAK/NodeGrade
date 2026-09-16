@@ -130,6 +130,9 @@ fails" business rule is enforced by the platform.
 
 The full PR pipeline SHALL complete within 15 minutes.
 
+Verification: recorded duration of the PR pipeline on a representative pull request;
+under 15 minutes.
+
 ## Acceptance criteria
 
 ### AC-001 — PR checks run
@@ -232,8 +235,8 @@ Then the platform prevents merging the PR
 
 ## Dependencies
 
-- SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0007, SPEC-0014 (the smoke test walks flows
-  those features define).
+- SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0007, SPEC-0014 (the smoke test walks
+  flows those features define).
 
 ## Assumptions
 

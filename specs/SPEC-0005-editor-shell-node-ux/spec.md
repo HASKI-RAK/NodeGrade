@@ -130,6 +130,9 @@ workshop-friendly categories, and adding an entry SHALL place the node on the ca
 WHERE block templates exist,
 the component palette SHALL include a Blocks section listing them (see SPEC-0003).
 
+Verification: palette test with block templates present asserting that a Blocks section
+lists them.
+
 ### FR-006 — Inspector panel
 
 WHEN a node is selected,
@@ -203,6 +206,9 @@ editor with unsaved changes.
 ### NFR-001 — Palette search responsiveness
 
 Palette search SHALL filter results within 200 ms of input for the full node inventory.
+
+Verification: timed palette search over the full node inventory; results are filtered
+within 200 ms of input.
 
 ## Acceptance criteria
 
