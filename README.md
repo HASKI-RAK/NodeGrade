@@ -54,13 +54,22 @@ yarn dev
 
 This will launch both the server and the frontend PWA in development mode.
 
+### Workshop flow
+
+Facilitators sign in at `/admin`, create a workshop from a published template revision,
+and publish its eight-character code. Participants enter the code at `/` or open
+`/workshop/<code>`; each browser receives an isolated workspace and workflow copy.
+
+Workflow persistence uses REST with optimistic version checks. Graph execution uses
+Socket.IO and a workspace-scoped workflow ID.
+
 ### Benchmarking
 
-To run a benchmark, send a POST request to `http://localhost:5000/v1/benchmark` with the following body:
+Facilitator-authenticated benchmark runs use `POST /api/benchmark/run` with the following body:
 
 ```json
 {
-  "path": "<your_path>",
+  "workflowId": "<workflow-id>",
   "data": {
     "question": "What is 1+1?",
     "realAnswer": "2",
@@ -69,7 +78,7 @@ To run a benchmark, send a POST request to `http://localhost:5000/v1/benchmark` 
 }
 ```
 
-Replace `<your_path>` with the path you want to benchmark. When you launch the application as in chapter "Running the Project", you can specify the path in the URL. After you hit save, the graph for the path will be saved in the database and you can use it for benchmarking.
+The request uses the facilitator session and CSRF header from the admin API.
 
 > Note: The graph has to have the following nodes for the benchmark to work: "Answer Input", "question", "feedback output". You can use multiple of these nodes.
 
@@ -79,7 +88,7 @@ The project is structured into multiple workspaces located under `packages/*`, e
 
 ### Server
 
-The server component, implemented in TypeScript, provides the backend functionality for the application. It stores graph data based on the current path using [Prisma](https://www.prisma.io/), a database toolkit and Object Relational Mapper (ORM). The server also provides an API for the frontend PWA to interact with the evaluated graph in the backend using websockets.
+The server component, implemented in TypeScript, stores workspace-scoped workflows with [Prisma](https://www.prisma.io/) and PostgreSQL. REST handles persistence while WebSockets stream graph execution events.
 
 ### Frontend PWA
 
@@ -91,16 +100,24 @@ The library package includes shared resources and utilities used across the serv
 
 ## Example Usage
 
-TODO
+1. Run `yarn debug:up`.
+2. Open <http://localhost:15173/>.
+3. Join the seeded workshop with code `WAVE-2026`.
+4. Edit the workflow and wait for the `Saved` indicator.
 
 ## Docker
 
-TODO
+`yarn debug:up` starts PostgreSQL, the backend, frontend, and deterministic
+OpenAI-compatible model worker. `yarn debug:down` stops the stack and
+`yarn debug:reset` recreates its database.
 
 ## Scripts
 
 - **Development**: `yarn dev` - Runs both the server and frontend in development mode.
 - **Lint**: `yarn lint` - Lints the codebase for both the server and frontend.
+- **Unit tests**: `yarn test` - Runs backend and frontend tests.
+- **Database integration**: `yarn test:int` - Checks PostgreSQL constraints.
+- **Browser smoke tests**: `yarn test:e2e` - Exercises the workshop flow.
 
 ## License
 

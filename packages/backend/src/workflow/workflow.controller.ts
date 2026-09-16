@@ -63,7 +63,11 @@ export class WorkflowController {
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const workflow = await this.workflows.get(workspace.id, id);
+    const workflow = await this.workflows.get(
+      workspace.id,
+      id,
+      workspace.publishedProjection,
+    );
     response.setHeader('ETag', versionToEtag(workflow.version));
     return serializeDetail(workflow);
   }

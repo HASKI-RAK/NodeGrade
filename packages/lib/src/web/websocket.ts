@@ -35,7 +35,6 @@ export type EventHandlerMap<S extends ServerEventPayload | ClientEventPayload> =
           graphFinished: (payload) => {},
           nodeExecuting: (nodeId) => {},
           nodeExecuted: (nodeId) => {},
-          graphSaved: () => {},
           feedback: (feedback) => {}
         })
  * ```

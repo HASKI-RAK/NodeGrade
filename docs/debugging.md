@@ -20,8 +20,8 @@ yarn debug:up
 
 Open these endpoints:
 
-- Editor: <http://localhost:15173/ws/editor/debug/demo/1>
-- Student view: <http://localhost:15173/ws/student/debug/demo/1>
+- Workshop entry: <http://localhost:15173/workshop/WAVE-2026>
+- Start page: <http://localhost:15173/>
 - Backend health: <http://localhost:15000/health>
 - Deterministic model health: <http://localhost:18000/health>
 - Node inspector: `localhost:19229`
@@ -85,7 +85,8 @@ The debug Compose service sets `VITE_DEBUG_BRIDGE=true`. In the browser console,
 - `connectNodes(sourceId, sourceSlot, targetId, targetSlot)`
 - `setNodeProperty(id, property, value)`
 - `socketState()`, `recentEvents()`, and `clearEvents()`
-- `waitForEvent(name)`, `runGraph(answer)`, and `saveGraph(name)`
+- `waitForEvent(name)` and `runGraph(answer)`
+- `workspaceState()`, `saveStatus()`, and `saveNow()`
 
 Snapshots and captured event payloads redact credential-shaped property names. The bridge
 is compiled into development builds when `VITE_DEBUG_BRIDGE=true`. Regular development

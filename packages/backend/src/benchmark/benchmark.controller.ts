@@ -1,7 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { Facilitator } from '../auth/decorators/facilitator.decorator.js';
 import { BenchmarkService } from './benchmark.service.js';
 
 @Controller('benchmark')
+@Facilitator()
 export class BenchmarkController {
   constructor(private readonly benchmarkService: BenchmarkService) {}
 
@@ -9,7 +11,7 @@ export class BenchmarkController {
   async runBenchmark(
     @Body()
     data: {
-      path: string;
+      workflowId: string;
       data: {
         question: string;
         realAnswer: string;

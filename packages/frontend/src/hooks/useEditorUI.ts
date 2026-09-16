@@ -39,7 +39,7 @@ export function useEditorUI({
   const checkSize = useCallback(() => {
     setSize({
       width: window.outerWidth,
-      height: window.outerWidth
+      height: window.innerHeight
     })
   }, [])
 

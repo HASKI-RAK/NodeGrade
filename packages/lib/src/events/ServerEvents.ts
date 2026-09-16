@@ -26,8 +26,6 @@ export type ServerEventPayload = {
   graphFinished: string //SerializedGraph // graph run finished
   nodeExecuting: number // node id
   nodeExecuted: number // node id
-  graphSaved: string //SerializedGraph // graph
-  graphLoaded: string //SerializedGraph // after loading a graph
   graphOperationFailed: GraphOperationFailure
   outputSet: {
     uniqueId: string
@@ -50,16 +48,11 @@ export type ServerEventPayload = {
 export type ServerBenchmarkPostPayload = (string | number | string[])[]
 
 export type ClientEventPayload = {
-  // saves a graph
-  saveGraph: {
-    graph: string //SerializedGraph
-    name?: string // when no name is given, use the current location.pathname
-  }
-  loadGraph: string // loads a graph by pathname
-  // runs a graph
   runGraph: {
+    workflowId: string
     answer: string
-    graph: string //SerializedGraph
+    /** Unsaved editor state. The server falls back to persisted workflow content. */
+    graph?: string //SerializedGraph
     xapi?: {
       // user_id is handled by cookie for security reasons
       custom_activityname: string // the name in the url to which it has been saved: for instance: strategie_leicht. This has to be specified in the LMS custom parameters
@@ -75,7 +68,7 @@ export type ClientEventPayload = {
 }
 
 export type ClientBenchmarkPostPayload = {
-  path: string
+  workflowId: string
   data: {
     question: string
     realAnswer: string

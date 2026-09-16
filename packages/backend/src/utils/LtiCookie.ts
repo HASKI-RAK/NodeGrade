@@ -6,4 +6,9 @@ export type LtiCookie = {
   lis_person_name_full: string;
   tool_consumer_instance_name: string;
   lis_person_contact_email_primary: string;
+  issuer?: string;
+  context_id?: string;
+  resource_link_id?: string;
+  ltiKey?: string;
+  workflowId?: string;
 };

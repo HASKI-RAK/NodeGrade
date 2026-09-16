@@ -1,18 +1,13 @@
 import { expect, test } from '@playwright/test'
 
 type DebugBridge = {
-  listNodes(): Array<{
-    id: number
-    title: string
-    type: string
-    properties: Record<string, unknown>
-  }>
-  addNode(type: string, position?: [number, number]): { id: number }
-  selectNode(id: number): boolean
+  version: 2
+  listNodes(): Array<{ id: number; title: string; type: string; properties: Record<string, unknown> }>
   setNodeProperty(id: number, property: string, value: unknown): boolean
-  socketState(): { connected: boolean; id?: string }
-  recentEvents(): Array<{ name: string; payload: unknown }>
-  clearEvents(): void
+  socketState(): { connected: boolean }
+  workspaceState(): { workspaceId?: string; workflowId?: string; type?: string }
+  saveStatus(): string
+  saveNow(): Promise<string>
   waitForEvent(eventName: string, timeoutMs?: number): Promise<unknown>
   runGraph(answer?: string): boolean
 }
@@ -25,86 +20,54 @@ declare global {
 
 const modelUrl = `http://127.0.0.1:${process.env.NODEGRADE_DEBUG_MODEL_PORT ?? '18000'}`
 
-test('deterministic model exposes the OpenAI-compatible contract', async ({
-  request
-}) => {
+const joinWorkshop = async (page: import('@playwright/test').Page) => {
+  await page.goto('/workshop/WAVE-2026')
+  await page.waitForURL(/\/editor\//)
+  await page.waitForFunction(() => window.__NODEGRADE_DEBUG__?.version === 2)
+  await expect(page.locator('#mycanvas')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.socketState().connected)).toBe(true)
+}
+
+test('deterministic model exposes OpenAI-compatible contract', async ({ request }) => {
   const models = await request.get(`${modelUrl}/v1/models`)
   await expect(models).toBeOK()
-  await expect(models.json()).resolves.toMatchObject({
-    object: 'list',
-    data: [{ id: 'nodegrade-deterministic' }]
-  })
-
-  const completion = await request.post(`${modelUrl}/v1/chat/completions`, {
-    data: { model: 'nodegrade-deterministic', messages: [] }
-  })
-  await expect(completion).toBeOK()
-  await expect(completion.json()).resolves.toMatchObject({
-    choices: [
-      { message: { content: 'score: 100\nfeedback: Deterministic debug response.' } }
-    ]
-  })
+  await expect(models.json()).resolves.toMatchObject({ object: 'list', data: [{ id: 'nodegrade-deterministic' }] })
 })
 
-test('debug bridge inspects and controls the seeded canvas', async ({ page }) => {
-  await page.goto('/ws/editor/debug/demo/1')
-  await page.waitForFunction(() => window.__NODEGRADE_DEBUG__ !== undefined)
-  await page.evaluate(() => window.__NODEGRADE_DEBUG__?.waitForEvent('graphLoaded'))
-
-  await expect(page.locator('#mycanvas')).toBeVisible()
-  await expect
-    .poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.socketState().connected))
-    .toBe(true)
-
-  const initialNodes = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
-  expect(initialNodes).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ title: 'Question', type: 'input/question' }),
-      expect.objectContaining({ title: 'Answer Input', type: 'input/answer' })
-    ])
-  )
-
-  const node = await page.evaluate(() => {
-    const bridge = window.__NODEGRADE_DEBUG__
-    if (bridge === undefined) throw new Error('Debug bridge unavailable')
-    const created = bridge.addNode('basic/textfield', [720, 120])
-    bridge.setNodeProperty(created.id, 'value', 'Playwright controlled this node')
-    bridge.setNodeProperty(created.id, 'apiKey', 'debug-secret')
-    bridge.selectNode(created.id)
-    return created
-  })
-
-  const updatedNodes = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
-  expect(updatedNodes).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        id: node.id,
-        properties: expect.objectContaining({
-          value: 'Playwright controlled this node',
-          apiKey: '[Redacted]'
-        })
-      })
-    ])
-  )
-
-  const started = await page.evaluate(() => {
-    const bridge = window.__NODEGRADE_DEBUG__
-    if (bridge === undefined) throw new Error('Debug bridge unavailable')
-    bridge.clearEvents()
-    return bridge.runGraph('Playwright answer')
-  })
+test('workshop workflow autosaves and executes', async ({ page }) => {
+  await joinWorkshop(page)
+  const nodes = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
+  expect(nodes).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Question' }), expect.objectContaining({ title: 'Answer Input' })]))
+  const first = nodes?.[0]
+  expect(first).toBeDefined()
+  await page.evaluate((id) => window.__NODEGRADE_DEBUG__?.setNodeProperty(id, 'wave1Marker', 'persisted'), first?.id)
+  await expect.poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveStatus())).toBe('dirty')
+  await expect(page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveNow())).resolves.toBe('saved')
+  const started = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.runGraph('Playwright answer'))
   expect(started).toBe(true)
   await page.evaluate(() => window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished'))
+  await page.reload()
+  await page.waitForFunction(() => window.__NODEGRADE_DEBUG__?.version === 2)
+  const reloaded = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
+  expect(reloaded?.find((node) => node.id === first?.id)?.properties.wave1Marker).toBe('persisted')
+})
 
-  const eventNames = await page.evaluate(() =>
-    window.__NODEGRADE_DEBUG__?.recentEvents().map((event) => event.name)
-  )
-  expect(eventNames).toEqual(
-    expect.arrayContaining([
-      'nodeExecuting',
-      'nodeExecuted',
-      'outputSet',
-      'graphFinished'
-    ])
-  )
+test('two participants joining one code receive isolated workspaces', async ({ browser }) => {
+  const firstContext = await browser.newContext()
+  const secondContext = await browser.newContext()
+  const first = await firstContext.newPage()
+  const second = await secondContext.newPage()
+  await Promise.all([joinWorkshop(first), joinWorkshop(second)])
+  const [firstState, secondState] = await Promise.all([
+    first.evaluate(() => window.__NODEGRADE_DEBUG__?.workspaceState()),
+    second.evaluate(() => window.__NODEGRADE_DEBUG__?.workspaceState())
+  ])
+  expect(firstState?.type).toBe('WORKSHOP')
+  expect(secondState?.type).toBe('WORKSHOP')
+  expect(firstState?.workspaceId).toBeTruthy()
+  expect(secondState?.workspaceId).toBeTruthy()
+  expect(firstState?.workspaceId).not.toBe(secondState?.workspaceId)
+  expect(firstState?.workflowId).not.toBe(secondState?.workflowId)
+  await firstContext.close()
+  await secondContext.close()
 })

@@ -113,8 +113,7 @@ export function useServerEvents({
         console.log('Graph finished: ', payload)
         setProcessingPercentage(100)
         setAttemptState('completed')
-        lgraph.configure(JSON.parse(payload))
-        lgraph.setDirtyCanvas(true, true)
+        void payload
       },
       questionSet(payload) {
         setQuestion(payload)
@@ -126,14 +125,6 @@ export function useServerEvents({
       nodeExecuted(nodeId) {
         console.log('Node executed: ', nodeId)
         handleNodeExecuted(lgraph, nodeId)
-      },
-      graphSaved(payload) {
-        console.log('Graph saved: ', payload)
-        setSnackbar({
-          message: 'Graph saved',
-          severity: 'success',
-          open: true
-        })
       },
       outputSet(output) {
         // check if output is already in outputs, if not add it, otherwise update it
@@ -160,12 +151,6 @@ export function useServerEvents({
       },
       questionImageSet: function (imageBase64: string): void | Promise<void> {
         setImage(imageBase64)
-      },
-      graphLoaded(payload) {
-        lgraph.configure(JSON.parse(payload))
-        lgraph.setDirtyCanvas(true, true)
-        setGraphState('ready')
-        setFailureMessage(undefined)
       },
       graphOperationFailed(payload) {
         setFailureMessage(payload.message)

@@ -70,20 +70,4 @@ export class GraphGateway
   ) {
     await this.graphHandlerService.handleRunGraph(client, payload);
   }
-
-  @SubscribeMessage('saveGraph')
-  async handleSaveGraph(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ClientEventPayload['saveGraph'],
-  ) {
-    await this.graphHandlerService.handleSaveGraph(client, payload);
-  }
-
-  @SubscribeMessage('loadGraph')
-  async handleLoadGraph(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: ClientEventPayload['loadGraph'],
-  ) {
-    await this.graphHandlerService.handleLoadGraph(client, payload);
-  }
 }

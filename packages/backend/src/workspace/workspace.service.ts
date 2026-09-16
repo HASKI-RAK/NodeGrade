@@ -16,6 +16,7 @@ export type ResolvedWorkspace = {
   type: WorkspaceType;
   label: string | null;
   workshopId: string | null;
+  publishedProjection?: boolean;
 };
 
 export type CreatedWorkspace = ResolvedWorkspace & {
@@ -41,6 +42,45 @@ export class WorkspaceService {
 
     this.logger.log(`Created BROWSER workspace ${workspace.id}`);
     return { ...workspace, token: issued.token };
+  }
+
+  async createWorkshop(
+    workshopId: string,
+    label?: string,
+  ): Promise<CreatedWorkspace> {
+    const issued = issueWorkspaceToken();
+    const workspace = await this.create('WORKSHOP', issued, {
+      label,
+      workshopId,
+    });
+
+    this.logger.log(`Created WORKSHOP workspace ${workspace.id}`);
+    return { ...workspace, token: issued.token };
+  }
+
+  async resolveByLtiKey(
+    ltiKey: string,
+    now: Date = new Date(),
+  ): Promise<ResolvedWorkspace | null> {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { ltiKey },
+      select: {
+        id: true,
+        type: true,
+        label: true,
+        workshopId: true,
+        lastActiveAt: true,
+      },
+    });
+    if (!workspace || workspace.type !== 'LTI') return null;
+
+    await this.touch(workspace.id, workspace.lastActiveAt, now);
+    return {
+      id: workspace.id,
+      type: workspace.type,
+      label: workspace.label,
+      workshopId: workspace.workshopId,
+    };
   }
 
   private async create(

@@ -16,16 +16,10 @@ datasource db {
 // Superseded by Workspace/Workflow (SPEC-0004). Kept until the rows have been backfilled
 // and the new model has proven itself on real data; renamed to LegacyGraph and dropped in
 // a later migration.
-model Graph {
+model LegacyGraph {
   id    Int    @id @default(autoincrement())
   path  String @unique
   graph String
-}
-
-model Settings {
-  id       Int    @id @default(autoincrement())
-  path     String @unique
-  modelUrl String // openAI conform model url
 }
 
 // ---------------------------------------------------------------------------

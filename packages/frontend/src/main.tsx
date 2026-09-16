@@ -25,7 +25,12 @@ fetch('/config/env.' + (process.env.NODE_ENV ?? 'development') + '.json')
     root.render(<App />)
   })
   .catch((error) => {
-    alert('Error loading config: ' + error)
+    root.render(
+      <div role="alert" style={{ padding: 32, fontFamily: 'sans-serif' }}>
+        <h1>NodeGrade could not start</h1>
+        <p>{error instanceof Error ? error.message : String(error)}</p>
+      </div>
+    )
   })
 
 const updateSW = registerSW({

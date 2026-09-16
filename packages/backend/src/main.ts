@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
@@ -29,6 +29,12 @@ async function bootstrap() {
   // and grow with prompt text, so the default would start rejecting saves partway
   // through a workshop. The DTO caps content well below this.
   app.useBodyParser('json', { limit: '8mb' });
+  app.setGlobalPrefix('api', {
+    exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'lti/basiclogin', method: RequestMethod.POST },
+    ],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

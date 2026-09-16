@@ -7,7 +7,6 @@ import {
   QuestionNode,
   SampleSolutionNode,
 } from '@haski/ta-lib';
-// import { addOnNodeAdded, runLgraph } from './Graph'; //TODO: migrate from old codebase
 import { executeLgraph } from '../core/Graph.js';
 
 @Injectable()
@@ -15,21 +14,22 @@ export class BenchmarkService {
   constructor(private readonly prisma: PrismaService) {}
 
   async runBenchmark({
-    path,
+    workflowId,
     data,
   }: {
-    path: string;
+    workflowId: string;
     data: { question: string; realAnswer: string; answer: string };
   }) {
-    const graph = await this.prisma.graph.findFirst({
-      where: { path },
+    const graph = await this.prisma.workflow.findUnique({
+      where: { id: workflowId },
+      select: { content: true },
     });
 
     if (!graph) throw new Error('Graph not found');
 
     const lgraph = new LiteGraph.LGraph();
     // addOnNodeAdded(lgraph, undefined, true);
-    lgraph.configure(JSON.parse(graph.graph));
+    lgraph.configure(JSON.parse(graph.content));
 
     // Fill in the answer and question
     lgraph.findNodesByClass(QuestionNode).forEach((node) => {

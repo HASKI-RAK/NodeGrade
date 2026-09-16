@@ -8,6 +8,7 @@ import type { Request } from 'express';
 import type { ResolvedWorkspace } from '../workspace.service.js';
 import { WorkspaceService } from '../workspace.service.js';
 import { parseBearerToken } from '../workspace-token.js';
+import { LTI_COOKIE_NAME, parseLtiCookie } from '../../lti/lti-cookie.js';
 
 export type RequestWithWorkspace = Request & {
   workspace?: ResolvedWorkspace;
@@ -30,15 +31,22 @@ export class WorkspaceGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithWorkspace>();
     const token = parseBearerToken(request.headers.authorization);
+    const ltiCookie = parseLtiCookie(
+      (request.cookies as Record<string, string> | undefined)?.[
+        LTI_COOKIE_NAME
+      ],
+    );
 
-    if (!token) {
+    if (!token && !ltiCookie?.ltiKey) {
       throw new UnauthorizedException({
         code: 'workspace_token_missing',
         message: 'A workspace access token is required.',
       });
     }
 
-    const workspace = await this.workspaces.resolveByToken(token);
+    const workspace = token
+      ? await this.workspaces.resolveByToken(token)
+      : await this.workspaces.resolveByLtiKey(ltiCookie?.ltiKey as string);
     if (!workspace) {
       // Deliberately indistinguishable from a malformed token: whether a given token
       // ever existed is not something a caller gets to probe.
@@ -48,7 +56,9 @@ export class WorkspaceGuard implements CanActivate {
       });
     }
 
-    request.workspace = workspace;
+    request.workspace = ltiCookie
+      ? { ...workspace, publishedProjection: !ltiCookie.isEditor }
+      : workspace;
     return true;
   }
 }

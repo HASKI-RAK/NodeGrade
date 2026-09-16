@@ -1,16 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 import { describeLaunch } from './lti-log.js';
+import { PrismaService } from '../prisma.service.js';
+import { slugify } from '../workflow/workflow-slug.js';
+
+type Launch = LtiBasicLaunchRequest & { oauth_consumer_key?: string };
 
 @Injectable()
 export class LtiService {
   private readonly logger = new Logger(LtiService.name);
 
-  handleBasicLogin(payload: LtiBasicLaunchRequest): {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async handleBasicLogin(payload: Launch): Promise<{
     redirectUrl: string;
     isEditor: boolean;
     timestamp: string;
-  } {
+    ltiKey: string;
+    workflowId: string;
+  }> {
     try {
       this.logger.debug(
         `Basic LTI Launch Request: ${JSON.stringify(describeLaunch(payload))}`,
@@ -58,7 +66,6 @@ export class LtiService {
         throw new Error(errorMsg);
       }
 
-      const userType = isEditor ? 'editor' : 'student';
       const activityName = payload.custom_activityname || 'default';
 
       // Validate activityName to prevent path traversal attacks
@@ -72,25 +79,53 @@ export class LtiService {
         throw new Error(errorMsg);
       }
 
-      const redirectUrl = `${frontendUrl.trim()}/ws/${userType}/${activityName}/1/1?user_id=${payload.user_id}&resource_link_title=${encodeURIComponent(
-        payload.resource_link_title,
-      )}&resource_link_id=${encodeURIComponent(
-        payload.resource_link_id,
-      )}&tool_consumer_instance_name=${encodeURIComponent(
-        payload.tool_consumer_instance_name,
-      )}&custom_activityname=${encodeURIComponent(
-        payload.custom_activityname || '',
-      )}&tool_consumer_info_product_family_code=${encodeURIComponent(
-        payload.tool_consumer_info_product_family_code,
-      )}&launch_presentation_locale=${encodeURIComponent(
-        payload.launch_presentation_locale,
-      )}&tool_consumer_instance_guid=${encodeURIComponent(
-        payload.tool_consumer_instance_guid,
-      )}&context_id=${encodeURIComponent(
+      const issuer =
+        payload.oauth_consumer_key || payload.tool_consumer_instance_guid;
+      const ltiKey = [
+        issuer,
         payload.context_id,
-      )}&context_title=${encodeURIComponent(
-        payload.context_title,
-      )}&context_type=${encodeURIComponent(payload.context_type)}`;
+        payload.resource_link_id,
+      ].join('|');
+      const workspace = await this.prisma.workspace.upsert({
+        where: { ltiKey },
+        update: { label: payload.context_title },
+        create: {
+          type: 'LTI',
+          label: payload.context_title,
+          ltiKey,
+        },
+        select: { id: true },
+      });
+      let workflow = await this.prisma.workflow.findFirst({
+        where: { workspaceId: workspace.id },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!workflow) {
+        const editorPath = `/ws/editor/${activityName}/1/1`;
+        const studentPath = `/ws/student/${activityName}/1/1`;
+        const [editorGraph, studentGraph] = await Promise.all([
+          this.prisma.legacyGraph.findUnique({ where: { path: editorPath } }),
+          this.prisma.legacyGraph.findUnique({ where: { path: studentPath } }),
+        ]);
+        const content =
+          editorGraph?.graph ??
+          '{"last_node_id":0,"last_link_id":0,"nodes":[],"links":[],"groups":[],"config":{},"extra":{},"version":0.4}';
+        workflow = await this.prisma.workflow.create({
+          data: {
+            workspaceId: workspace.id,
+            slug: slugify(activityName),
+            name: payload.resource_link_title || activityName,
+            content,
+            publishedContent: studentGraph?.graph ?? content,
+            publishedVersion: 1,
+            publishedAt: new Date(),
+          },
+          select: { id: true },
+        });
+      }
+      const userType = isEditor ? 'editor' : 'student';
+      const redirectUrl = `${frontendUrl.trim()}/${userType}/${workflow.id}?lti=1`;
       // The query string carries user_id and the person's display name, so only the
       // path is logged.
       this.logger.debug(`Generated redirect to: ${redirectUrl.split('?')[0]}`);
@@ -99,6 +134,8 @@ export class LtiService {
         redirectUrl,
         isEditor,
         timestamp,
+        ltiKey,
+        workflowId: workflow.id,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';

@@ -90,16 +90,54 @@ export class WorkflowService {
     });
   }
 
-  async get(workspaceId: string, id: string): Promise<WorkflowDetail> {
+  async get(
+    workspaceId: string,
+    id: string,
+    publishedProjection = false,
+  ): Promise<WorkflowDetail> {
     const workflow = await this.prisma.workflow.findFirst({
       where: { id, workspaceId },
-      select: { ...SUMMARY_SELECT, content: true },
+      select: { ...SUMMARY_SELECT, content: true, publishedContent: true },
     });
 
     // 404 rather than 403 for a workflow in another workspace: whether an id exists at
     // all is not something a caller gets to learn by probing.
     if (!workflow) throw this.notFound();
-    return workflow;
+    if (publishedProjection && workflow.publishedContent === null) {
+      throw new ConflictException({
+        code: 'workflow_not_published',
+        message: 'This workflow has not been published for students.',
+      });
+    }
+    const { publishedContent, ...detail } = workflow;
+    return {
+      ...detail,
+      content: publishedProjection
+        ? (publishedContent as string)
+        : workflow.content,
+    };
+  }
+
+  async getExecutionContent(
+    workspaceId: string,
+    id: string,
+    publishedProjection: boolean,
+  ): Promise<string> {
+    const workflow = await this.prisma.workflow.findFirst({
+      where: { id, workspaceId },
+      select: { content: true, publishedContent: true },
+    });
+    if (!workflow) throw this.notFound();
+    if (publishedProjection) {
+      if (workflow.publishedContent === null) {
+        throw new ConflictException({
+          code: 'workflow_not_published',
+          message: 'This workflow has not been published for students.',
+        });
+      }
+      return workflow.publishedContent;
+    }
+    return workflow.content;
   }
 
   async create(

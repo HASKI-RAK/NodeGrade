@@ -32,15 +32,10 @@ describe('useServerEvents', () => {
   it('tracks load, run, completion, and failure states', () => {
     const { socket, emit } = createSocket()
     const lgraph = new LGraph()
-    vi.spyOn(lgraph, 'configure').mockImplementation(() => undefined)
-    vi.spyOn(lgraph, 'setDirtyCanvas').mockImplementation(() => undefined)
     const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
 
     act(() => result.current.beginGraphLoad())
     expect(result.current.graphState).toBe('loading')
-
-    act(() => emit('graphLoaded', '{}'))
-    expect(result.current.graphState).toBe('ready')
 
     act(() => result.current.beginAttempt())
     expect(result.current.attemptState).toBe('running')

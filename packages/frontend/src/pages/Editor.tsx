@@ -1,278 +1,168 @@
 import { LiteGraph } from '@haski/ta-lib'
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import {
-  Box,
-  Button,
-  Divider,
-  Drawer,
-  IconButton,
-  styled,
-  Typography,
-  useTheme
-} from '@mui/material'
-import { memo, useCallback, useEffect, useMemo } from 'react'
+import { Box, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
-import Snackbar from '@/common/SnackBar'
-import { AppBar } from '@/components/AppBar'
+import { api, type Workflow } from '@/api/http'
 import Canvas from '@/components/Canvas'
-import CircularProgressWithLabel from '@/components/CircularProgressWithLabel'
 import TaskView from '@/components/TaskView'
+import { useAutosave } from '@/hooks/useAutosave'
 import { useEditorUI } from '@/hooks/useEditorUI'
-import { useGraphOperations } from '@/hooks/useGraphOperations'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
+import { workspaceStore } from '@/store/workspaceStore'
+import { configureDebugSession } from '@/utils/debugBridge'
 
-export const drawerWidth = 500
+const statusLabel = {
+  loading: 'Loading…',
+  saved: 'Saved',
+  dirty: 'Unsaved changes',
+  saving: 'Saving…',
+  conflict: 'Save conflict — reload required',
+  error: 'Save failed'
+} as const
 
-const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })<{
-  open?: boolean
-}>(({ theme, open }) => ({
-  flexGrow: 1,
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen
-  }),
-  marginRight: -drawerWidth,
-  ...(open && {
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen
-    }),
-    marginRight: 0
-  }),
-  /**
-   * This is necessary to enable the selection of content. In the DOM, the stacking order is determined
-   * by the order of appearance. Following this rule, elements appearing later in the markup will overlay
-   * those that appear earlier. Since the Drawer comes after the Main content, this adjustment ensures
-   * proper interaction with the underlying content.
-   */
-  position: 'relative'
-}))
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  padding: theme.spacing(0, 1),
-  // necessary for content to be below app bar
-  ...theme.mixins.toolbar,
-  justifyContent: 'flex-start'
-}))
+export const drawerWidth = 400
 
 export const Editor = () => {
-  // Get search params
-  const searchParams = new URLSearchParams(window.location.search)
-  const path = window.location.pathname
-
-  // Create LiteGraph instance
+  const { workflowId = '' } = useParams()
+  const [search] = useSearchParams()
+  const ltiMode =
+    search.get('lti') === '1' || window.location.pathname.startsWith('/student/')
+  const session = ltiMode ? null : workspaceStore.active()
+  const token = session?.token ?? null
+  const [workflow, setWorkflow] = useState<Workflow | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
+  const { size } = useEditorUI({ initialDrawerState: false })
 
-  // Use custom hooks
-  const {
-    open,
-    handleDrawerOpen,
-    handleDrawerClose,
-    size,
-    selectedGraph,
-    setSelectedGraph
-  } = useEditorUI()
+  useEffect(() => {
+    let active = true
+    void api
+      .workflow(workflowId, token)
+      .then(({ workflow: loaded }) => {
+        lgraph.configure(JSON.parse(loaded.content ?? '{}'))
+        lgraph.setDirtyCanvas(true, true)
+        if (active) setWorkflow(loaded)
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setLoadError(
+            error instanceof Error ? error.message : 'Workflow could not be loaded.'
+          )
+      })
+    return () => {
+      active = false
+    }
+  }, [lgraph, token, workflowId])
 
-  const { socket, connectionStatus, runGraph, loadGraph, saveGraph, publishGraph } =
-    useSocket({
-      socketPath: path.slice(1), // window.location.pathname without leading slash
-      lgraph: lgraph
+  const autosave = useAutosave({
+    graph: lgraph,
+    workflowId,
+    token,
+    initialVersion: workflow?.version ?? 1,
+    enabled: workflow !== null && !window.location.pathname.startsWith('/student/')
+  })
+  const { socket, connectionStatus, runGraph } = useSocket({
+    workflowId,
+    workspaceToken: token,
+    lgraph
+  })
+  const { outputs, question, image, maxInputChars, processingPercentage } =
+    useServerEvents({
+      socket,
+      lgraph
     })
 
-  const {
-    outputs,
-    question,
-    image,
-    maxInputChars,
-    processingPercentage,
-    snackbar,
-    handleSnackbarClose
-  } = useServerEvents({
-    socket,
-    lgraph: lgraph
-  })
-
-  const { handleDownloadGraph, handleUploadGraph } = useGraphOperations({
-    lgraph: lgraph
-  })
-
-  const memoizedOutputs = useMemo(() => outputs, [outputs])
-
-  const handleSubmit = useCallback(
-    (answer: string) => {
-      try {
-        runGraph({
-          answer,
-          xapi: {
-            custom_activityname: searchParams.get('custom_activityname') || '',
-            resource_link_title: searchParams.get('resource_link_title') || '',
-            tool_consumer_info_product_family_code:
-              searchParams.get('tool_consumer_info_product_family_code') || '',
-            launch_presentation_locale:
-              searchParams.get('launch_presentation_locale') || '',
-            tool_consumer_instance_guid:
-              searchParams.get('tool_consumer_instance_guid') || '',
-            context_id: searchParams.get('context_id') || '',
-            context_title: searchParams.get('context_title') || '',
-            context_type: searchParams.get('context_type') || ''
-          }
-        })
-      } catch (error) {
-        console.error('Error running graph:', error)
-        // The error message is handled in the useSocket hook
-      }
-    },
-    [runGraph, searchParams, path]
-  )
-
-  const handleSaveGraph = useCallback(() => {
-    // prompt user
-    const name = prompt('Enter graph name', path)
-    if (!name) return
-    saveGraph(name)
-  }, [saveGraph, path])
-
-  const handlePublishGraph = useCallback(() => {
-    publishGraph(path)
-  }, [publishGraph, path])
-
-  const handleClickChangeSocketUrl = useCallback(() => {
-    const newUrl = prompt('Enter new socket path', path.slice(1))
-    if (newUrl) {
-      window.location.href = '/editor/' + newUrl
-    }
-  }, [path])
-
-  /**
-   * Loads a new workflow from the server. Does not save the current graph nor does it run it.
-   * @param workflow - the ID of the workflow to load
-   */
-  const handleWorkflowChange = useCallback(
-    (workflow: string) => {
-      setSelectedGraph(workflow)
-      try {
-        loadGraph(workflow)
-      } catch (error) {
-        console.error('Error loading graph:', error)
-        // The error message is handled in the useSocket hook
-      }
-    },
-    [setSelectedGraph, loadGraph]
-  )
-
-  const theme = useTheme()
-
   useEffect(() => {
-    // Set the initial graph name from the URL
-    const initialGraphName = '/' + path.slice(1)
-    setSelectedGraph(initialGraphName)
+    configureDebugSession({
+      workspaceId: session?.id,
+      workflowId,
+      type: session?.type ?? (ltiMode ? 'LTI' : undefined),
+      status: () => autosave.status,
+      save: autosave.saveNow
+    })
+  }, [autosave.saveNow, autosave.status, ltiMode, session?.id, session?.type, workflowId])
 
-    // Only load the graph when the connection is established
-    if (connectionStatus === 'Connected') {
-      // Load the graph from the server
-      loadGraph(initialGraphName)
-    }
-  }, [connectionStatus])
+  const submit = useCallback((answer: string) => runGraph({ answer }), [runGraph])
 
-  useEffect(() => {
-    console.log('Registering nodes')
-  }, [])
+  if (loadError) {
+    return (
+      <Box p={4}>
+        <Typography color="error">{loadError}</Typography>
+        <Button component={Link} to="/">
+          Back to start
+        </Button>
+      </Box>
+    )
+  }
+  if (!workflow)
+    return (
+      <Box p={4}>
+        <CircularProgress />
+      </Box>
+    )
 
   return (
-    <>
-      <Box sx={{ display: 'flex' }}>
-        <AppBar
-          open={open}
-          currentPath={selectedGraph}
-          handleClickChangeSocketUrl={handleClickChangeSocketUrl}
-          handleSaveGraph={handleSaveGraph}
-          handleDrawerOpen={handleDrawerOpen}
-          handleDownloadGraph={handleDownloadGraph}
-          handleUploadGraph={handleUploadGraph}
-          handleWorkflowChange={handleWorkflowChange}
-          handlePublishGraph={handlePublishGraph}
-        />
-        <Main open={open}>
-          <Button
-            onClick={handleDrawerOpen}
-            variant="contained"
-            startIcon={
-              <ArrowBackIosNewIcon
-                sx={{
-                  transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: (theme) =>
-                    theme.transitions.create('transform', {
-                      duration: theme.transitions.duration.shortest
-                    })
-                }}
-              />
-            }
-            style={{ position: 'absolute', top: 0, right: 0 }}
-          >
-            {open ? 'Close' : 'Open'}
-          </Button>
-          <Canvas lgraph={lgraph} width={size.width} height={size.height} />
-        </Main>
-        {/* WS connection indicator status */}
-        <Typography
-          variant="body1"
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            padding: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            color: 'white',
-            marginRight: drawerWidth
-          }}
-        >
-          {connectionStatus}
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f7fb' }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={2}
+        px={2}
+        py={1}
+        bgcolor="white"
+      >
+        <Button component={Link} to="/">
+          Start
+        </Button>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {workflow.name}
         </Typography>
-        <Drawer
-          sx={{
-            width: drawerWidth,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: drawerWidth
-            }
-          }}
-          variant="persistent"
-          anchor="right"
-          open={open}
-        >
-          <DrawerHeader>
-            <IconButton onClick={handleDrawerClose}>
-              {theme.direction === 'rtl' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-            </IconButton>
-            <Typography variant="h6" noWrap component="div">
-              Task preview
-            </Typography>
-          </DrawerHeader>
-          <Divider />
+        {session?.type === 'WORKSHOP' && (
+          <Chip label={session.label ?? 'Workshop'} color="primary" />
+        )}
+        <Chip
+          label={statusLabel[autosave.status]}
+          color={
+            autosave.status === 'conflict' || autosave.status === 'error'
+              ? 'error'
+              : 'default'
+          }
+        />
+        <Chip label={connectionStatus} variant="outlined" />
+        {!window.location.pathname.startsWith('/student/') && (
+          <Button onClick={() => void autosave.saveNow()}>Save now</Button>
+        )}
+        {ltiMode && !window.location.pathname.startsWith('/student/') && (
+          <Button onClick={() => void api.publishWorkflow(null, workflowId)}>
+            Publish
+          </Button>
+        )}
+      </Stack>
+      <Stack direction={{ xs: 'column', md: 'row' }}>
+        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <Canvas
+            lgraph={lgraph}
+            width={Math.max(600, size.width - 420)}
+            height={Math.max(500, size.height - 72)}
+          />
+        </Box>
+        <Box sx={{ width: { xs: '100%', md: 400 }, p: 2, bgcolor: 'white' }}>
           {processingPercentage > 0 && processingPercentage < 100 && (
-            <CircularProgressWithLabel value={processingPercentage} />
+            <Typography>Running: {processingPercentage}%</Typography>
           )}
           <TaskView
             question={question}
             questionImage={image}
-            onSubmit={handleSubmit}
-            outputs={memoizedOutputs}
+            onSubmit={submit}
+            outputs={outputs}
             maxInputChars={maxInputChars}
           />
-        </Drawer>
-      </Box>
-      <Snackbar
-        open={snackbar.open}
-        handleClose={handleSnackbarClose}
-        message={snackbar.message}
-        severity={snackbar.severity}
-      />
-    </>
+        </Box>
+      </Stack>
+    </Box>
   )
 }
 
-export default memo(Editor)
+export default Editor

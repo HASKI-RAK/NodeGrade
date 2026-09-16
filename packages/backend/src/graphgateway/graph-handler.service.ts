@@ -15,17 +15,18 @@ import {
 import { Socket } from 'socket.io';
 import { emitEvent } from '../../utils/socket-emitter.js';
 import { buildNodeExecutionEnv } from '../config/node-env.js';
-import { GraphService } from '../graph/graph.service.js';
 import { executeLgraph } from '../core/Graph.js';
 import { XapiService } from '../xapi.service.js';
 import { LtiCookie } from '../utils/LtiCookie.js';
+import { WorkflowService } from '../workflow/workflow.service.js';
+import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 
 @Injectable()
 export class GraphHandlerService {
   private readonly logger = new Logger(GraphHandlerService.name);
 
   constructor(
-    private readonly graphService: GraphService,
+    private readonly workflows: WorkflowService,
     private readonly xapiService: XapiService,
   ) {}
 
@@ -199,13 +200,26 @@ export class GraphHandlerService {
   ) {
     this.logger.log(`RunGraph event received from client id: ${client.id}`);
     try {
+      const workspace = (client.data as { workspace?: ResolvedWorkspace })
+        .workspace;
+      if (!workspace) {
+        throw new Error('A workspace-authenticated socket is required.');
+      }
+      const auth = (client as unknown as { handshake?: { auth?: unknown } })
+        ?.handshake?.auth as { ltiCookie?: LtiCookie } | undefined;
+      const persistedContent = await this.workflows.getExecutionContent(
+        workspace.id,
+        payload.workflowId,
+        auth?.ltiCookie?.isEditor === false,
+      );
+      const graphContent = payload.graph ?? persistedContent;
       const lgraph = new LGraph();
 
       // Add the node execution handling BEFORE configuring
       this.addOnNodeAdded(lgraph, client);
 
       this.logger.debug('Configuring graph from client payload');
-      lgraph.configure(JSON.parse(payload.graph));
+      lgraph.configure(JSON.parse(graphContent));
 
       // Hydrate all nodes that were added during configure
       await this.hydrateExistingNodes(lgraph);
@@ -228,8 +242,6 @@ export class GraphHandlerService {
         .join(' ');
 
       // Extract LtiCookie data from the client's handshake (guarded for tests)
-      const auth = (client as unknown as { handshake?: { auth?: unknown } })
-        ?.handshake?.auth as { ltiCookie?: LtiCookie } | undefined;
       const ltiCookie: LtiCookie | undefined = auth?.ltiCookie;
 
       // Send initial xAPI statement before executing the graph
@@ -406,101 +418,6 @@ export class GraphHandlerService {
         operation: 'run',
         code: 'run-failed',
         message: 'The answer could not be evaluated. Please try again.',
-        retryable: true,
-      });
-    }
-  }
-
-  /**
-   * Handles the "saveGraph" event from a client. This method processes the
-   * incoming graph data, configures it into an LGraph instance, and saves it
-   * using the graph service. Upon successful saving, it emits a "graphSaved"
-   * event back to the client with the serialized graph data.
-   *
-   * @param client - The socket client instance that sent the event.
-   * @param payload - The payload containing the graph data and optional graph name.
-   *   - `payload.graph` - The graph configuration data to be saved.
-   *   - `payload.name` - (Optional) The name of the graph. Defaults to "UnnamedGraph" if not provided.
-   *
-   * @throws Will log an error if the graph saving process fails.
-   */
-  async handleSaveGraph(
-    client: Socket,
-    payload: ClientEventPayload['saveGraph'],
-  ) {
-    this.logger.log(`SaveGraph event received from client id: ${client.id}`);
-    const lgraph = new LGraph();
-    lgraph.configure(JSON.parse(payload.graph));
-
-    const pathname = payload.name || 'UnnamedGraph';
-    this.logger.debug(`Saving graph with pathname: ${pathname}`);
-
-    try {
-      await this.graphService.saveGraph(pathname, lgraph);
-      emitEvent(
-        client,
-        'graphSaved',
-        JSON.stringify(lgraph.serialize<SerializedGraph>()),
-      );
-    } catch (error) {
-      this.logger.error('Error saving graph: ', error);
-    }
-  }
-
-  async handleLoadGraph(
-    client: Socket,
-    payload: ClientEventPayload['loadGraph'],
-  ) {
-    this.logger.log(`LoadGraph event received from client id: ${client.id}`);
-    const pathname = payload || 'UnnamedGraph';
-    this.logger.debug(`Loading graph with pathname: ${pathname}`);
-
-    try {
-      const graph = await this.graphService.getGraph(pathname);
-      if (graph) {
-        const lgraph = new LGraph();
-
-        // Set up the node addition handler BEFORE configuring the graph
-        // This ensures new nodes added during configure() get hydrated
-        this.addOnNodeAdded(lgraph, client);
-
-        this.logger.debug(
-          `Configuring graph from DB for pathname: ${pathname}`,
-        );
-        lgraph.configure(JSON.parse(graph.graph));
-
-        // Hydrate all existing nodes that were added during configure()
-        await this.hydrateExistingNodes(lgraph);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-        const nodeCount = ((lgraph as any)._nodes as LGraphNode[]).length;
-        this.logger.debug(
-          `Graph loaded successfully with pathname: ${pathname}, nodes: ${nodeCount}`,
-        );
-
-        emitEvent(
-          client,
-          'graphLoaded',
-          JSON.stringify(lgraph.serialize<SerializedGraph>()),
-        );
-        this.sendImages(client, lgraph);
-        this.sendQuestion(client, lgraph);
-        emitEvent(client, 'maxInputChars', 1500);
-      } else {
-        this.logger.warn(`Graph not found with pathname: ${pathname}`);
-        emitEvent(client, 'graphOperationFailed', {
-          operation: 'load',
-          code: 'not-found',
-          message: `Graph with pathname "${pathname}" not found.`,
-          retryable: true,
-        });
-      }
-    } catch (error) {
-      this.logger.error('Error loading graph: ', error);
-      emitEvent(client, 'graphOperationFailed', {
-        operation: 'load',
-        code: 'load-failed',
-        message: 'The task could not be loaded. Please try again.',
         retryable: true,
       });
     }
