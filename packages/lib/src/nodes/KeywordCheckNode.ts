@@ -68,10 +68,12 @@ export class KeywordCheckNode extends LGraphNode {
       const SIMILARITY_WORKER_URL =
         (this.env && this.env.SIMILARITY_WORKER_URL) || 'http://193.174.195.36:8002'
       const threshold = 0.7
+      const executionSignal = this.executionSignal
       // Helper to fetch embedding
       async function fetchEmbedding(sentence: string): Promise<number[]> {
         const response = await fetch(`${SIMILARITY_WORKER_URL}/sentence_embedding`, {
           method: 'POST',
+          signal: executionSignal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sentence })
         })

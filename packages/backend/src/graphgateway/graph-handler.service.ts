@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   ClientEventPayload,
   LGraph,
@@ -6,24 +7,36 @@ import {
   AnswerInputNode,
   LGraphNode,
   ImageNode,
-  LiteGraph,
-  ServerEvent,
-  ServerEventPayload,
   OutputNode,
   QuestionNode,
 } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { emitEvent } from '../../utils/socket-emitter.js';
 import { buildNodeExecutionEnv } from '../config/node-env.js';
-import { executeLgraph } from '../core/Graph.js';
+import { configuration } from '../config/configuration.js';
+import { executeLgraph, GraphExecutionError } from '../core/Graph.js';
+import {
+  sanitizeExecutionError,
+  sanitizeTraceOutputs,
+} from '../core/trace-sanitizer.js';
 import { XapiService } from '../xapi.service.js';
 import { LtiCookie } from '../utils/LtiCookie.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 
+type ActiveRun = {
+  runId: string;
+  requestId: string;
+  clientId: string;
+  workspaceId: string;
+  workflowId: string;
+  controller: AbortController;
+};
+
 @Injectable()
 export class GraphHandlerService {
   private readonly logger = new Logger(GraphHandlerService.name);
+  private readonly activeRuns = new Map<string, ActiveRun>();
 
   constructor(
     private readonly workflows: WorkflowService,
@@ -39,20 +52,43 @@ export class GraphHandlerService {
   private readonly addOnNodeAdded = (
     lgraph: LGraph,
     client: Socket,
-    benchmark = false,
+    correlation: { runId: string; workflowId: string },
   ): void => {
     lgraph.onNodeAdded = (node: LGraphNode) => {
       this.logger.debug(
         `Node added to graph: ${node.title} (id: ${node.id}, type: ${node.type})`,
       );
 
-      if (!benchmark && client) {
-        node.emitEventCallback = (
-          event: ServerEvent<keyof ServerEventPayload>,
-        ) => {
-          client.emit(event.eventName, event.payload);
+      node.emitEventCallback = (event) => {
+        if (event.eventName !== 'outputSet') return;
+        const payload = event.payload as {
+          uniqueId: string;
+          type: string;
+          label: string;
+          value: unknown;
         };
-      }
+        const output = sanitizeTraceOutputs(
+          [
+            {
+              slot: 0,
+              name: payload.label,
+              type: payload.type,
+              value: payload.value,
+              truncated: false,
+            },
+          ],
+          [
+            node.env?.OPENAI_API_KEY as string | undefined,
+            node.env?.BEARER_TOKEN as string | undefined,
+          ],
+        )[0];
+        client.emit(event.eventName, {
+          ...payload,
+          value: output.value,
+          ...correlation,
+          timestamp: new Date().toISOString(),
+        });
+      };
 
       // Hydrate node environment on load so nodes can initialize themselves
       try {
@@ -70,36 +106,29 @@ export class GraphHandlerService {
           `Node env setup error for ${node.title} (${node.type}): ${String(e)}`,
         );
       }
-
-      const onExecute = node.onExecute?.bind(node) as typeof node.onExecute;
-      node.onExecute = async () => {
-        this.logger.debug(`Executing node: ${node.title}`);
-
-        if (!benchmark && client) emitEvent(client, 'nodeExecuting', node.id);
-
-        node.color = LiteGraph.NODE_DEFAULT_COLOR;
-
-        try {
-          await onExecute?.();
-
-          if (!benchmark && client) {
-            this.logger.debug(`Executed node: ${node.title}`);
-            emitEvent(client, 'nodeExecuted', node.id);
-          }
-        } catch (error: unknown) {
-          this.logger.error(error);
-          node.color = '#ff0000';
-
-          if (!benchmark && client) {
-            emitEvent(client, 'nodeErrorOccured', {
-              nodeId: node.id,
-              error: `Error while executing node: '${node.title}`,
-            });
-          }
-        }
-      };
     };
   };
+
+  cancelRun(client: Socket, payload: ClientEventPayload['cancelRun']): void {
+    const workspace = (client.data as { workspace?: ResolvedWorkspace })
+      .workspace;
+    const run = this.activeRuns.get(payload.runId);
+    if (
+      !workspace ||
+      !run ||
+      run.clientId !== client.id ||
+      run.workspaceId !== workspace.id ||
+      run.workflowId !== payload.workflowId
+    )
+      return;
+    run.controller.abort();
+  }
+
+  cancelRunsForClient(clientId: string): void {
+    for (const run of this.activeRuns.values()) {
+      if (run.clientId === clientId) run.controller.abort();
+    }
+  }
 
   private readonly sendImages = (client: Socket, lgraph: LGraph): void => {
     for (const node of lgraph.findNodesByClass(ImageNode)) {
@@ -199,12 +228,29 @@ export class GraphHandlerService {
     payload: ClientEventPayload['runGraph'],
   ) {
     this.logger.log(`RunGraph event received from client id: ${client.id}`);
+    let run: ActiveRun | undefined;
     try {
       const workspace = (client.data as { workspace?: ResolvedWorkspace })
         .workspace;
       if (!workspace) {
         throw new Error('A workspace-authenticated socket is required.');
       }
+      run = {
+        runId: randomUUID(),
+        requestId: payload.requestId,
+        clientId: client.id,
+        workspaceId: workspace.id,
+        workflowId: payload.workflowId,
+        controller: new AbortController(),
+      };
+      this.activeRuns.set(run.runId, run);
+      emitEvent(client, 'runStateChanged', {
+        requestId: run.requestId,
+        runId: run.runId,
+        workflowId: run.workflowId,
+        state: 'queued',
+        timestamp: new Date().toISOString(),
+      });
       const auth = (client as unknown as { handshake?: { auth?: unknown } })
         ?.handshake?.auth as { ltiCookie?: LtiCookie } | undefined;
       const persistedContent = await this.workflows.getExecutionContent(
@@ -216,7 +262,7 @@ export class GraphHandlerService {
       const lgraph = new LGraph();
 
       // Add the node execution handling BEFORE configuring
-      this.addOnNodeAdded(lgraph, client);
+      this.addOnNodeAdded(lgraph, client, run);
 
       this.logger.debug('Configuring graph from client payload');
       lgraph.configure(JSON.parse(graphContent));
@@ -302,13 +348,52 @@ export class GraphHandlerService {
         });
       }
 
-      await executeLgraph(lgraph, (percentage) => {
-        emitEvent(
-          client,
-          'percentageUpdated',
-          Number(percentage.toFixed(2)) * 100,
-        );
+      emitEvent(client, 'runStateChanged', {
+        requestId: run.requestId,
+        runId: run.runId,
+        workflowId: run.workflowId,
+        state: 'running',
+        timestamp: new Date().toISOString(),
       });
+      const nodeEnv = buildNodeExecutionEnv();
+      await executeLgraph(
+        lgraph,
+        (percentage) => {
+          emitEvent(client, 'percentageUpdated', {
+            runId: run!.runId,
+            workflowId: run!.workflowId,
+            timestamp: new Date().toISOString(),
+            percentage: Number(percentage.toFixed(2)) * 100,
+          });
+        },
+        false,
+        {
+          signal: run.controller.signal,
+          timeoutMs: configuration().runNodeTimeoutMs,
+          mapOutputs: (outputs) =>
+            sanitizeTraceOutputs(outputs, [
+              nodeEnv.OPENAI_API_KEY,
+              nodeEnv.BEARER_TOKEN,
+            ]),
+          onNodeEvent: (event) => {
+            emitEvent(client, 'nodeExecutionChanged', {
+              runId: run!.runId,
+              workflowId: run!.workflowId,
+              nodeId: Number(event.node.id),
+              nodeTitle: event.node.title,
+              nodeType: event.node.type ?? 'unknown',
+              state: event.state,
+              timestamp: event.timestamp,
+              startedAt: event.startedAt,
+              durationMs: event.durationMs,
+              outputs: event.outputs,
+              error: event.error
+                ? sanitizeExecutionError(event.error)
+                : undefined,
+            });
+          },
+        },
+      );
 
       // Calculate execution time in milliseconds
       const executionTimeMs = Date.now() - startTime;
@@ -407,19 +492,54 @@ export class GraphHandlerService {
         });
       }
 
-      emitEvent(
-        client,
-        'graphFinished',
-        JSON.stringify(lgraph.serialize<SerializedGraph>()),
-      );
+      emitEvent(client, 'runStateChanged', {
+        requestId: run.requestId,
+        runId: run.runId,
+        workflowId: run.workflowId,
+        state: 'completed',
+        timestamp: new Date().toISOString(),
+      });
+      emitEvent(client, 'graphFinished', {
+        runId: run.runId,
+        workflowId: run.workflowId,
+        timestamp: new Date().toISOString(),
+        graph: JSON.stringify(lgraph.serialize<SerializedGraph>()),
+      });
     } catch (error) {
       this.logger.error('Error running graph: ', error);
-      emitEvent(client, 'graphOperationFailed', {
-        operation: 'run',
-        code: 'run-failed',
-        message: 'The answer could not be evaluated. Please try again.',
-        retryable: true,
-      });
+      if (run) {
+        const traceError =
+          error instanceof GraphExecutionError
+            ? sanitizeExecutionError(error.traceError)
+            : sanitizeExecutionError({
+                code: 'node_failed',
+                message: 'Run failed.',
+              });
+        emitEvent(client, 'runStateChanged', {
+          requestId: run.requestId,
+          runId: run.runId,
+          workflowId: run.workflowId,
+          state: traceError.code === 'cancelled' ? 'cancelled' : 'failed',
+          timestamp: new Date().toISOString(),
+          error: traceError,
+        });
+      }
+      const cancelled =
+        error instanceof GraphExecutionError &&
+        error.traceError.code === 'cancelled';
+      if (!cancelled) {
+        emitEvent(client, 'graphOperationFailed', {
+          operation: 'run',
+          code: 'run-failed',
+          message: 'The answer could not be evaluated. Please try again.',
+          retryable: true,
+          runId: run?.runId,
+          workflowId: run?.workflowId,
+          timestamp: run ? new Date().toISOString() : undefined,
+        });
+      }
+    } finally {
+      if (run) this.activeRuns.delete(run.runId);
     }
   }
 }

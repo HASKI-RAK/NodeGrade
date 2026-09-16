@@ -48,6 +48,7 @@ export class SentenceTransformer extends LGraphNode {
 
     const response_one = await fetch(url, {
       method: 'POST',
+      signal: this.executionSignal,
       headers: {
         'Content-Type': 'application/json'
       },

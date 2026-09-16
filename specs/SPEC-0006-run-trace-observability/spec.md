@@ -2,11 +2,11 @@
 id: SPEC-0006
 type: feature
 title: Run and trace observability
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0004
 related:
@@ -328,8 +328,8 @@ Then no events from workspace A's run are delivered to workspace B
 
 ## Assumptions
 
-- Existing `nodeExecuting` / `nodeExecuted` events can be extended without breaking
-  the current editor behavior.
+- `nodeExecutionChanged` replaces the legacy node lifecycle events after frontend
+  consumers migrate.
 
 ## Open questions
 
@@ -343,9 +343,10 @@ Then no events from workspace A's run are delivered to workspace B
 
 ## Change history
 
-| Date | Change |
-|---|---|
-| 2026-09-15 | Initial specification created |
-| 2026-09-15 | Fail-fast decision: global fail-fast (FR-008, AC-006); edge case updated |
+| Date       | Change                                                                                                                                                                                                                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-15 | Initial specification created                                                                                                                                                                                                                                                                                   |
+| 2026-09-15 | Fail-fast decision: global fail-fast (FR-008, AC-006); edge case updated                                                                                                                                                                                                                                        |
 | 2026-09-15 | Added run correlation ids (FR-009, AC-007), run states incl. skipped/cancelled (FR-010), execution timeout (FR-011, AC-008), cancellation (FR-012, AC-009), trace delivery scoped to run owner (FR-013, AC-010), sanitized provider errors (FR-014); trace visibility made an explicit policy in business rules |
-| 2026-09-15 | Review revision 2: run states and node-execution states separated — RunState = queued|running|completed|failed|cancelled (FR-010), NodeExecutionState adds skipped (FR-010a); cancellation marks not-started nodes cancelled; fail-fast clarified for in-flight parallel nodes: stop starting new nodes, cancel in-flight where possible, disregard late results (FR-008, AC-009a) |
+| 2026-09-15 | Review revision 2: run states and node-execution states separated — RunState = queued                                                                                                                                                                                                                           | running | completed | failed | cancelled (FR-010), NodeExecutionState adds skipped (FR-010a); cancellation marks not-started nodes cancelled; fail-fast clarified for in-flight parallel nodes: stop starting new nodes, cancel in-flight where possible, disregard late results (FR-008, AC-009a) |
+| 2026-09-16 | Implemented ephemeral owner-scoped run correlation, lifecycle execution, cancellation, timeout, output redaction and truncation, Test/Trace UI, and trace-to-canvas selection.                                                                                                                                  |

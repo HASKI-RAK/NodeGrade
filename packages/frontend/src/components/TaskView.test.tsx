@@ -56,4 +56,54 @@ describe('TaskView', () => {
     expect(onSubmit).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'Wird ausgewertet...' })).toBeDisabled()
   })
+
+  it('shows trace outputs, expands values, cancels, and selects a node', async () => {
+    const onCancel = vi.fn()
+    const onSelectTraceNode = vi.fn()
+    const user = userEvent.setup()
+    const longValue = 'x'.repeat(600)
+
+    render(
+      <TaskView
+        question="Question"
+        onSubmit={vi.fn()}
+        runId="run-1"
+        runState="running"
+        onCancel={onCancel}
+        onSelectTraceNode={onSelectTraceNode}
+        trace={[
+          {
+            runId: 'run-1',
+            workflowId: 'workflow-1',
+            nodeId: 7,
+            nodeTitle: 'Intermediate',
+            nodeType: 'basic/watch',
+            state: 'completed',
+            timestamp: '2026-09-16T00:00:00.000Z',
+            durationMs: 12,
+            outputs: [
+              {
+                slot: 0,
+                name: 'Value',
+                type: 'string',
+                value: longValue,
+                truncated: false
+              }
+            ]
+          }
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Run: running')).toBeVisible()
+    expect(screen.getByText('12 ms')).toBeVisible()
+    expect(screen.queryByText(longValue)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(screen.getByText(longValue)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Select Intermediate' }))
+
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(onSelectTraceNode).toHaveBeenCalledWith(7)
+  })
 })

@@ -3,7 +3,7 @@
 /* eslint-disable immutable/no-this */
 import { WebSocket } from 'ws'
 
-import { OutputType, ServerEvent, ServerEventPayload } from '../events'
+import { OutputType, RunCorrelation, ServerEventPayload } from '../events'
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
 
 /**
@@ -11,7 +11,7 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  * path: output/feedback
  */
 export class OutputNode extends LGraphNode {
-  properties: ServerEventPayload['outputSet']
+  properties: Omit<ServerEventPayload['outputSet'], keyof RunCorrelation>
   constructor() {
     super()
     this.title = 'feedback output'
@@ -57,8 +57,8 @@ export class OutputNode extends LGraphNode {
     if (this.inputs[0]) {
       this.properties.value = this.getInputData(0)
     }
-    const output: ServerEvent<'outputSet'> = {
-      eventName: 'outputSet',
+    const output = {
+      eventName: 'outputSet' as const,
       payload: {
         uniqueId: this.id.toString(),
         type: this.properties.type,

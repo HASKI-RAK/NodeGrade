@@ -15,6 +15,7 @@ export type AppConfig = {
   corsOrigins: string[];
   frontendUrl: string;
   cookiesInsecure: boolean;
+  runNodeTimeoutMs: number;
   workers: {
     modelWorkerUrl: string;
     similarityWorkerUrl: string;
@@ -37,6 +38,7 @@ export const configuration = (): AppConfig => ({
   corsOrigins: resolveCorsOrigins(),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   cookiesInsecure: toBool(process.env.COOKIE_INSECURE),
+  runNodeTimeoutMs: Number(process.env.RUN_NODE_TIMEOUT_MS ?? 120_000),
   workers: {
     modelWorkerUrl: process.env.MODEL_WORKER_URL || LEGACY_MODEL_WORKER_URL,
     similarityWorkerUrl:

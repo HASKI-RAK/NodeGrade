@@ -37,11 +37,24 @@ describe('useServerEvents', () => {
     act(() => result.current.beginGraphLoad())
     expect(result.current.graphState).toBe('loading')
 
-    act(() => result.current.beginAttempt())
+    act(() => result.current.beginAttempt('request-1'))
     expect(result.current.attemptState).toBe('running')
 
     act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-1',
+        runId: 'run-1',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:00.000Z'
+      })
+    )
+
+    act(() =>
       emit('outputSet', {
+        runId: 'run-1',
+        workflowId: 'workflow-1',
+        timestamp: '2026-09-16T00:00:01.000Z',
         uniqueId: 'result',
         type: 'text',
         label: 'Result',
@@ -50,10 +63,26 @@ describe('useServerEvents', () => {
     )
     expect(result.current.outputs).toHaveProperty('result')
 
-    act(() => result.current.beginAttempt())
+    act(() => result.current.beginAttempt('request-2'))
     expect(result.current.outputs).toBeUndefined()
 
-    act(() => emit('graphFinished', '{}'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-2',
+        runId: 'run-2',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:02.000Z'
+      })
+    )
+    act(() =>
+      emit('graphFinished', {
+        runId: 'run-2',
+        workflowId: 'workflow-1',
+        timestamp: '2026-09-16T00:00:03.000Z',
+        graph: '{}'
+      })
+    )
     expect(result.current.attemptState).toBe('completed')
 
     act(() => {
@@ -66,6 +95,48 @@ describe('useServerEvents', () => {
     })
     expect(result.current.graphState).toBe('not-found')
     expect(result.current.failureMessage).toBe('Task not found')
+  })
+
+  it('binds request to run and filters interleaved trace events', () => {
+    const { socket, emit } = createSocket()
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph: new LGraph() }))
+
+    act(() => result.current.beginAttempt('request-current'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-old',
+        runId: 'run-old',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:00.000Z'
+      })
+    )
+    expect(result.current.runId).toBeUndefined()
+
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-current',
+        runId: 'run-current',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:01.000Z'
+      })
+    )
+
+    const step = {
+      workflowId: 'workflow-1',
+      nodeId: 1,
+      nodeTitle: 'Answer Input',
+      nodeType: 'input/answer',
+      state: 'completed',
+      timestamp: '2026-09-16T00:00:02.000Z'
+    }
+    act(() => emit('nodeExecutionChanged', { ...step, runId: 'run-old' }))
+    act(() => emit('nodeExecutionChanged', { ...step, runId: 'run-current' }))
+
+    expect(result.current.runId).toBe('run-current')
+    expect(result.current.trace).toHaveLength(1)
+    expect(result.current.trace[0].runId).toBe('run-current')
   })
 
   it('removes the exact socket listeners on unmount', () => {

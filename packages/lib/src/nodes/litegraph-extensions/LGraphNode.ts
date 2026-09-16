@@ -3,7 +3,7 @@ import { WebSocket } from 'ws'
 
 import WebSocketNode from '../behavior/WebSocketNode'
 import { InOut } from '../types/NodeLinkMessage'
-import { ServerEvent, ServerEventPayload } from '../../events'
+import { ServerEventPayload } from '../../events'
 
 interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
@@ -21,7 +21,13 @@ interface ILGraphNode extends LGN {
 export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNode {
   env?: Record<string, unknown> | undefined
 
-  emitEventCallback?(event: ServerEvent<keyof ServerEventPayload>): void
+  /** Transient execution context. Never serialized with the graph. */
+  executionSignal?: AbortSignal
+
+  emitEventCallback?(event: {
+    eventName: keyof ServerEventPayload
+    payload: unknown
+  }): void
 
   static path: string
   static getPath(): string {

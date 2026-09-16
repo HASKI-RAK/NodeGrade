@@ -139,13 +139,23 @@ export const Editor = () => {
     enabled: workflow !== null && !student
   })
   const { history, canUndo, canRedo } = useGraphHistory(lgraph, canvas)
-  const { socket, connectionStatus, runGraph } = useSocket({
+  const { socket, connectionStatus, runGraph, cancelRun } = useSocket({
     workflowId,
     workspaceToken: token,
     lgraph
   })
-  const { outputs, question, image, maxInputChars, processingPercentage } =
-    useServerEvents({ socket, lgraph })
+  const {
+    outputs,
+    question,
+    image,
+    maxInputChars,
+    processingPercentage,
+    attemptState,
+    runId,
+    runState,
+    trace,
+    beginAttempt
+  } = useServerEvents({ socket, lgraph })
 
   useEffect(() => {
     configureDebugSession({
@@ -190,6 +200,20 @@ export const Editor = () => {
       if (!taskView.current?.submit()) taskView.current?.focusAnswer()
     })
   }, [showPreview])
+
+  const selectTraceNode = useCallback(
+    (nodeId: number) => {
+      const node = lgraph.getNodeById(nodeId)
+      if (!node || !canvas) return
+      canvas.selectNode(node)
+      canvas.centerOnNode(node)
+      setSelection([node])
+      if (mobile) setRailOpen(false)
+      else setRailMode('preview')
+      lgraph.setDirtyCanvas(true, true)
+    },
+    [canvas, lgraph, mobile]
+  )
 
   const reloadLatest = useCallback(async () => {
     if (!window.confirm('Discard local edits and load the latest saved workflow?')) return
@@ -383,9 +407,15 @@ export const Editor = () => {
               ref={taskView}
               question={question}
               questionImage={image}
-              onSubmit={(answer) => runGraph({ answer })}
+              onSubmit={(answer) => beginAttempt(runGraph({ answer }))}
               outputs={outputs}
               maxInputChars={maxInputChars}
+              disabled={attemptState === 'running' || runState === 'queued'}
+              runId={runId}
+              runState={runState}
+              trace={trace}
+              onCancel={() => runId && cancelRun(runId)}
+              onSelectTraceNode={selectTraceNode}
             />
           ) : (
             <NodeInspector selection={selection} history={history} />

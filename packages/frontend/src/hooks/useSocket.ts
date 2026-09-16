@@ -6,7 +6,10 @@ import type { Socket } from 'socket.io-client'
 import { attachDebugSocket, detachDebugSocket } from '@/utils/debugBridge'
 import { connectSocket, disconnectSocket, emitEvent, getSocket } from '@/utils/socket'
 
-type RunParams = Omit<ClientEventPayload['runGraph'], 'graph' | 'workflowId'>
+type RunParams = Omit<
+  ClientEventPayload['runGraph'],
+  'graph' | 'workflowId' | 'requestId'
+>
 
 export function useSocket({
   workflowId,
@@ -41,14 +44,25 @@ export function useSocket({
   const runGraph = useCallback(
     (params: RunParams) => {
       if (!socket?.connected) throw new Error('Connection to the server is unavailable.')
+      const requestId = crypto.randomUUID()
       emitEvent<ClientEventPayload['runGraph']>('runGraph', {
         ...params,
+        requestId,
         workflowId,
         graph: JSON.stringify(lgraph.serialize<SerializedGraph>())
       })
+      return requestId
     },
     [lgraph, socket, workflowId]
   )
 
-  return { socket, connectionStatus, runGraph }
+  const cancelRun = useCallback(
+    (runId: string) => {
+      if (!socket?.connected) return
+      emitEvent<ClientEventPayload['cancelRun']>('cancelRun', { runId, workflowId })
+    },
+    [socket, workflowId]
+  )
+
+  return { socket, connectionStatus, runGraph, cancelRun }
 }

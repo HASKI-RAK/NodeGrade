@@ -14,6 +14,29 @@ export type SerializedGraph = serializedLGraph<
 
 export type OutputType = 'text' | 'score' | 'classifications'
 
+export type RunState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type NodeExecutionState =
+  'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+
+export type TraceError = {
+  code: 'node_failed' | 'timeout' | 'cancelled'
+  message: string
+}
+
+export type TraceOutput = {
+  slot: number
+  name: string
+  type: string
+  value: unknown
+  truncated: boolean
+}
+
+export type RunCorrelation = {
+  runId: string
+  workflowId: string
+  timestamp: string
+}
+
 export type GraphOperationFailure = {
   operation: 'load' | 'run'
   code: 'not-found' | 'load-failed' | 'run-failed'
@@ -23,11 +46,24 @@ export type GraphOperationFailure = {
 
 // type that matches ServerEventName with payload
 export type ServerEventPayload = {
-  graphFinished: string //SerializedGraph // graph run finished
-  nodeExecuting: number // node id
-  nodeExecuted: number // node id
-  graphOperationFailed: GraphOperationFailure
-  outputSet: {
+  runStateChanged: RunCorrelation & {
+    requestId: string
+    state: RunState
+    error?: TraceError
+  }
+  nodeExecutionChanged: RunCorrelation & {
+    nodeId: number
+    nodeTitle: string
+    nodeType: string
+    state: NodeExecutionState
+    startedAt?: string
+    durationMs?: number
+    outputs?: TraceOutput[]
+    error?: TraceError
+  }
+  graphFinished: RunCorrelation & { graph: string }
+  graphOperationFailed: GraphOperationFailure & Partial<RunCorrelation>
+  outputSet: RunCorrelation & {
     uniqueId: string
     type: OutputType
     label: string
@@ -36,19 +72,16 @@ export type ServerEventPayload = {
   //feedback: string // string from the feedback node
   //successPercentage: number // can be used for cosine similarity and is indicated by a progress bar in the frontend. used by successPercentageNode
   maxInputChars: number // used by maxInputCharsNode. Can be used to limit how many characters a user can input. Default is 700
-  nodeErrorOccured: {
-    nodeId: number
-    error: string
-  }
   questionSet: string // question from the question node
   questionImageSet: string // image from the question node
-  percentageUpdated: number // displays in the frontend as a progress bar from 0 to 100. Server calculates the percentage of the graph that has been processed
+  percentageUpdated: RunCorrelation & { percentage: number }
 }
 
 export type ServerBenchmarkPostPayload = (string | number | string[])[]
 
 export type ClientEventPayload = {
   runGraph: {
+    requestId: string
     workflowId: string
     answer: string
     /** Unsaved editor state. The server falls back to persisted workflow content. */
@@ -64,6 +97,10 @@ export type ClientEventPayload = {
       context_title: string
       context_type: string
     }
+  }
+  cancelRun: {
+    runId: string
+    workflowId: string
   }
 }
 

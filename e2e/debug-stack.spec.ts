@@ -2,8 +2,14 @@ import { expect, test } from '@playwright/test'
 
 type DebugBridge = {
   version: 2
-  listNodes(): Array<{ id: number; title: string; type: string; properties: Record<string, unknown> }>
+  listNodes(): Array<{
+    id: number
+    title: string
+    type: string
+    properties: Record<string, unknown>
+  }>
   setNodeProperty(id: number, property: string, value: unknown): boolean
+  selectedNodeIds(): number[]
   socketState(): { connected: boolean }
   workspaceState(): { workspaceId?: string; workflowId?: string; type?: string }
   saveStatus(): string
@@ -25,34 +31,64 @@ const joinWorkshop = async (page: import('@playwright/test').Page) => {
   await page.waitForURL(/\/editor\//)
   await page.waitForFunction(() => window.__NODEGRADE_DEBUG__?.version === 2)
   await expect(page.locator('#mycanvas')).toBeVisible()
-  await expect.poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.socketState().connected)).toBe(true)
+  await expect
+    .poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.socketState().connected))
+    .toBe(true)
 }
 
 test('deterministic model exposes OpenAI-compatible contract', async ({ request }) => {
   const models = await request.get(`${modelUrl}/v1/models`)
   await expect(models).toBeOK()
-  await expect(models.json()).resolves.toMatchObject({ object: 'list', data: [{ id: 'nodegrade-deterministic' }] })
+  await expect(models.json()).resolves.toMatchObject({
+    object: 'list',
+    data: [{ id: 'nodegrade-deterministic' }]
+  })
 })
 
 test('workshop workflow autosaves and executes', async ({ page }) => {
   await joinWorkshop(page)
   const nodes = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
-  expect(nodes).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Question' }), expect.objectContaining({ title: 'Answer Input' })]))
+  expect(nodes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ title: 'Question' }),
+      expect.objectContaining({ title: 'Answer Input' })
+    ])
+  )
   const first = nodes?.[0]
   expect(first).toBeDefined()
-  await page.evaluate((id) => window.__NODEGRADE_DEBUG__?.setNodeProperty(id, 'wave1Marker', 'persisted'), first?.id)
-  await expect.poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveStatus())).toBe('dirty')
-  await expect(page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveNow())).resolves.toBe('saved')
-  const started = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.runGraph('Playwright answer'))
-  expect(started).toBe(true)
+  await page.evaluate(
+    (id) => window.__NODEGRADE_DEBUG__?.setNodeProperty(id, 'wave1Marker', 'persisted'),
+    first?.id
+  )
+  await expect
+    .poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveStatus()))
+    .toBe('dirty')
+  await expect(page.evaluate(() => window.__NODEGRADE_DEBUG__?.saveNow())).resolves.toBe(
+    'saved'
+  )
+  await page.getByRole('button', { name: 'Preview' }).click()
+  await page.getByLabel('Antwort').fill('Playwright deterministic answer')
+  await page.getByRole('button', { name: 'Absenden' }).click()
   await page.evaluate(() => window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished'))
+  await expect(page.getByText('Run: completed')).toBeVisible()
+  const traceSteps = page.locator('[aria-label^="Select "]')
+  await expect(traceSteps).toHaveCount(3)
+  await expect(page.locator('[aria-label="Run trace"] pre').first()).toBeVisible()
+  await traceSteps.first().click()
+  await expect
+    .poll(() => page.evaluate(() => window.__NODEGRADE_DEBUG__?.selectedNodeIds()))
+    .toContain(first?.id)
   await page.reload()
   await page.waitForFunction(() => window.__NODEGRADE_DEBUG__?.version === 2)
   const reloaded = await page.evaluate(() => window.__NODEGRADE_DEBUG__?.listNodes())
-  expect(reloaded?.find((node) => node.id === first?.id)?.properties.wave1Marker).toBe('persisted')
+  expect(reloaded?.find((node) => node.id === first?.id)?.properties.wave1Marker).toBe(
+    'persisted'
+  )
 })
 
-test('two participants joining one code receive isolated workspaces', async ({ browser }) => {
+test('two participants joining one code receive isolated workspaces', async ({
+  browser
+}) => {
   const firstContext = await browser.newContext()
   const secondContext = await browser.newContext()
   const first = await firstContext.newPage()

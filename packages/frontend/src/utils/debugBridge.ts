@@ -20,6 +20,7 @@ export type NodeGradeDebugBridge = {
   listNodes(): DebugNode[]
   getNode(id: number): DebugNode | undefined
   selectNode(id: number): boolean
+  selectedNodeIds(): number[]
   addNode(type: string, position?: [number, number]): DebugNode
   connectNodes(
     sourceId: number,
@@ -128,6 +129,7 @@ export function installDebugBridge(graph: LGraph, canvas: LGraphCanvas) {
       canvas.centerOnNode(node)
       return true
     },
+    selectedNodeIds: () => Object.keys(canvas.selected_nodes).map(Number),
     addNode(type, position = [100, 100]) {
       const node = LiteGraph.createNode(type)
       node.pos = position

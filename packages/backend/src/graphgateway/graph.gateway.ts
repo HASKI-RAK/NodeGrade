@@ -61,6 +61,7 @@ export class GraphGateway
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client id:${client.id} disconnected`);
+    this.graphHandlerService.cancelRunsForClient(client.id);
   }
 
   @SubscribeMessage('runGraph')
@@ -69,5 +70,13 @@ export class GraphGateway
     @MessageBody() payload: ClientEventPayload['runGraph'],
   ) {
     await this.graphHandlerService.handleRunGraph(client, payload);
+  }
+
+  @SubscribeMessage('cancelRun')
+  handleCancelRun(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: ClientEventPayload['cancelRun'],
+  ) {
+    this.graphHandlerService.cancelRun(client, payload);
   }
 }

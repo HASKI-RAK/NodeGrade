@@ -217,7 +217,8 @@ export class LLMNode extends LGraphNode {
       }
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers
+        headers,
+        signal: this.executionSignal
       })
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -243,6 +244,7 @@ export class LLMNode extends LGraphNode {
     try {
       const response = await fetch('https://api.openai.com/v1/models', {
         method: 'GET',
+        signal: this.executionSignal,
         headers: {
           Authorization: `Bearer ${apiKey}`
         }
@@ -291,6 +293,7 @@ export class LLMNode extends LGraphNode {
     // Try the modern Responses API with retry loop for parameter errors
     let response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
+      signal: this.executionSignal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`
@@ -323,6 +326,7 @@ export class LLMNode extends LGraphNode {
         // Retry Responses API without the bad parameter
         response = await fetch('https://api.openai.com/v1/responses', {
           method: 'POST',
+          signal: this.executionSignal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiKey}`
@@ -348,6 +352,7 @@ export class LLMNode extends LGraphNode {
       }
       response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        signal: this.executionSignal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`
@@ -376,6 +381,7 @@ export class LLMNode extends LGraphNode {
 
           response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
+            signal: this.executionSignal,
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${apiKey}`
@@ -494,6 +500,7 @@ export class LLMNode extends LGraphNode {
 
     const response = await fetch(workerUrl + '/v1/chat/completions', {
       method: 'POST',
+      signal: this.executionSignal,
       headers,
       body: required_input
     })
@@ -516,8 +523,7 @@ export class LLMNode extends LGraphNode {
       this.models = available
       // reconstruct model source sets from serialized map if available
       const srcMap = (this.properties as any).available_model_sources as
-        | Record<string, 'local' | 'openai'>
-        | undefined
+        Record<string, 'local' | 'openai'> | undefined
       this.openAiModelSet = new Set()
       this.localModelSet = new Set()
       if (srcMap) {
