@@ -142,3 +142,80 @@ describe('provider administration', () => {
     )
   })
 })
+
+describe('workshop readiness view', () => {
+  const readiness = {
+    status: 'FAIL',
+    checks: [
+      {
+        id: 'backend',
+        label: 'Backend',
+        status: 'PASS',
+        detail: 'The backend answered this request.'
+      },
+      {
+        id: 'models',
+        label: 'Provider and models',
+        status: 'FAIL',
+        detail: 'No provider is reachable (OpenAI: UNREACHABLE).'
+      }
+    ]
+  }
+
+  beforeEach(() => {
+    vi.mocked(apiRequest).mockReset()
+    vi.mocked(apiRequest).mockImplementation(async (path) => {
+      if (path === '/admin/auth/session')
+        return {
+          data: { enabled: true, authenticated: true },
+          response: new Response()
+        }
+      if (path === '/admin/workshops')
+        return {
+          data: {
+            workshops: [
+              {
+                id: 'shop-1',
+                title: 'WAIE workshop',
+                code: 'ABCD-EFGH',
+                status: 'PUBLISHED'
+              }
+            ]
+          },
+          response: new Response()
+        }
+      if (path === '/admin/templates')
+        return {
+          data: { templates: [{ id: 'tpl-1', name: 'WAIE free-text assessment' }] },
+          response: new Response()
+        }
+      if (path === '/admin/templates/tpl-1')
+        return {
+          data: { revisions: [{ id: 'rev-1', name: 'WAIE', revision: 1 }] },
+          response: new Response()
+        }
+      if (path === '/admin/workshops/shop-1/readiness')
+        return { data: readiness, response: new Response() }
+      return { data: {}, response: new Response() }
+    })
+  })
+
+  it('shows every preflight check with its pass or fail state (AC-008)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/workshops']}>
+        <AdminPage />
+      </MemoryRouter>
+    )
+    await screen.findByRole('heading', { name: 'WAIE workshop' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check readiness' }))
+
+    const panel = await screen.findByLabelText('Workshop readiness')
+    expect(panel).toHaveTextContent('Backend: The backend answered this request.')
+    expect(panel).toHaveTextContent(
+      'Provider and models: No provider is reachable (OpenAI: UNREACHABLE).'
+    )
+    expect(panel).toHaveTextContent('Pass')
+    expect(panel).toHaveTextContent('Fail')
+  })
+})

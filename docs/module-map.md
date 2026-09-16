@@ -66,12 +66,17 @@ Tests: `packages/backend/src/template/**/*.spec.ts`
 Location: `packages/backend/src/workshop/`
 
 Responsibilities: workshop lifecycle (`DRAFT`/`PUBLISHED`/`CLOSED`), join-code generation
-and normalization, minting a workspace plus workflow copy on join.
+and normalization, minting a workspace plus workflow copy on join, and the entry preflight
+and facilitator readiness checks (backend, template, node types, provider/model health).
 
-Primary entry points: `workshop.service.ts`, `workshop.controller.ts`, `workshop-code.ts`
+Primary entry points: `workshop.service.ts`, `workshop.controller.ts`, `workshop-code.ts`,
+`workshop-readiness.service.ts`
+
+Depends on: Prisma, templates, providers (model catalog for the readiness check).
 
 Related UI: `packages/frontend/src/pages/WorkshopJoin.tsx`,
-`packages/frontend/src/utils/workshopCode.ts`
+`packages/frontend/src/utils/workshopCode.ts`, the readiness panel in
+`packages/frontend/src/pages/admin/AdminPage.tsx`
 
 Tests: `packages/backend/src/workshop/**/*.spec.ts`
 
@@ -163,7 +168,11 @@ Primary entry points: `components/Canvas.tsx`, `components/editor/EditorToolbar.
 `components/editor/NodePalette.tsx`, `components/editor/NodeInspector.tsx`,
 `components/editor/EditorRail.tsx`, `components/TaskView.tsx`, `components/TraceView.tsx`,
 `hooks/useAutosave.ts`, `hooks/useGraphHistory.ts`, `hooks/useGraphOperations.ts`,
-`hooks/useSocket.ts`, `hooks/useServerEvents.ts`, `utils/graphBlocks.ts`
+`hooks/useSocket.ts`, `hooks/useServerEvents.ts`, `hooks/useWorkflowForm.ts`,
+`i18n/preview.ts`, `utils/graphBlocks.ts`
+
+The preview's question and answer-length bounds come from the open graph through
+`hooks/useWorkflowForm.ts`; its participant-facing strings live in `i18n/preview.ts`.
 
 Tests: `packages/frontend/src/**/*.test.tsx`, `packages/frontend/src/**/*.test.ts`
 

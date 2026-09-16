@@ -21,6 +21,9 @@ paths:
 - Editor state flows through the existing hooks — `useSocket`, `useServerEvents`,
   `useAutosave`, `useGraphHistory`, `useGraphOperations`, `useWorkspaceSession` — rather
   than new ad-hoc effects around the LiteGraph instance.
+- Participant-facing preview strings belong in `@/i18n/preview` (EN and DE), never inline
+  in a component; the preview's question and answer-length bounds come from the open graph
+  through `useWorkflowForm`, not from run events or component defaults.
 - Handle `ApiError` by its `body.code` (for example a version conflict carrying
   `currentVersion`), not by message text.
 - Prettier here means no semicolons, single quotes, no trailing commas, 90 columns;

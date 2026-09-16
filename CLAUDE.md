@@ -42,6 +42,8 @@ Workflow persistence, ETags       → packages/backend/src/workflow/
 Workspace access, retention       → packages/backend/src/workspace/
 Templates, bundled content        → packages/backend/src/template/
 Workshops and join codes          → packages/backend/src/workshop/
+Workshop preflight / readiness    → packages/backend/src/workshop/workshop-readiness.service.ts
+Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
 LTI launch and registration       → packages/backend/src/lti/, packages/lti/
@@ -49,8 +51,8 @@ Schema change                     → packages/backend/prisma/schema.prisma + mi
 Content schema backfill           → packages/backend/src/migration/
 ```
 
-Specification status: `specs/index.md` holds the authoritative table — waves 1 to 3 are
-implemented; SPEC-0007, SPEC-0012 and SPEC-0015 are outstanding and SPEC-0008 is deferred.
+Specification status: `specs/index.md` holds the authoritative table — waves 1 to 5 are
+implemented; SPEC-0015 is outstanding and SPEC-0008 is deferred.
 Wave-1 implementation notes and escalations live in `docs/wave-1-plan.md`.
 
 ## Commands

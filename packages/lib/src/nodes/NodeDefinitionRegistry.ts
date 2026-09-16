@@ -163,7 +163,11 @@ const entries: readonly Entry[] = [
     node: AnswerInputNode,
     category: 'Assessment',
     description: 'Receive the learner answer.',
-    properties: [textarea('value', 'Answer', true)]
+    properties: [
+      textarea('value', 'Answer', true),
+      number('minChars', 'Minimum characters'),
+      number('maxChars', 'Maximum characters')
+    ]
   },
   {
     node: PromptMessage,

@@ -109,13 +109,20 @@ re-read per request, so a facilitator change applies without a restart.
 
 ```mermaid
 flowchart LR
-    Start["/ or /workshop/CODE"] --> Ensure["ensureWorkspaceSession()"]
+    Start["/ or /workshop/CODE"] --> Preflight["GET /api/workshops/by-code/:code/preflight"]
+    Preflight -->|fails| Blocked["failing checks shown, no workspace minted"]
+    Preflight -->|passes| Ensure["ensureWorkspaceSession()"]
     Ensure -->|no stored token| Create["POST /api/workspaces, or POST /api/workshops/by-code/:code/join"]
     Create --> Token["token + workspace stored in localStorage"]
     Ensure -->|stored token| Verify["GET /api/workspaces/me"]
     Token --> Copy["workflow copied from the workshop's template revision"]
     Copy --> Editor["/editor/:workflowId"]
 ```
+
+Workshop entry is preflighted before anyone is started into it: `WorkshopReadinessService`
+checks the backend, the workshop's template revision, whether this build registers the node
+types that revision needs, and whether a reachable provider offers a model the policy
+permits. Facilitators run the same checks from the admin workshop list.
 
 Joining a published workshop code mints a `WORKSHOP` workspace and copies the workshop's
 template revision into a fresh workflow, so participants never share state. A token the

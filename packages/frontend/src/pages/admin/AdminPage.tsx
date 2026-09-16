@@ -18,7 +18,7 @@ import {
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-import { apiRequest } from '@/api/http'
+import { apiRequest, type WorkshopReadiness } from '@/api/http'
 
 type Session = { enabled: boolean; authenticated: boolean }
 type Workshop = {
@@ -520,6 +520,60 @@ const ExecutionLimitsCard = ({ onSaved }: { onSaved: (message: string) => void }
   )
 }
 
+/**
+ * The facilitator's readiness view (SPEC-0007/FR-010, AC-008): the same preflight a
+ * participant hits on entry, run on demand before the room fills up.
+ */
+const ReadinessPanel = ({ workshopId }: { workshopId: string }) => {
+  const [readiness, setReadiness] = useState<WorkshopReadiness | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const check = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { data } = await apiRequest<WorkshopReadiness>(
+        `/admin/workshops/${workshopId}/readiness`
+      )
+      setReadiness(data)
+    } catch (readinessError) {
+      setError(
+        readinessError instanceof Error
+          ? readinessError.message
+          : 'Readiness check failed.'
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Stack spacing={1} mt={1}>
+      <Box>
+        <Button disabled={busy} onClick={() => void check()}>
+          Check readiness
+        </Button>
+      </Box>
+      {readiness && (
+        <Stack spacing={0.5} aria-label="Workshop readiness">
+          {readiness.checks.map((entry) => (
+            <Stack direction="row" spacing={1} alignItems="center" key={entry.id}>
+              <Chip
+                size="small"
+                color={entry.status === 'PASS' ? 'success' : 'error'}
+                label={entry.status === 'PASS' ? 'Pass' : 'Fail'}
+              />
+              <Typography variant="body2">
+                {entry.label}: {entry.detail}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      )}
+      {error && <Typography color="error">{error}</Typography>}
+    </Stack>
+  )
+}
+
 const WorkshopAdmin = () => {
   const [workshops, setWorkshops] = useState<Workshop[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -627,6 +681,7 @@ const WorkshopAdmin = () => {
                   </Button>
                 )}
               </Stack>
+              <ReadinessPanel workshopId={workshop.id} />
             </CardContent>
           </Card>
         ))}

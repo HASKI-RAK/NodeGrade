@@ -2,7 +2,7 @@ import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/ma
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { api, ApiError } from '@/api/http'
+import { api, ApiError, type ReadinessCheck } from '@/api/http'
 import { resetWorkspaceSession } from '@/store/workspaceSession'
 import { workspaceStore } from '@/store/workspaceStore'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
@@ -16,16 +16,27 @@ export const WorkshopJoin = () => {
   const navigate = useNavigate()
   const [attempt, setAttempt] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [failedChecks, setFailedChecks] = useState<ReadinessCheck[] | null>(null)
 
   useEffect(() => {
     let active = true
     const join = async () => {
       setError(null)
+      setFailedChecks(null)
       if (!normalized) {
         setError(UNAVAILABLE)
         return
       }
       try {
+        // Preflight first: a workshop without a loadable template or a runnable model
+        // fails for everyone in the room at once, and it fails less confusingly here than
+        // after a participant has started editing (SPEC-0007/FR-009, AC-007).
+        const readiness = await api.workshopPreflight(normalized)
+        if (!active) return
+        if (readiness.status === 'FAIL') {
+          setFailedChecks(readiness.checks.filter((check) => check.status === 'FAIL'))
+          return
+        }
         const result = await api.joinWorkshop(
           normalized,
           workspaceStore.workshop(normalized)?.token
@@ -57,6 +68,33 @@ export const WorkshopJoin = () => {
   }, [normalized, navigate, attempt])
 
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+
+  if (failedChecks)
+    return (
+      <Box maxWidth={600} mx="auto" p={4}>
+        <Typography variant="h4" gutterBottom>
+          Workshop not ready
+        </Typography>
+        <Stack spacing={1}>
+          <Typography>
+            The facilitator has to fix this before the workshop can start.
+          </Typography>
+          {failedChecks.map((check) => (
+            <Alert severity="error" key={check.id}>
+              {check.label}: {check.detail}
+            </Alert>
+          ))}
+        </Stack>
+        <Stack direction="row" spacing={1} mt={2}>
+          <Button variant="contained" onClick={retry}>
+            Try again
+          </Button>
+          <Button component={Link} to="/">
+            Back to start
+          </Button>
+        </Stack>
+      </Box>
+    )
 
   if (error)
     return (

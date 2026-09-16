@@ -97,6 +97,18 @@ export type TemplateRevision = {
   requiredNodeTypes: string[]
 }
 
+/** Workshop preflight and facilitator readiness results (SPEC-0007/FR-009, FR-010). */
+export type ReadinessCheck = {
+  id: 'backend' | 'template' | 'node_types' | 'models'
+  label: string
+  status: 'PASS' | 'FAIL'
+  detail: string
+}
+export type WorkshopReadiness = {
+  status: 'PASS' | 'FAIL'
+  checks: ReadinessCheck[]
+}
+
 export const api = {
   models: async () => (await apiRequest<ModelCatalog>('/models')).data,
   createWorkspace: async () => {
@@ -175,6 +187,12 @@ export const api = {
         `/workshops/by-code/${encodeURIComponent(code)}`
       )
     ).data.workshop,
+  workshopPreflight: async (code: string) =>
+    (
+      await apiRequest<WorkshopReadiness>(
+        `/workshops/by-code/${encodeURIComponent(code)}/preflight`
+      )
+    ).data,
   joinWorkshop: async (code: string, token?: string) =>
     (
       await apiRequest<{

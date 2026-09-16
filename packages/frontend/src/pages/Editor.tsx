@@ -34,6 +34,7 @@ import { useAutosave } from '@/hooks/useAutosave'
 import { useGraphHistory } from '@/hooks/useGraphHistory'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
+import { useWorkflowForm } from '@/hooks/useWorkflowForm'
 import { workspaceStore } from '@/store/workspaceStore'
 import { getConfig } from '@/utils/config'
 import { configureDebugSession } from '@/utils/debugBridge'
@@ -169,6 +170,17 @@ export const Editor = () => {
     trace,
     beginAttempt
   } = useServerEvents({ socket, lgraph })
+
+  // The preview poses the question the graph currently holds, so an inspector edit shows
+  // up in the Test tab without a run in between (SPEC-0007/FR-003).
+  const workflowForm = useWorkflowForm(lgraph, railMode === 'preview')
+  const answerConstraints = {
+    ...workflowForm.constraints,
+    // A max-input-chars node fed from a link only knows its value once a run computed it.
+    ...(workflowForm.constraints.maxChars === undefined && maxInputChars !== undefined
+      ? { maxChars: maxInputChars }
+      : {})
+  }
 
   useEffect(() => {
     configureDebugSession({
@@ -418,11 +430,11 @@ export const Editor = () => {
           {railMode === 'preview' ? (
             <TaskView
               ref={taskView}
-              question={question}
+              question={workflowForm.question || question}
               questionImage={image}
               onSubmit={(answer) => beginAttempt(runGraph({ answer }))}
               outputs={outputs}
-              maxInputChars={maxInputChars}
+              constraints={answerConstraints}
               disabled={attemptState === 'running' || runState === 'queued'}
               runId={runId}
               runState={runState}

@@ -88,8 +88,8 @@ test('workshop workflow autosaves and executes', async ({ page }) => {
     'saved'
   )
   await page.getByRole('button', { name: 'Preview' }).click()
-  await page.getByLabel('Antwort').fill('Playwright deterministic answer')
-  await page.getByRole('button', { name: 'Absenden' }).click()
+  await page.getByLabel('Your answer').fill('Playwright deterministic answer')
+  await page.getByRole('button', { name: 'Run assessment' }).click()
   await page.evaluate(() => window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished'))
   await expect(page.getByText('Run: completed')).toBeVisible()
   const traceSteps = page.locator('[aria-label^="Select "]')

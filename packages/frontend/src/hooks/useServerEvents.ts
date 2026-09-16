@@ -21,7 +21,8 @@ export interface UseServerEventsResult {
   outputs: Record<string, ServerEventPayload['outputSet']> | undefined
   question: string
   image: string | undefined
-  maxInputChars: number
+  /** Undefined until a run emits one: the preview has no maximum of its own (FR-008). */
+  maxInputChars: number | undefined
   processingPercentage: number
   graphState: GraphState
   attemptState: AttemptState
@@ -48,7 +49,7 @@ export function useServerEvents({
   const [outputs, setOutputs] = useState<
     Record<string, ServerEventPayload['outputSet']> | undefined
   >(undefined)
-  const [maxInputChars, setMaxInputChars] = useState<number>(700)
+  const [maxInputChars, setMaxInputChars] = useState<number | undefined>(undefined)
   const [image, setImage] = useState<string | undefined>()
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const [graphState, setGraphState] = useState<GraphState>('idle')

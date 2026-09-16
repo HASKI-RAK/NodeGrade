@@ -9,13 +9,17 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  * The server will listen to the user running the fraph and take an extra input from the form.
  * This will be written into properties.value
  * path: input/answer
+ *
+ * `minChars` and `maxChars` are the workflow's answer length bounds (SPEC-0007/FR-007,
+ * FR-008a). Zero means "no bound": the preview has no length rule of its own, so a
+ * workflow that says nothing accepts any answer.
  */
 export class AnswerInputNode extends LGraphNode {
-  properties: { value: string }
+  properties: { value: string; minChars: number; maxChars: number }
   constructor() {
     super()
     this.addOut('string')
-    this.properties = { value: '' }
+    this.properties = { value: '', minChars: 0, maxChars: 0 }
     this.title = 'Answer Input'
   }
 

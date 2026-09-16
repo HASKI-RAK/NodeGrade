@@ -2,11 +2,11 @@
 id: SPEC-0007
 type: feature
 title: WAIE workshop experience and preview
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-17
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -325,3 +325,4 @@ Then all preflight checks are displayed with pass/fail state
 |---|---|
 | 2026-09-15 | Initial specification created |
 | 2026-09-15 | Review revision 2: maximum answer length added as workflow configuration (FR-008a/FR-008b, AC-006a, US-004); preflight wording unified — provider/model health check explicit in FR-009; dependencies re-pointed from the SPEC-0009 epic to SPEC-0010 and SPEC-0012 (composite references and allowed models) in prose and frontmatter |
+| 2026-09-17 | Implemented: canonical WAIE template shipped, preview Test/Trace tabs in English with workflow-configured answer bounds, workshop preflight and facilitator readiness view |
