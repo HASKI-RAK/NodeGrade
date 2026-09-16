@@ -43,6 +43,27 @@ test('deterministic model exposes OpenAI-compatible contract', async ({ request 
     object: 'list',
     data: [{ id: 'nodegrade-deterministic' }]
   })
+
+  const completion = await request.post(`${modelUrl}/v1/chat/completions`, {
+    data: {
+      model: 'nodegrade-deterministic',
+      messages: [{ role: 'user', content: 'Deterministic check' }]
+    }
+  })
+  await expect(completion).toBeOK()
+  await expect(completion.json()).resolves.toMatchObject({
+    created: expect.any(Number),
+    choices: [
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'assistant' })
+      })
+    ],
+    usage: {
+      prompt_tokens: expect.any(Number),
+      completion_tokens: expect.any(Number),
+      total_tokens: expect.any(Number)
+    }
+  })
 })
 
 test('workshop workflow autosaves and executes', async ({ page }) => {

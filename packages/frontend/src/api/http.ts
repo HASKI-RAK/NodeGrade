@@ -1,3 +1,5 @@
+import type { ModelCatalog } from '@haski/ta-lib'
+
 import { getConfig } from '@/utils/config'
 
 export type ApiErrorBody = {
@@ -96,6 +98,7 @@ export type TemplateRevision = {
 }
 
 export const api = {
+  models: async () => (await apiRequest<ModelCatalog>('/models')).data,
   createWorkspace: async () =>
     (
       await apiRequest<{ workspace: WorkspaceSession }>('/workspaces', {

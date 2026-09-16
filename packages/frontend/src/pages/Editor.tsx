@@ -1,4 +1,9 @@
-import { compactNodeWidgets, LiteGraph, loadLegacyWidgetProperties } from '@haski/ta-lib'
+import {
+  compactNodeWidgets,
+  LiteGraph,
+  loadLegacyWidgetProperties,
+  type ModelCatalogEntry
+} from '@haski/ta-lib'
 import {
   Alert,
   Box,
@@ -92,6 +97,7 @@ export const Editor = () => {
   const [railOpen, setRailOpen] = useState(true)
   const [developerTools, setDeveloperTools] = useState(false)
   const [blocks, setBlocks] = useState<WorkflowTemplate[]>([])
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [connectionSuggestions, setConnectionSuggestions] = useState<
     ConnectionSuggestion[]
@@ -122,6 +128,13 @@ export const Editor = () => {
       active = false
     }
   }, [lgraph, token, workflowId])
+
+  useEffect(() => {
+    void api
+      .models()
+      .then((catalog) => setModelCatalog(catalog.models))
+      .catch(() => setModelCatalog([]))
+  }, [])
 
   useEffect(() => {
     if (!student)
@@ -418,7 +431,11 @@ export const Editor = () => {
               onSelectTraceNode={selectTraceNode}
             />
           ) : (
-            <NodeInspector selection={selection} history={history} />
+            <NodeInspector
+              selection={selection}
+              history={history}
+              modelCatalog={modelCatalog}
+            />
           )}
         </EditorRail>
       </Box>

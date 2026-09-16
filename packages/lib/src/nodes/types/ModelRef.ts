@@ -23,13 +23,74 @@ export type ModelRef = {
   modelId: string
 }
 
+export const MODEL_PARAMETERS = [
+  'max_tokens',
+  'temperature',
+  'top_p',
+  'top_k',
+  'presence_penalty'
+] as const
+
+export type ModelParameter = (typeof MODEL_PARAMETERS)[number]
+
+export type ModelCapabilities = {
+  supportedParameters: ModelParameter[]
+  contextWindow?: number
+}
+
+export type ModelCatalogEntry = {
+  ref: ModelRef
+  label: string
+  providerName: string
+  capabilities: ModelCapabilities
+}
+
+export type ProviderStatusCode =
+  'AVAILABLE' | 'TIMEOUT' | 'UNAUTHORIZED' | 'UNREACHABLE' | 'INVALID_RESPONSE'
+
+export type ModelCatalogProviderStatus = {
+  providerKey: string
+  providerName: string
+  status: ProviderStatusCode
+}
+
+export type ModelCatalog = {
+  models: ModelCatalogEntry[]
+  providers: ModelCatalogProviderStatus[]
+}
+
+export type ModelExecutionWarning = {
+  code: 'UNSUPPORTED_MODEL_PARAMETER'
+  parameter: ModelParameter
+  providerKey: string
+  modelId: string
+}
+
+export type ModelCompletionRequest = {
+  modelRef: ModelRef
+  messages: { role: string; content: string }[]
+  parameters: Partial<Record<ModelParameter, number>>
+  signal?: AbortSignal
+}
+
+export type ModelCompletionResult = {
+  text: string
+  warnings: ModelExecutionWarning[]
+}
+
+/** Backend-only implementation. The interface carries zero credentials. */
+export interface ModelCompletionRuntime {
+  complete(request: ModelCompletionRequest): Promise<ModelCompletionResult>
+}
+
 export const isModelRef = (value: unknown): value is ModelRef => {
   if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Record<string, unknown>
+  const providerKey: unknown = Reflect.get(value, 'providerKey')
+  const modelId: unknown = Reflect.get(value, 'modelId')
   return (
-    typeof candidate.providerKey === 'string' &&
-    candidate.providerKey.length > 0 &&
-    typeof candidate.modelId === 'string' &&
-    candidate.modelId.length > 0
+    typeof providerKey === 'string' &&
+    providerKey.length > 0 &&
+    typeof modelId === 'string' &&
+    modelId.length > 0
   )
 }

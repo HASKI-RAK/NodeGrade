@@ -24,6 +24,7 @@ export type SelectControl = {
   optionsProperty?: string
 }
 export type FileControl = { type: 'file'; accept?: string }
+export type ModelControl = { type: 'model' }
 
 export type NodePropertyControl =
   | TextControl
@@ -33,6 +34,7 @@ export type NodePropertyControl =
   | ToggleControl
   | SelectControl
   | FileControl
+  | ModelControl
 
 export interface NodePropertyDefinition {
   key: string

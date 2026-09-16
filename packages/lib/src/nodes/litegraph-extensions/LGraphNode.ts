@@ -4,6 +4,7 @@ import { WebSocket } from 'ws'
 import WebSocketNode from '../behavior/WebSocketNode'
 import { InOut } from '../types/NodeLinkMessage'
 import { ServerEventPayload } from '../../events'
+import type { ModelExecutionWarning } from '../types/ModelRef'
 
 interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
@@ -23,6 +24,9 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
 
   /** Transient execution context. Never serialized with the graph. */
   executionSignal?: AbortSignal
+
+  /** Transient warnings produced by the current execution. */
+  executionWarnings?: ModelExecutionWarning[]
 
   emitEventCallback?(event: {
     eventName: keyof ServerEventPayload

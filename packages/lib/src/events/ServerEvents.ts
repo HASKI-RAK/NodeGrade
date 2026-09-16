@@ -5,6 +5,7 @@ import {
 } from 'litegraph.js'
 
 import { LGraphNode } from '../nodes/litegraph-extensions'
+import type { ModelExecutionWarning } from '../nodes/types/ModelRef'
 
 export type SerializedGraph = serializedLGraph<
   SerializedLGraphNode<LGraphNode>,
@@ -60,6 +61,7 @@ export type ServerEventPayload = {
     durationMs?: number
     outputs?: TraceOutput[]
     error?: TraceError
+    warnings?: ModelExecutionWarning[]
   }
   graphFinished: RunCorrelation & { graph: string }
   graphOperationFailed: GraphOperationFailure & Partial<RunCorrelation>

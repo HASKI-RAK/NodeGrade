@@ -1,4 +1,9 @@
-import { KeywordCheckNode, LLMNode, SentenceTransformer } from '@haski/ta-lib';
+import {
+  KeywordCheckNode,
+  LLMNode,
+  type ModelCompletionRuntime,
+  SentenceTransformer,
+} from '@haski/ta-lib';
 
 describe('network node execution signals', () => {
   const originalFetch = global.fetch;
@@ -13,9 +18,21 @@ describe('network node execution signals', () => {
       'LLMNode',
       async (signal: AbortSignal) => {
         const node = new LLMNode();
-        node.env = { MODEL_WORKER_URL: 'http://model-worker' };
+        const runtime: ModelCompletionRuntime = {
+          complete: async (request) => {
+            await fetch('http://model-worker/v1/chat/completions', {
+              signal: request.signal,
+            });
+            return { text: 'result', warnings: [] };
+          },
+        };
+        node.setRuntime(runtime);
         node.executionSignal = signal;
-        node.properties.model = 'local-model';
+        node.properties.model_ref = {
+          providerKey: 'local',
+          modelId: 'local-model',
+        };
+        node.properties.needs_model_selection = false;
         node.getInputData = jest
           .fn()
           .mockReturnValueOnce({ role: 'user', content: 'Answer' })

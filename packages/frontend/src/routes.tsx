@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { AdminPage } from '@/pages/admin/AdminPage'
@@ -23,7 +23,11 @@ export const router = createBrowserRouter([
   { path: '/templates', element: <TemplatesPage /> },
   { path: '/editor/:workflowId', element: editor },
   { path: '/student/:workflowId', element: editor },
-  { path: '/admin', element: <AdminPage /> },
+  { path: '/admin', element: <Navigate to="/admin/workshops" replace /> },
+
+  { path: '/admin/workshops', element: <AdminPage /> },
+
+  { path: '/admin/providers', element: <AdminPage /> },
   { path: '/lti/register', element: <LtiRegister /> },
   { path: '*', element: <NotFoundPage /> }
 ])

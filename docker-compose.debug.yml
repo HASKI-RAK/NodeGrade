@@ -56,6 +56,9 @@ services:
       CORS_ORIGIN: http://localhost:${NODEGRADE_DEBUG_FRONTEND_PORT:-15173},http://127.0.0.1:${NODEGRADE_DEBUG_FRONTEND_PORT:-15173}
       MODEL_WORKER_URL: http://model:8000
       OPENAI_API_KEY: ''
+      OPENROUTER_API_KEY: ''
+      # Development-only stable key: base64url encoding of 32 zero bytes.
+      PROVIDER_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
       # Fixed credentials so the browser suite can log in deterministically. This stack is
       # local-only; do not copy these into any deployed compose file.
       ADMIN_USERNAME: debug-admin

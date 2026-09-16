@@ -2,6 +2,7 @@ import { LGraph } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { XapiService } from '../xapi.service.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
+import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 import { GraphHandlerService } from './graph-handler.service.js';
 
 const client = (id: string, workspaceId: string) =>
@@ -27,6 +28,7 @@ const service = () =>
         .mockResolvedValue(JSON.stringify(new LGraph().serialize())),
     } as unknown as WorkflowService,
     {} as XapiService,
+    {} as ProviderRuntimeService,
   );
 
 describe('GraphHandlerService run ownership', () => {

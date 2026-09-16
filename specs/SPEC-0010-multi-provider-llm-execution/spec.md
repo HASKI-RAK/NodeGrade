@@ -2,11 +2,11 @@
 id: SPEC-0010
 type: feature
 title: Multi-provider LLM execution
-status: draft
+status: implemented
 parent: SPEC-0009
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0011
 related:

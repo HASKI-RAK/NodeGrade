@@ -43,6 +43,7 @@ const server = createServer(async (request, response) => {
       json(response, 200, {
         id: 'debug-completion-1',
         object: 'chat.completion',
+        created: 1,
         model: typeof body.model === 'string' ? body.model : modelId,
         choices: [
           {
@@ -53,7 +54,12 @@ const server = createServer(async (request, response) => {
               content: 'score: 100\nfeedback: Deterministic debug response.'
             }
           }
-        ]
+        ],
+        usage: {
+          prompt_tokens: 4,
+          completion_tokens: 8,
+          total_tokens: 12
+        }
       })
     } catch {
       json(response, 400, { error: { message: 'Request body must be valid JSON.' } })

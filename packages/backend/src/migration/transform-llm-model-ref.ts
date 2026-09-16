@@ -11,6 +11,8 @@ const LLM_NODE_TYPE = 'models/llm';
 export type TransformOptions = {
   /** Provider keys currently enabled on this deployment. */
   enabledProviderKeys: string[];
+  /** Models successfully discovered from enabled providers. */
+  availableModels?: ModelRef[];
 };
 
 export type TransformResult = {
@@ -40,7 +42,7 @@ const sourceToProviderKey = (source: unknown): string | null => {
 const resolveModelRef = (
   model: unknown,
   sources: unknown,
-  enabledProviderKeys: string[],
+  options: TransformOptions,
 ): { ref: ModelRef | null; needsSelection: boolean } => {
   if (typeof model !== 'string' || model.length === 0) {
     // Nothing was ever selected, so there is nothing to resolve and nothing to fix.
@@ -50,13 +52,20 @@ const resolveModelRef = (
   if (typeof sources === 'object' && sources !== null) {
     const known = (sources as Record<string, unknown>)[model];
     const providerKey = sourceToProviderKey(known);
-    if (providerKey)
+    if (providerKey && options.enabledProviderKeys.includes(providerKey))
       return { ref: { providerKey, modelId: model }, needsSelection: false };
   }
 
-  if (enabledProviderKeys.length === 1) {
+  const discoveredMatches = options.availableModels?.filter(
+    (entry) => entry.modelId === model,
+  );
+  if (discoveredMatches?.length === 1)
+    return { ref: discoveredMatches[0], needsSelection: false };
+  if (options.availableModels) return { ref: null, needsSelection: true };
+
+  if (options.enabledProviderKeys.length === 1) {
     return {
-      ref: { providerKey: enabledProviderKeys[0], modelId: model },
+      ref: { providerKey: options.enabledProviderKeys[0], modelId: model },
       needsSelection: false,
     };
   }
@@ -108,7 +117,7 @@ export function transformLlmModelRefs(
     const { ref, needsSelection } = resolveModelRef(
       props.model,
       props.available_model_sources,
-      options.enabledProviderKeys,
+      options,
     );
 
     props.model_ref = ref;

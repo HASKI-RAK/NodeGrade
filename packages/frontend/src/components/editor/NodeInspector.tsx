@@ -1,4 +1,10 @@
-import { getNodeDefinition, type NodePropertyDefinition } from '@haski/ta-lib'
+import {
+  getNodeDefinition,
+  isModelRef,
+  MODEL_PARAMETERS,
+  type ModelCatalogEntry,
+  type NodePropertyDefinition
+} from '@haski/ta-lib'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import {
   Accordion,
@@ -72,11 +78,13 @@ const validationMessage = (
 const PropertyEditor = ({
   node,
   property,
-  history
+  history,
+  modelCatalog
 }: {
   node: LGraphNode
   property: NodePropertyDefinition
   history: GraphHistory
+  modelCatalog: ModelCatalogEntry[]
 }) => {
   const [value, setValue] = useState(() => shownValue(node, property))
   const [error, setError] = useState<string | null>(null)
@@ -103,6 +111,67 @@ const PropertyEditor = ({
   }
   const common = { onFocus: history.begin, onBlur: history.end }
   const control = property.control
+  const currentRef = isModelRef(node.properties.model_ref)
+    ? node.properties.model_ref
+    : null
+  const selectedModel = currentRef
+    ? modelCatalog.find(
+        (entry) =>
+          entry.ref.providerKey === currentRef.providerKey &&
+          entry.ref.modelId === currentRef.modelId
+      )
+    : undefined
+  const parameter = MODEL_PARAMETERS.find((candidate) => candidate === property.key)
+  const unsupported = Boolean(
+    parameter &&
+    selectedModel &&
+    !selectedModel.capabilities.supportedParameters.includes(parameter)
+  )
+  if (control.type === 'model') {
+    const selected = currentRef ? JSON.stringify(currentRef) : ''
+    const unavailable = Boolean(currentRef && !selectedModel)
+    return (
+      <TextField
+        {...common}
+        select
+        fullWidth
+        size="small"
+        label={property.label}
+        value={selected}
+        error={unavailable || node.properties.needs_model_selection === true}
+        helperText={
+          unavailable
+            ? 'Saved model is unavailable. Select another model.'
+            : node.properties.needs_model_selection === true
+              ? 'Select a provider and model.'
+              : undefined
+        }
+        onChange={(event) => {
+          const entry = modelCatalog.find(
+            (model) => JSON.stringify(model.ref) === event.target.value
+          )
+          if (!entry) return
+          history.transact(() => {
+            node.setProperty('model_ref', entry.ref)
+            node.setProperty('model', entry.ref.modelId)
+            node.setProperty('needs_model_selection', false)
+            node.setDirtyCanvas(true, true)
+          })
+        }}
+      >
+        {unavailable && (
+          <MenuItem value={selected} disabled>
+            {currentRef?.modelId} · unavailable
+          </MenuItem>
+        )}
+        {modelCatalog.map((entry) => (
+          <MenuItem value={JSON.stringify(entry.ref)} key={JSON.stringify(entry.ref)}>
+            {entry.label} · {entry.providerName}
+          </MenuItem>
+        ))}
+      </TextField>
+    )
+  }
   if (control.type === 'toggle')
     return (
       <FormControlLabel
@@ -129,6 +198,7 @@ const PropertyEditor = ({
           min={control.min}
           max={control.max}
           step={control.step}
+          disabled={unsupported}
           onChange={(_, next) => commit(Array.isArray(next) ? next[0] : next)}
         />
       </Box>
@@ -150,6 +220,7 @@ const PropertyEditor = ({
         value={String(value)}
         error={!!error}
         helperText={error}
+        disabled={unsupported}
         onChange={(event) => commit(event.target.value)}
       >
         {options.map((option) => (
@@ -219,6 +290,7 @@ const PropertyEditor = ({
       value={value}
       error={!!error}
       helperText={error}
+      disabled={unsupported}
       multiline={control.type === 'textarea'}
       rows={control.type === 'textarea' ? (control.rows ?? 4) : undefined}
       type={control.type === 'number' ? 'number' : 'text'}
@@ -233,10 +305,12 @@ const PropertyEditor = ({
 
 export const NodeInspector = ({
   selection,
-  history
+  history,
+  modelCatalog = []
 }: {
   selection: LGraphNode[]
   history: GraphHistory
+  modelCatalog?: ModelCatalogEntry[]
 }) => {
   if (!selection.length)
     return (
@@ -284,6 +358,7 @@ export const NodeInspector = ({
             node={node}
             property={property}
             history={history}
+            modelCatalog={modelCatalog}
           />
         ))
       ) : (
@@ -302,6 +377,7 @@ export const NodeInspector = ({
                   node={node}
                   property={property}
                   history={history}
+                  modelCatalog={modelCatalog}
                 />
               ))}
             </Stack>

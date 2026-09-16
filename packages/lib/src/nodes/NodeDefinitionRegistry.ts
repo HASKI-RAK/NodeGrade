@@ -133,9 +133,9 @@ const entries: readonly Entry[] = [
     tags: ['model', 'prompt'],
     properties: [
       {
-        key: 'model',
+        key: 'model_ref',
         label: 'Model',
-        control: { type: 'select', options: [], optionsProperty: 'available_models' },
+        control: { type: 'model' },
         advanced: false,
         required: true,
         keyValue: true
@@ -156,10 +156,7 @@ const entries: readonly Entry[] = [
         required: false
       },
       number('top_k', 'Top K', true),
-      number('presence_penalty', 'Presence penalty', true),
-      number('repetition_penalty', 'Repetition penalty', true),
-      number('repetition_penalty_range', 'Repetition range', true),
-      number('guidance_scale', 'Guidance scale', true)
+      number('presence_penalty', 'Presence penalty', true)
     ]
   },
   {

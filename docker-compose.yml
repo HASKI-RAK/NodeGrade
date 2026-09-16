@@ -6,11 +6,11 @@ services:
       POSTGRES_PASSWORD: nodegrade
       POSTGRES_DB: nodegrade
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nodegrade -d nodegrade"]
+      test: ['CMD-SHELL', 'pg_isready -U nodegrade -d nodegrade']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,15 +21,17 @@ services:
       dockerfile: packages/backend/Dockerfile
     environment:
       NODE_ENV: production
-      PORT: "5000"
+      PORT: '5000'
       DATABASE_URL: postgresql://nodegrade:nodegrade@db:5432/nodegrade?schema=public
       FRONTEND_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173,http://localhost:8080
       MODEL_WORKER_URL: http://models:8000
       SIMILARITY_WORKER_URL: http://models:8002
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      PROVIDER_ENCRYPTION_KEY: ${PROVIDER_ENCRYPTION_KEY:-}
     ports:
-      - "5000:5000"
+      - '5000:5000'
     depends_on:
       db:
         condition: service_healthy
@@ -39,7 +41,7 @@ services:
       context: .
       dockerfile: packages/frontend/Dockerfile
     ports:
-      - "8080:80"
+      - '8080:80'
     depends_on:
       - backend
 

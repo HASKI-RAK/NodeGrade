@@ -77,6 +77,12 @@ export const TraceView = ({
             )}
           </Stack>
           {step.error && <Alert severity="error">{step.error.message}</Alert>}
+          {step.warnings?.map((warning) => (
+            <Alert severity="warning" key={`${warning.code}-${warning.parameter}`}>
+              {warning.parameter} was ignored for {warning.modelId} on{' '}
+              {warning.providerKey}.
+            </Alert>
+          ))}
           {step.outputs?.map((output) => (
             <Stack key={output.slot} spacing={0.5}>
               <Typography variant="caption">{output.name}</Typography>

@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
+import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
+import { ProviderService } from '../provider/provider.service.js';
 import {
   CONTENT_SCHEMA_VERSION,
+  TransformOptions,
   transformLlmModelRefs,
 } from './transform-llm-model-ref.js';
 
@@ -22,7 +25,11 @@ const BATCH_SIZE = 200;
 export class ContentMigrationService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ContentMigrationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly providers: ProviderService,
+    private readonly runtime: ProviderRuntimeService,
+  ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     if (process.env.CONTENT_MIGRATION_ENABLED === 'false') {
@@ -43,9 +50,15 @@ export class ContentMigrationService implements OnApplicationBootstrap {
   }
 
   async migrate(): Promise<{ workflows: number; revisions: number }> {
+    await this.providers.ensureInitialized();
     const enabledProviderKeys = await this.enabledProviderKeys();
-    const workflows = await this.migrateWorkflows(enabledProviderKeys);
-    const revisions = await this.migrateTemplateRevisions(enabledProviderKeys);
+    const catalog = await this.runtime.catalog();
+    const options: TransformOptions = {
+      enabledProviderKeys,
+      availableModels: catalog.models.map((model) => model.ref),
+    };
+    const workflows = await this.migrateWorkflows(options);
+    const revisions = await this.migrateTemplateRevisions(options);
 
     if (workflows > 0 || revisions > 0) {
       this.logger.log(
@@ -69,9 +82,7 @@ export class ContentMigrationService implements OnApplicationBootstrap {
     return providers.map((provider) => provider.key);
   }
 
-  private async migrateWorkflows(
-    enabledProviderKeys: string[],
-  ): Promise<number> {
+  private async migrateWorkflows(options: TransformOptions): Promise<number> {
     let migrated = 0;
     let needingSelection = 0;
 
@@ -84,11 +95,7 @@ export class ContentMigrationService implements OnApplicationBootstrap {
       if (batch.length === 0) break;
 
       for (const workflow of batch) {
-        const result = this.transform(
-          workflow.id,
-          workflow.content,
-          enabledProviderKeys,
-        );
+        const result = this.transform(workflow.id, workflow.content, options);
         needingSelection += result.needingSelection;
 
         await this.prisma.workflow.update({
@@ -112,7 +119,7 @@ export class ContentMigrationService implements OnApplicationBootstrap {
   }
 
   private async migrateTemplateRevisions(
-    enabledProviderKeys: string[],
+    options: TransformOptions,
   ): Promise<number> {
     let migrated = 0;
 
@@ -125,11 +132,7 @@ export class ContentMigrationService implements OnApplicationBootstrap {
       if (batch.length === 0) break;
 
       for (const revision of batch) {
-        const result = this.transform(
-          revision.id,
-          revision.content,
-          enabledProviderKeys,
-        );
+        const result = this.transform(revision.id, revision.content, options);
 
         // Revisions are immutable as a domain rule, but a schema conversion is not a
         // content change: the same selection is being expressed in the current shape.
@@ -147,13 +150,9 @@ export class ContentMigrationService implements OnApplicationBootstrap {
     return migrated;
   }
 
-  private transform(
-    id: string,
-    content: string,
-    enabledProviderKeys: string[],
-  ) {
+  private transform(id: string, content: string, options: TransformOptions) {
     try {
-      return transformLlmModelRefs(content, { enabledProviderKeys });
+      return transformLlmModelRefs(content, options);
     } catch (error) {
       // Unparseable content is stamped anyway so it cannot spin the batch loop forever;
       // it is left byte-identical and reported.

@@ -83,6 +83,48 @@ describe('transformLlmModelRefs', () => {
     });
   });
 
+  it('uses the unique discovered composite model reference', () => {
+    const result = transformLlmModelRefs(graphWith({ model: 'shared-id' }), {
+      enabledProviderKeys: ['local', 'openrouter'],
+      availableModels: [
+        { providerKey: 'openrouter', modelId: 'shared-id' },
+        { providerKey: 'local', modelId: 'different-id' },
+      ],
+    });
+
+    expect(llmProps(result.content)).toMatchObject({
+      model_ref: { providerKey: 'openrouter', modelId: 'shared-id' },
+      needs_model_selection: false,
+    });
+  });
+
+  it('requires selection when discovery finds no matching model', () => {
+    const result = transformLlmModelRefs(graphWith({ model: 'missing-id' }), {
+      enabledProviderKeys: ['local'],
+      availableModels: [{ providerKey: 'local', modelId: 'different-id' }],
+    });
+
+    expect(llmProps(result.content)).toMatchObject({
+      model_ref: null,
+      needs_model_selection: true,
+    });
+  });
+
+  it('requires selection when discovery finds the id on multiple providers', () => {
+    const result = transformLlmModelRefs(graphWith({ model: 'shared-id' }), {
+      enabledProviderKeys: ['local', 'openrouter'],
+      availableModels: [
+        { providerKey: 'local', modelId: 'shared-id' },
+        { providerKey: 'openrouter', modelId: 'shared-id' },
+      ],
+    });
+
+    expect(llmProps(result.content)).toMatchObject({
+      model_ref: null,
+      needs_model_selection: true,
+    });
+  });
+
   it('is idempotent', () => {
     const once = transformLlmModelRefs(graphWith({ model: 'mistral' }), {
       enabledProviderKeys: ['local'],

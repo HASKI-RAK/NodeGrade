@@ -57,7 +57,16 @@ export const feedbackGeneratorBlock: BundledTemplate = {
         ],
         outputs: [{ name: 'string', type: 'string', links: [2] }],
         title: 'Feedback model',
-        properties: {},
+        properties: {
+          model: '',
+          model_ref: null,
+          needs_model_selection: true,
+          max_tokens: 64,
+          temperature: 0.4,
+          top_p: 1,
+          top_k: 50,
+          presence_penalty: 0,
+        },
       },
       {
         id: 3,

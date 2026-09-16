@@ -7,6 +7,7 @@ import {
   AnswerInputNode,
   LGraphNode,
   ImageNode,
+  LLMNode,
   OutputNode,
   QuestionNode,
 } from '@haski/ta-lib';
@@ -23,6 +24,7 @@ import { XapiService } from '../xapi.service.js';
 import { LtiCookie } from '../utils/LtiCookie.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
+import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 
 type ActiveRun = {
   runId: string;
@@ -41,6 +43,7 @@ export class GraphHandlerService {
   constructor(
     private readonly workflows: WorkflowService,
     private readonly xapiService: XapiService,
+    private readonly modelRuntime: ProviderRuntimeService,
   ) {}
 
   /**
@@ -77,10 +80,7 @@ export class GraphHandlerService {
               truncated: false,
             },
           ],
-          [
-            node.env?.OPENAI_API_KEY as string | undefined,
-            node.env?.BEARER_TOKEN as string | undefined,
-          ],
+          [],
         )[0];
         client.emit(event.eventName, {
           ...payload,
@@ -94,10 +94,9 @@ export class GraphHandlerService {
       try {
         const nodeEnv = buildNodeExecutionEnv();
         node.env = nodeEnv;
+        if (node instanceof LLMNode) node.setRuntime(this.modelRuntime);
 
-        this.logger.debug(
-          `Set env for node ${node.title} with MODEL_WORKER_URL: ${nodeEnv.MODEL_WORKER_URL} OPENAI: ${nodeEnv.OPENAI_API_KEY ? 'on' : 'off'}`,
-        );
+        this.logger.debug(`Set execution context for node ${node.title}`);
 
         // Note: We don't call init() here because onNodeAdded is synchronous
         // init() will be called in hydrateExistingNodes() after configure() completes
@@ -164,9 +163,10 @@ export class GraphHandlerService {
         const nodeAny = node as any;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         nodeAny.env = nodeEnv;
+        if (node instanceof LLMNode) node.setRuntime(this.modelRuntime);
 
         this.logger.debug(
-          `Hydrating existing node: ${node.title} (${node.type}) with MODEL_WORKER_URL: ${nodeEnv.MODEL_WORKER_URL} OPENAI: ${nodeEnv.OPENAI_API_KEY ? 'on' : 'off'}`,
+          `Hydrating existing node: ${node.title} (${node.type})`,
         );
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -355,7 +355,6 @@ export class GraphHandlerService {
         state: 'running',
         timestamp: new Date().toISOString(),
       });
-      const nodeEnv = buildNodeExecutionEnv();
       await executeLgraph(
         lgraph,
         (percentage) => {
@@ -370,11 +369,7 @@ export class GraphHandlerService {
         {
           signal: run.controller.signal,
           timeoutMs: configuration().runNodeTimeoutMs,
-          mapOutputs: (outputs) =>
-            sanitizeTraceOutputs(outputs, [
-              nodeEnv.OPENAI_API_KEY,
-              nodeEnv.BEARER_TOKEN,
-            ]),
+          mapOutputs: (outputs) => sanitizeTraceOutputs(outputs, []),
           onNodeEvent: (event) => {
             emitEvent(client, 'nodeExecutionChanged', {
               runId: run!.runId,
@@ -387,6 +382,7 @@ export class GraphHandlerService {
               startedAt: event.startedAt,
               durationMs: event.durationMs,
               outputs: event.outputs,
+              warnings: event.warnings,
               error: event.error
                 ? sanitizeExecutionError(event.error)
                 : undefined,

@@ -4,6 +4,7 @@ import {
   NodeExecutionState,
   TraceError,
   TraceOutput,
+  ModelExecutionWarning,
 } from '@haski/ta-lib';
 
 export type NodeLifecycleEvent = {
@@ -14,6 +15,7 @@ export type NodeLifecycleEvent = {
   durationMs?: number;
   outputs?: TraceOutput[];
   error?: TraceError;
+  warnings?: ModelExecutionWarning[];
 };
 
 export type ExecuteLgraphOptions = {
@@ -141,6 +143,7 @@ export async function executeLgraph(
         startedAt,
         durationMs: Date.now() - started,
         outputs,
+        warnings: node.executionWarnings,
       });
       updateProgressCallback?.((index + 1) / execorder.length);
     } catch (cause: unknown) {
@@ -170,6 +173,7 @@ export async function executeLgraph(
       if (timeout) clearTimeout(timeout);
       options.signal?.removeEventListener('abort', forwardAbort);
       node.executionSignal = undefined;
+      node.executionWarnings = undefined;
     }
   }
   return lgraph;
