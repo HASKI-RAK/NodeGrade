@@ -2,11 +2,11 @@
 id: SPEC-0008
 type: feature
 title: Reliability, CI and documentation
-status: draft
+status: deferred
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0002
   - SPEC-0003

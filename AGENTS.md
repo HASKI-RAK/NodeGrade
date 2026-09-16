@@ -2,6 +2,10 @@
 
 Instructions for AI agents and contributors working in this repository.
 
+Repository orientation lives in `CLAUDE.md` (task routing, commands, invariants),
+`docs/module-map.md` (where things live) and `docs/architecture.md` (how it fits
+together). Read those before searching the tree; this file covers git workflow.
+
 <!-- rtk-instructions v2 -->
 # Command output
 

@@ -2,11 +2,11 @@
 id: SPEC-0004
 type: feature
 title: Workspace isolation and multi-user storage
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on: []
 related:
   - SPEC-0002

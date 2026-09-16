@@ -2,11 +2,11 @@
 id: SPEC-0003
 type: feature
 title: Template subsystem
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0004
   - SPEC-0013

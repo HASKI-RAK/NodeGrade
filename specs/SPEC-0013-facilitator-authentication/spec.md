@@ -2,11 +2,11 @@
 id: SPEC-0013
 type: feature
 title: Facilitator authentication and administrative access
-status: draft
+status: implemented
 parent: null
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on: []
 related:
   - SPEC-0002

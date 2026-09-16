@@ -2,11 +2,11 @@
 id: SPEC-0014
 type: feature
 title: Workshop entity and join flow
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 depends_on:
   - SPEC-0013
   - SPEC-0003
