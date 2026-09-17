@@ -110,7 +110,15 @@ export const AdminPage = () => {
       />
     )
   return (
-    <Box maxWidth={1000} mx="auto" p={4}>
+    <Box
+      component="main"
+      boxSizing="border-box"
+      height="100%"
+      maxWidth={1000}
+      mx="auto"
+      overflow="auto"
+      p={4}
+    >
       <Typography variant="h4">Administration</Typography>
       <Stack direction="row" spacing={1} my={2}>
         <Button
