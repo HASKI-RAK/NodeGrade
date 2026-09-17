@@ -233,7 +233,7 @@ table kept for backfill. Migrations live in `prisma/migrations/`.
 Location: `tools/debug/`, `docker-compose.debug.yml`, `docs/debugging.md`
 
 `stack.mjs` drives Compose (`up|serve|down|status|logs|reset`) on the 15xxx/18000 port
-range with a fake model worker (`fake-model.mjs`), seeded demo graph
+range with a fake model and embedding worker (`fake-model.mjs`), seeded demo graph
 (`demo-graph.json`) and two published workshop codes: `WAVE-2026` on the demo graph and
 `WAIE-2026` on the bundled WAIE template. `packages/backend/scripts/seed-debug.ts` writes
 both before the server starts, using the bundled content byte for byte so the bootstrap

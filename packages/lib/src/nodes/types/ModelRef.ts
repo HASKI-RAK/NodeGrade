@@ -5,11 +5,14 @@
 export const PROVIDER_KEY_LOCAL = 'local'
 export const PROVIDER_KEY_OPENAI = 'openai'
 export const PROVIDER_KEY_OPENROUTER = 'openrouter'
+export const PROVIDER_KEY_KATALYST = 'katalyst'
+export const KATALYST_MODEL_QWEN_FLASH = 'qwen3.8-flash-next'
 
 export const RESERVED_PROVIDER_KEYS = [
   PROVIDER_KEY_LOCAL,
   PROVIDER_KEY_OPENAI,
-  PROVIDER_KEY_OPENROUTER
+  PROVIDER_KEY_OPENROUTER,
+  PROVIDER_KEY_KATALYST
 ] as const
 
 /**

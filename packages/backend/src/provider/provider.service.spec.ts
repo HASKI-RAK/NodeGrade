@@ -43,6 +43,7 @@ describe('ProviderService', () => {
     modelWorkerUrl: process.env.MODEL_WORKER_URL,
     openAiKey: process.env.OPENAI_API_KEY,
     openRouterKey: process.env.OPENROUTER_API_KEY,
+    katalystKey: process.env.KATALYST_API_KEY,
     bearerToken: process.env.BEARER_TOKEN,
   };
   const findUnique = jest.fn();
@@ -59,6 +60,7 @@ describe('ProviderService', () => {
     delete process.env.MODEL_WORKER_URL;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.KATALYST_API_KEY;
     delete process.env.BEARER_TOKEN;
     findUnique.mockReset();
     findUniqueOrThrow.mockReset();
@@ -98,6 +100,7 @@ describe('ProviderService', () => {
     restore('MODEL_WORKER_URL', originalEnvironment.modelWorkerUrl);
     restore('OPENAI_API_KEY', originalEnvironment.openAiKey);
     restore('OPENROUTER_API_KEY', originalEnvironment.openRouterKey);
+    restore('KATALYST_API_KEY', originalEnvironment.katalystKey);
     restore('BEARER_TOKEN', originalEnvironment.bearerToken);
   });
 
@@ -108,7 +111,7 @@ describe('ProviderService', () => {
 
     await service.ensureInitialized();
 
-    expect(findUnique).toHaveBeenCalledTimes(3);
+    expect(findUnique).toHaveBeenCalledTimes(4);
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -123,6 +126,10 @@ describe('ProviderService', () => {
       .mockResolvedValueOnce({
         id: 'openrouter-id',
         baseUrl: 'https://saved-openrouter.example/v1',
+      })
+      .mockResolvedValueOnce({
+        id: 'katalyst-id',
+        baseUrl: 'https://vllm.katalyst-education.de/v1',
       });
     findMany.mockResolvedValue([]);
 
@@ -243,6 +250,7 @@ describe('ProviderService', () => {
   it('seeds a cloud provider closed and the local worker open', async () => {
     process.env.MODEL_WORKER_URL = 'http://model-worker:8000';
     process.env.OPENAI_API_KEY = 'seeded-openai-key';
+    process.env.KATALYST_API_KEY = 'seeded-katalyst-key';
     findUnique.mockResolvedValue(null);
     findMany.mockResolvedValue([]);
     create.mockResolvedValue({ id: 'created-id' });
@@ -259,7 +267,26 @@ describe('ProviderService', () => {
       local: 'ALLOW_ALL',
       openai: 'DENY_ALL',
       openrouter: 'DENY_ALL',
+      katalyst: 'ALLOWLIST',
     });
+    const katalyst = create.mock.calls.find(
+      ([call]) => call.data.key === 'katalyst',
+    )?.[0].data;
+    expect(katalyst).toEqual(
+      expect.objectContaining({
+        type: 'OPENAI_COMPATIBLE',
+        baseUrl: 'https://vllm.katalyst-education.de/v1',
+        enabled: true,
+        apiKeyHint: '••••-key',
+        modelPolicy: {
+          create: {
+            mode: 'ALLOWLIST',
+            allowedModels: ['qwen3.8-flash-next'],
+          },
+        },
+      }),
+    );
+    expect(cipher.decrypt(katalyst!.apiKeyEnc)).toBe('seeded-katalyst-key');
   });
 
   it('refuses to enable a cloud provider before a policy mode is chosen', async () => {
