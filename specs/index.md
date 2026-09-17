@@ -20,7 +20,7 @@ is included in a release.
 | 6 — Release confidence       | SPEC-0008                       | SPEC-0002, SPEC-0003, SPEC-0004, SPEC-0006, SPEC-0007, and SPEC-0014 are accepted.                                             | CI, deterministic browser coverage, documentation, and the conference happy path form the release gate.                                        |
 | 7 — Specification governance | SPEC-0015                       | The lint check attaches to the existing pull-request workflow that SPEC-0008 extends.                                          | Specification validation runs locally and in CI.                                                                                               |
 
-Waves 1 to 5 and wave 7 are implemented; wave 6 (SPEC-0008) is deferred. The Status
+Every wave is implemented. The Status
 column of the specification table below is authoritative and must match each
 specification's frontmatter `status`.
 
@@ -38,7 +38,7 @@ the required provider-management capabilities from SPEC-0009 are available.
 | SPEC-0005 | Feature | Editor shell and node UX                             | SPEC-0001 | Implemented |
 | SPEC-0006 | Feature | Run and trace observability                          | SPEC-0001 | Implemented |
 | SPEC-0007 | Feature | WAIE workshop experience and preview                 | SPEC-0001 | Implemented |
-| SPEC-0008 | Feature | Reliability, CI and documentation                    | SPEC-0001 | Deferred    |
+| SPEC-0008 | Feature | Reliability, CI and documentation                    | SPEC-0001 | Implemented |
 | SPEC-0009 | Epic    | LLM provider management and model governance         | null      | Implemented |
 | SPEC-0010 | Feature | Multi-provider LLM execution                         | SPEC-0009 | Implemented |
 | SPEC-0011 | Feature | Provider configuration admin UI                      | SPEC-0009 | Implemented |

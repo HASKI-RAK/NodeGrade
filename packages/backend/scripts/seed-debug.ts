@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PrismaClient } from '../src/generated/prisma/client.js';
+import { waieAssessmentTemplate } from '../src/template/bundled/waie-assessment.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl === undefined) {
@@ -106,8 +107,63 @@ try {
     },
   });
 
+  // The conference smoke test walks the WAIE workshop, and the bundled seeder only runs
+  // once the server is up — after this script. Installing the same bundled content here,
+  // byte for byte, gives the browser suite a WAIE workshop on the very first boot; the
+  // bootstrap seeder then recognises its own content hash and leaves the revision alone.
+  const waieContent = JSON.stringify(waieAssessmentTemplate.content);
+  const waieHash = createHash('sha256').update(waieContent, 'utf8').digest('hex');
+  const waieMetadata = {
+    name: waieAssessmentTemplate.name,
+    description: waieAssessmentTemplate.description,
+    category: waieAssessmentTemplate.category,
+    tags: waieAssessmentTemplate.tags,
+  };
+  const waieTemplate = await prisma.template.upsert({
+    where: { slug: waieAssessmentTemplate.slug },
+    update: { published: true, deletedAt: null },
+    create: {
+      slug: waieAssessmentTemplate.slug,
+      kind: waieAssessmentTemplate.kind,
+      published: true,
+      currentRevision: 1,
+      ...waieMetadata,
+    },
+  });
+  const waieRevision = await prisma.templateRevision.upsert({
+    where: {
+      templateId_revision: { templateId: waieTemplate.id, revision: 1 },
+    },
+    update: { content: waieContent, contentHash: waieHash },
+    create: {
+      templateId: waieTemplate.id,
+      revision: 1,
+      origin: 'BUNDLED',
+      content: waieContent,
+      contentHash: waieHash,
+      ...waieMetadata,
+    },
+  });
+  const waieWorkshop = await prisma.workshop.upsert({
+    where: { code: 'WAIE2026' },
+    update: {
+      status: 'PUBLISHED',
+      templateId: waieTemplate.id,
+      templateRevisionId: waieRevision.id,
+      closedAt: null,
+    },
+    create: {
+      code: 'WAIE2026',
+      title: 'WAIE free-text assessment workshop',
+      status: 'PUBLISHED',
+      templateId: waieTemplate.id,
+      templateRevisionId: waieRevision.id,
+      publishedAt: new Date(),
+    },
+  });
+
   console.log(
-    `Seeded debug workshop ${workshop.code}; browser workspace token ${token}`,
+    `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}; browser workspace token ${token}`,
   );
 } finally {
   await prisma.$disconnect();

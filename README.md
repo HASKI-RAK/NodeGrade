@@ -63,6 +63,9 @@ and publish its eight-character code. Participants enter the code at `/` or open
 Workflow persistence uses REST with optimistic version checks. Graph execution uses
 Socket.IO and a workspace-scoped workflow ID.
 
+See [Running a workshop](#running-a-workshop) for the facilitator checklist and
+[Instructions for participants](#instructions-for-participants) for the handout text.
+
 ### Benchmarking
 
 Facilitator-authenticated benchmark runs use `POST /api/benchmark/run` with the following body:
@@ -102,8 +105,16 @@ The library package includes shared resources and utilities used across the serv
 
 1. Run `yarn debug:up`.
 2. Open <http://localhost:15173/>.
-3. Join the seeded workshop with code `WAVE-2026`.
-4. Edit the workflow and wait for the `Saved` indicator.
+3. Join a seeded workshop: `WAVE-2026` for the minimal three-node graph, or `WAIE-2026`
+   for the full rubric, classification and feedback workflow.
+4. Select a node on the canvas. The inspector on the right edits its properties; the model
+   nodes in `WAIE-2026` ship unselected, so pick `nodegrade-deterministic` before running.
+5. Edit the workflow and wait for the `Saved` indicator.
+6. Press **Preview**, write an answer, and press **Run assessment**. The **Trace** tab
+   shows each node as it executes; clicking a step selects that node on the canvas.
+
+The debug stack answers every model call from a deterministic worker, so results are the
+same on every run and no API key is needed.
 
 ## Docker
 
@@ -111,13 +122,133 @@ The library package includes shared resources and utilities used across the serv
 OpenAI-compatible model worker. `yarn debug:down` stops the stack and
 `yarn debug:reset` recreates its database.
 
+## Deployment
+
+`docker-compose.yml` builds and runs the deployable stack: PostgreSQL, the backend on port
+5000, and the frontend on port 8080. It expects the model and similarity workers to be
+reachable at `MODEL_WORKER_URL` and `SIMILARITY_WORKER_URL`; `models/Dockerfile` builds the
+Python worker that serves them.
+
+```bash
+PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
+  docker compose up --build -d
+```
+
+Configure the backend through the environment (`.env_template` lists every variable):
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string. Required. |
+| `PROVIDER_ENCRYPTION_KEY` | Base64url-encoded 32-byte key encrypting stored provider API keys. Required, and **stable for the life of the deployment** — changing it makes every stored key undecryptable. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Facilitator sign-in at `/admin`. Without them the admin area stays disabled. |
+| `FRONTEND_URL`, `CORS_ORIGIN` | Public origin of the frontend, and the origins allowed to call the API. |
+| `MODEL_WORKER_URL` | An OpenAI-compatible endpoint offered as the `local` provider. |
+| `SIMILARITY_WORKER_URL` | The embedding worker used by the NLP nodes. |
+| `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | Seed credentials for the cloud providers. A seeded cloud provider starts with its model policy set to deny-all; a facilitator opens it in `/admin/providers`. |
+
+Apply schema migrations on every release, before the new backend serves traffic:
+
+```bash
+yarn workspace backend exec prisma migrate deploy
+```
+
+Release checklist:
+
+1. `yarn build && yarn typecheck && yarn lint:check && yarn test` pass.
+2. Migrations applied against the target database.
+3. `/health` returns `{"status":"ok"}` on the backend.
+4. `/admin` accepts the configured facilitator credentials.
+5. At least one provider is enabled with a model policy, and the readiness panel of the
+   workshop you are about to run reports all checks green.
+
+## Running a workshop
+
+1. **Sign in.** Open `/admin` and log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+2. **Open a provider.** In **Providers**, enable the provider you intend to use and set its
+   model policy — *allow all*, or an *allowlist* of the model ids participants may run. A
+   provider with no policy mode offers participants nothing, by design.
+3. **Create the workshop.** In **Workshops**, give it a title, pick a published template
+   and one of its revisions, and press **Create workshop**. The revision is frozen: later
+   edits to the template never change a running workshop.
+4. **Check readiness.** Each workshop shows a readiness panel covering the backend, the
+   template, the node types this build registers, and whether any model is available. Fix
+   anything red before the room arrives; participants hit the same checks on entry.
+5. **Publish.** Press **Publish** to hand out the eight-character code. Participants can
+   only join a published workshop.
+6. **Close.** Press **Close** when the session ends. The code stops working; workspaces
+   already handed out keep their content until retention removes them.
+
+## Authoring a template
+
+Template revisions are immutable (ADR-0003): new content is always a new revision, never an
+edit of an existing one. There are two ways in.
+
+**Ship it with the deployment.** Add a module to
+`packages/backend/src/template/bundled/` exporting a `BundledTemplate`, and list it in
+`bundled/index.ts`. The seeder installs it on startup, publishes it on first install, and
+afterwards only appends a revision when the bundled content actually changed. It leaves a
+template alone once a facilitator has edited it. `waie-assessment.ts` is the worked
+example.
+
+**Author it from the editor.** Build the graph in the editor, press **Export** to download
+its JSON, then post it as a facilitator:
+
+```bash
+# Sign in; the cookie jar carries the session and the CSRF cookie.
+curl -c jar.txt -X POST http://localhost:5000/api/admin/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"...","password":"..."}'
+
+curl -b jar.txt -X POST http://localhost:5000/api/admin/templates \
+  -H 'content-type: application/json' \
+  -H "X-CSRF-Token: $(grep ng_admin_csrf jar.txt | cut -f7)" \
+  -d "$(jq -n --slurpfile content workflow.json \
+        '{slug:"my-workshop", kind:"WORKFLOW", name:"My workshop", published:true,
+          content:($content[0]|tostring)}')"
+```
+
+A later revision of the same template is `POST /api/admin/templates/<id>/revisions` with
+the same body shape. `POST /api/admin/templates/<id>/published` controls whether it appears
+in the gallery at `/templates`.
+
+Two rules are worth knowing before you author:
+
+- **Leave model nodes unselected.** Set `needs_model_selection: true` and no `model_ref`.
+  Which models may run is decided server-side per deployment (ADR-0008), so a model id
+  baked into shipped content produces a run that fails at execution time somewhere else.
+- **Only use registered node types.** The readiness check refuses a workshop whose template
+  uses a node type this build does not register, because LiteGraph would otherwise drop
+  those nodes silently.
+
+## Instructions for participants
+
+Hand out the code and these five lines:
+
+1. Open **<https://your-deployment.example>** and type the code **`ABCD-EFGH`** into
+   *Workshop code*, then press **Join**. The dashes are optional.
+2. You now have your own private copy of the workflow. Nobody else sees your edits, and
+   nothing you do affects anyone else in the room.
+3. Click a node to edit it in the panel on the right. The editor saves by itself; the
+   toolbar says `Saved` when your work is stored.
+4. Press **Preview**, write an answer the way a student would, and press
+   **Run assessment**. An assessment can take up to two minutes — do not reload the page.
+   The **Trace** tab shows what each node did.
+5. If you close the tab, open the same link in the *same browser* to get your work back. A
+   different browser, a different device, or a private window gets a fresh copy.
+
 ## Scripts
 
 - **Development**: `yarn dev` - Runs both the server and frontend in development mode.
 - **Lint**: `yarn lint` - Lints the codebase for both the server and frontend.
 - **Unit tests**: `yarn test` - Runs backend and frontend tests.
 - **Database integration**: `yarn test:int` - Checks PostgreSQL constraints.
-- **Browser smoke tests**: `yarn test:e2e` - Exercises the workshop flow.
+- **Browser smoke tests**: `yarn test:e2e` - Walks the workshop flow in Chrome and Firefox
+  against the debug stack, which it starts itself.
+- **Specification lint**: `yarn lint:specs` - Checks `specs/` for structural consistency.
+
+Pull requests run the typecheck, lint, unit test, build, browser smoke test and
+specification lint jobs in `.github/workflows/pr.yml`. Making them block a merge is a
+repository setting rather than a file; see `.github/rulesets/`.
 
 ## License
 

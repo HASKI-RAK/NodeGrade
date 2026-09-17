@@ -2,11 +2,11 @@
 id: SPEC-0008
 type: feature
 title: Reliability, CI and documentation
-status: deferred
+status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-17
 depends_on:
   - SPEC-0002
   - SPEC-0003
@@ -203,7 +203,7 @@ Traces to: FR-007, SPEC-0004/FR-005
 
 ```gherkin
 Given two independent browser sessions
-When each creates a workflow with slug "rubric-assessment" and modifies its graph differently
+When each joins the same workshop code, receiving a workflow under the same slug, and modifies its graph differently
 Then each session reloads and sees only its own modifications
 ```
 
@@ -262,3 +262,4 @@ Then the platform prevents merging the PR
 | 2026-09-15 | Initial specification created |
 | 2026-09-15 | Added deterministic test provider for E2E (FR-006, AC-006), workspace isolation E2E (FR-007, AC-007), branch protection requirement (FR-008, AC-008). FR ordering corrected. Dependencies extended with SPEC-0014. |
 | 2026-09-15 | Review revision 2: frontmatter depends_on aligned with prose Dependencies (added SPEC-0006 and SPEC-0014) |
+| 2026-09-17 | Implemented. AC-007 no longer names a literal slug: the slug under test is whatever joining a workshop derives from the template revision name, and the requirement is that two workspaces may hold the same one. |

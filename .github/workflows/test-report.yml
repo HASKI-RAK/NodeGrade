@@ -25,6 +25,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      # The backend imports @haski/ta-lib from its build output; without this the report
+      # records failures that are only a missing dist.
+      - name: Build
+        run: yarn build
+
       - name: Run tests with JSON report
         run: yarn test:report
 

@@ -233,8 +233,33 @@ Location: `tools/debug/`, `docker-compose.debug.yml`, `docs/debugging.md`
 
 `stack.mjs` drives Compose (`up|serve|down|status|logs|reset`) on the 15xxx/18000 port
 range with a fake model worker (`fake-model.mjs`), seeded demo graph
-(`demo-graph.json`) and a published workshop code. Playwright (`e2e/`,
-`playwright.config.ts`) boots it via `yarn debug:serve`.
+(`demo-graph.json`) and two published workshop codes: `WAVE-2026` on the demo graph and
+`WAIE-2026` on the bundled WAIE template. `packages/backend/scripts/seed-debug.ts` writes
+both before the server starts, using the bundled content byte for byte so the bootstrap
+seeder recognises its own hash and appends no revision.
+
+## Browser suite
+
+Location: `e2e/`, `playwright.config.ts`
+
+Playwright in Chromium and Firefox against the debug stack, which it boots via
+`yarn debug:serve` or reuses if already running. `support/nodegrade.ts` holds the shared
+workshop-entry helpers and the typed `window.__NODEGRADE_DEBUG__` bridge;
+`conference-smoke.spec.ts` walks the conference happy path end to end,
+`workspace-isolation.spec.ts` proves two sessions under one workshop code stay separate,
+and `debug-stack.spec.ts` covers the deterministic model contract and autosave. No test
+may reach a cloud provider: the stack ships no provider credential, and the suite asserts
+the catalog offers only the local worker.
+
+## Pull-request gate
+
+Location: `.github/workflows/pr.yml`, `.github/rulesets/`
+
+Three parallel jobs, each budgeted at 15 minutes: `verify` (build, typecheck, lint, unit
+tests), `e2e` (browsers, debug stack, `yarn test:e2e`) and `specs` (specification linter).
+`.github/rulesets/integration-branches-require-ci.json` is the ruleset that makes all
+three required on `dev` and `main`; a repository administrator applies it with `gh api`,
+since GitHub cannot read a ruleset from the tree.
 
 ## Specification linter
 
