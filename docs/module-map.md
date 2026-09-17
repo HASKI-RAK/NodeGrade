@@ -182,7 +182,8 @@ Location: `packages/frontend/src/pages/`, routes in `packages/frontend/src/route
 
 Primary entry points: `StartPage.tsx` (`/`), `WorkshopJoin.tsx` (`/workshop/:code`),
 `WorkflowListPage.tsx`, `TemplatesPage.tsx`, `admin/AdminPage.tsx`
-(`/admin/workshops`, `/admin/providers`), `lti/LtiRegister.tsx`, `NotFoundPage.tsx`
+(`/admin/workshops`, `/admin/providers`, `/admin/templates`), `admin/TemplateAdmin.tsx`,
+`lti/LtiRegister.tsx`, `NotFoundPage.tsx`
 
 Server access: `api/http.ts` only. Runtime config: `utils/config.ts` +
 `public/config/env.*.json`.

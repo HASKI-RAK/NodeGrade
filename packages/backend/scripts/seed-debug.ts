@@ -107,12 +107,29 @@ try {
     },
   });
 
-  // The conference smoke test walks the WAIE workshop, and the bundled seeder only runs
-  // once the server is up — after this script. Installing the same bundled content here,
-  // byte for byte, gives the browser suite a WAIE workshop on the very first boot; the
-  // bootstrap seeder then recognises its own content hash and leaves the revision alone.
-  const waieContent = JSON.stringify(waieAssessmentTemplate.content);
-  const waieHash = createHash('sha256').update(waieContent, 'utf8').digest('hex');
+  // The conference smoke test maps the canonical OpenRouter selection to the local fake
+  // model. Its workshop stays pinned to this deterministic revision. The bootstrap seeder
+  // may append the canonical bundled revision for gallery use after the server starts.
+  const debugWaie = JSON.parse(
+    JSON.stringify(waieAssessmentTemplate.content),
+  ) as typeof waieAssessmentTemplate.content;
+  for (const node of debugWaie.nodes) {
+    if (node.type !== 'models/llm') continue;
+    node.properties = {
+      ...node.properties,
+      value: 'nodegrade-deterministic',
+      model: 'nodegrade-deterministic',
+      model_ref: {
+        providerKey: 'local',
+        modelId: 'nodegrade-deterministic',
+      },
+      needs_model_selection: false,
+    };
+  }
+  const waieContent = JSON.stringify(debugWaie);
+  const waieHash = createHash('sha256')
+    .update(waieContent, 'utf8')
+    .digest('hex');
   const waieMetadata = {
     name: waieAssessmentTemplate.name,
     description: waieAssessmentTemplate.description,

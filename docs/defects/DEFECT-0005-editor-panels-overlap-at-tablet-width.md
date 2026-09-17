@@ -1,13 +1,14 @@
 ---
 id: DEFECT-0005
 title: Inspector covers the node palette at tablet width
-status: open
+status: resolved
 severity: medium
 area: editor-shell
 specs:
   - SPEC-0005/AC-003
   - SPEC-0005/AC-006
 found: 2026-09-17
+fixed: 2026-09-17
 ---
 
 # Inspector covers the node palette at tablet width
@@ -54,3 +55,14 @@ Tablet-sized workshop displays make the primary Add workflow appear inactive and
 ## Acceptance check
 
 At compact breakpoints, opening Add should replace or close the active details drawer. Add a Playwright viewport case that searches for a node and inserts it at 780 x 493.
+
+## Resolution
+
+- Opening Add at the compact breakpoint now closes the details drawer.
+- Added a 780 x 493 Playwright regression that searches for and inserts a Question node.
+
+## Verification
+
+- `yarn test`: 300 backend tests and 59 frontend tests passed.
+- `yarn test:e2e`: 18 Chromium and Firefox tests passed.
+- `yarn typecheck`, `yarn lint:check`, `yarn test:specs`, and `yarn build` passed.

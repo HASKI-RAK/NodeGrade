@@ -20,6 +20,8 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { apiRequest, type WorkshopReadiness } from '@/api/http'
 
+import { TemplateAdmin } from './TemplateAdmin'
+
 type Session = { enabled: boolean; authenticated: boolean }
 type Workshop = {
   id: string
@@ -125,8 +127,21 @@ export const AdminPage = () => {
         >
           Providers
         </Button>
+        <Button
+          component={Link}
+          to="/admin/templates"
+          variant={location.pathname.endsWith('templates') ? 'contained' : 'outlined'}
+        >
+          Templates
+        </Button>
       </Stack>
-      {location.pathname.endsWith('providers') ? <ProviderAdmin /> : <WorkshopAdmin />}
+      {location.pathname.endsWith('providers') ? (
+        <ProviderAdmin />
+      ) : location.pathname.endsWith('templates') ? (
+        <TemplateAdmin />
+      ) : (
+        <WorkshopAdmin />
+      )}
     </Box>
   )
 }

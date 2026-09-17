@@ -1,12 +1,13 @@
 ---
 id: DEFECT-0002
 title: Template gallery omits category, type filtering, and structural preview
-status: open
+status: resolved
 severity: medium
 area: templates
 specs:
   - SPEC-0003/AC-007
 found: 2026-09-17
+fixed: 2026-09-17
 ---
 
 # Template gallery omits category, type filtering, and structural preview
@@ -57,3 +58,15 @@ Participants and facilitators lack template-kind distinction and graph inspectio
 ## Acceptance check
 
 Add visible category metadata, a workflow/block type filter, and a structural preview. Cover the combined seeded gallery with a Playwright assertion matching SPEC-0003/AC-007.
+
+## Resolution
+
+- Added template-kind filtering and visible category and kind chips.
+- Added an on-demand structural preview listing node titles, node types, and connection count.
+- Added component and Playwright regression coverage.
+
+## Verification
+
+- `yarn test`: 300 backend tests and 59 frontend tests passed.
+- `yarn test:e2e`: 18 Chromium and Firefox tests passed.
+- `yarn typecheck`, `yarn lint:check`, `yarn test:specs`, and `yarn build` passed.

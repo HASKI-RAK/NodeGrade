@@ -67,20 +67,15 @@ test('a participant joins the WAIE workshop, edits the rubric, runs it and reloa
   const modelNodeIds = await nodeIdsByType(page, 'models/llm')
   expect(modelNodeIds).toHaveLength(3)
 
-  // The template ships every model node unselected on purpose (ADR-0008), so picking a
-  // model is part of the flow rather than a shortcut around it.
+  // Debug seeding maps the production OpenRouter default to the deterministic local
+  // provider, preserving the configured-workflow path without external traffic.
   for (const id of modelNodeIds) {
-    await inspectNode(page, id)
-    await page.getByRole('combobox', { name: 'Model' }).click()
-    await page
-      .getByRole('option')
-      .filter({ hasText: DETERMINISTIC_MODEL_ID })
-      .first()
-      .click()
-    await expect.poll(() => nodeProperty(page, id, 'model_ref')).toEqual({
-      providerKey: DETERMINISTIC_PROVIDER_KEY,
-      modelId: DETERMINISTIC_MODEL_ID
-    })
+    await expect
+      .poll(() => nodeProperty(page, id, 'model_ref'))
+      .toEqual({
+        providerKey: DETERMINISTIC_PROVIDER_KEY,
+        modelId: DETERMINISTIC_MODEL_ID
+      })
   }
 
   await inspectNode(page, rubricId)

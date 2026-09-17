@@ -60,6 +60,8 @@ export type Workflow = {
   name: string
   slug: string
   version: number
+  sourceTemplateId?: string | null
+  sourceTemplateRevisionId?: string | null
   content?: string
   updatedAt?: string
 }
@@ -151,6 +153,14 @@ export const api = {
         token,
         headers: { 'If-Match': `W/"${version}"` },
         body: { content }
+      })
+    ).data,
+  resetWorkflow: async (token: string | null, id: string) =>
+    (
+      await apiRequest<Workflow>(`/workflows/${id}/reset`, {
+        method: 'POST',
+        token,
+        body: {}
       })
     ).data,
   publishWorkflow: async (token: string | null, id: string) =>

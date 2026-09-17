@@ -69,6 +69,10 @@ describe('provider administration', () => {
       'href',
       '/admin/providers'
     )
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
+      'href',
+      '/admin/templates'
+    )
     await screen.findByRole('heading', { name: 'OpenAI' })
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))

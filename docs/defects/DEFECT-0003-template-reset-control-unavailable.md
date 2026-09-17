@@ -1,13 +1,14 @@
 ---
 id: DEFECT-0003
 title: Template-derived workflows lack a reset action
-status: open
+status: resolved
 severity: high
 area: templates
 specs:
   - SPEC-0003/AC-002
   - SPEC-0003/AC-003
 found: 2026-09-17
+fixed: 2026-09-17
 ---
 
 # Template-derived workflows lack a reset action
@@ -57,3 +58,15 @@ Workshop participants lack the specified recovery path after graph edits. Facili
 ## Acceptance check
 
 Expose Reset to source revision for template-derived workflows, show a destructive confirmation dialog, call the workflow reset endpoint, reload the restored graph, and preserve the source revision reference.
+
+## Resolution
+
+- Added a template-derived workflow reset action to the editor overflow menu.
+- Added destructive confirmation, reset endpoint wiring, graph reload, version synchronization, and history clearing.
+- Added component and Playwright regression coverage.
+
+## Verification
+
+- `yarn test`: 300 backend tests and 59 frontend tests passed.
+- `yarn test:e2e`: 18 Chromium and Firefox tests passed.
+- `yarn typecheck`, `yarn lint:check`, `yarn test:specs`, and `yarn build` passed.

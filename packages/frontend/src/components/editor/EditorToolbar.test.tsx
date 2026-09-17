@@ -14,6 +14,7 @@ describe('EditorToolbar', () => {
         status="saved"
         student={false}
         canSaveAs
+        canReset
         ltiInstructor
         developerTools={false}
         connectionStatus="Connected"
@@ -24,6 +25,7 @@ describe('EditorToolbar', () => {
         onSaveAs={async () => undefined}
         onImport={async () => undefined}
         onExport={action}
+        onReset={async () => undefined}
         onDeveloperTools={action}
         onPublish={async () => undefined}
         onRetry={action}
@@ -42,7 +44,52 @@ describe('EditorToolbar', () => {
     expect(screen.getByText('Save as…')).toBeVisible()
     expect(screen.getByText('Import workflow…')).toBeVisible()
     expect(screen.getByText('Export workflow')).toBeVisible()
+    expect(screen.getByText('Reset to source template…')).toBeVisible()
     expect(screen.getByText('Connection information')).toBeVisible()
     expect(screen.getByText('Publish to students')).toBeVisible()
+  })
+
+  it('confirms before resetting a template-derived workflow', async () => {
+    const user = userEvent.setup()
+    const reset = vi.fn().mockResolvedValue(undefined)
+    render(
+      <EditorToolbar
+        workflowName="Demo"
+        status="saved"
+        student={false}
+        canSaveAs
+        canReset
+        ltiInstructor={false}
+        developerTools={false}
+        connectionStatus="Connected"
+        onAdd={vi.fn()}
+        onTemplates={vi.fn()}
+        onRun={vi.fn()}
+        onPreview={vi.fn()}
+        onSaveAs={async () => undefined}
+        onImport={async () => undefined}
+        onExport={vi.fn()}
+        onReset={reset}
+        onDeveloperTools={vi.fn()}
+        onPublish={async () => undefined}
+        onRetry={vi.fn()}
+        onReloadLatest={vi.fn()}
+        connectionInfo={{
+          apiOrigin: 'http://api',
+          wsOrigin: 'ws://api',
+          workspaceType: 'BROWSER',
+          workflowId: 'wf-1'
+        }}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'More editor actions' }))
+    await user.click(screen.getByText('Reset to source template…'))
+    expect(
+      screen.getByRole('heading', { name: 'Reset to source template?' })
+    ).toBeVisible()
+    expect(reset).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Reset workflow' }))
+    expect(reset).toHaveBeenCalledOnce()
   })
 })

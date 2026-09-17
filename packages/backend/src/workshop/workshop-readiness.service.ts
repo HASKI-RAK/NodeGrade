@@ -1,4 +1,4 @@
-import { getNodeDefinition } from '@haski/ta-lib';
+import { getNodeDefinition, isModelRef } from '@haski/ta-lib';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
@@ -90,7 +90,7 @@ export class WorkshopReadinessService {
       this.templateCheck(workshop),
     ];
     checks.push(this.nodeTypeCheck(workshop.templateRevision?.content));
-    checks.push(await this.modelCheck());
+    checks.push(await this.modelCheck(workshop.templateRevision?.content));
 
     return {
       status: checks.some((check) => check.status === 'FAIL') ? 'FAIL' : 'PASS',
@@ -159,31 +159,98 @@ export class WorkshopReadinessService {
    * Passes only when a participant could actually run something: a reachable provider
    * offering at least one model its policy permits (SPEC-0010, SPEC-0012).
    */
-  private async modelCheck(): Promise<ReadinessCheck> {
+  private async modelCheck(
+    content: string | undefined,
+  ): Promise<ReadinessCheck> {
     const label = 'Provider and models';
+    if (content === undefined)
+      return fail('models', label, 'There is no template content to check.');
+
+    let modelRefs: { providerKey: string; modelId: string }[];
+    try {
+      const modelNodes = parseGraphContent(content).nodes.filter(
+        (node) => node.type === 'models/llm',
+      );
+      const invalid = modelNodes.filter((node) => {
+        const properties = node.properties;
+        if (typeof properties !== 'object' || properties === null) return true;
+        return (
+          !isModelRef(Reflect.get(properties, 'model_ref')) ||
+          Reflect.get(properties, 'needs_model_selection') === true
+        );
+      });
+      if (invalid.length > 0)
+        return fail(
+          'models',
+          label,
+          `${invalid.length} model node(s) need a configured provider and model.`,
+        );
+      modelRefs = modelNodes.map((node) => {
+        const properties = node.properties as Record<string, unknown>;
+        return properties.model_ref as { providerKey: string; modelId: string };
+      });
+    } catch (error) {
+      return fail(
+        'models',
+        label,
+        error instanceof TemplateContentError
+          ? error.message
+          : 'The template model configuration could not be read.',
+      );
+    }
+
     const catalog = await this.runtime.catalog();
     const reachable = catalog.providers.filter(
       (provider) => provider.status === 'AVAILABLE',
     );
-    if (catalog.models.length > 0 && reachable.length > 0)
-      return pass(
-        'models',
-        label,
-        `${catalog.models.length} model(s) available from ${reachable
-          .map((provider) => provider.providerName)
-          .join(', ')}.`,
-      );
     if (catalog.providers.length === 0)
       return fail('models', label, 'No provider is configured and enabled.');
     const statuses = catalog.providers
       .map((provider) => `${provider.providerName}: ${provider.status}`)
       .join(', ');
-    return fail(
+    if (reachable.length === 0)
+      return fail('models', label, `No provider is reachable (${statuses}).`);
+    if (catalog.models.length === 0)
+      return fail(
+        'models',
+        label,
+        `No model is allowed for participants (${statuses}).`,
+      );
+    const unavailable = modelRefs.filter(
+      (ref) =>
+        !catalog.models.some(
+          (model) =>
+            model.ref.providerKey === ref.providerKey &&
+            model.ref.modelId === ref.modelId,
+        ),
+    );
+    if (unavailable.length > 0)
+      return fail(
+        'models',
+        label,
+        `Template model unavailable: ${[
+          ...new Set(
+            unavailable.map((ref) => `${ref.providerKey}/${ref.modelId}`),
+          ),
+        ].join(', ')}.`,
+      );
+    if (modelRefs.length > 0)
+      return pass(
+        'models',
+        label,
+        `Every configured model is available (${[
+          ...new Set(
+            modelRefs.map((ref) => `${ref.providerKey}/${ref.modelId}`),
+          ),
+        ].join(', ')}).`,
+      );
+
+    return pass(
       'models',
       label,
-      reachable.length === 0
-        ? `No provider is reachable (${statuses}).`
-        : `No model is allowed for participants (${statuses}).`,
+      `${catalog.models.length} model(s) available from ${reachable
+        .map((provider) => provider.providerName)
+        .join(', ')}.`,
     );
   }
 

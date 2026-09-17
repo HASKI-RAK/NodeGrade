@@ -1,7 +1,7 @@
 ---
 id: DEFECT-0001
 title: Published WAIE workshop starts with unconfigured model nodes
-status: open
+status: resolved
 severity: critical
 area: workshop-execution
 specs:
@@ -9,6 +9,7 @@ specs:
   - SPEC-0007/AC-007
   - SPEC-0007/AC-008
 found: 2026-09-17
+fixed: 2026-09-17
 ---
 
 # Published WAIE workshop starts with unconfigured model nodes
@@ -71,3 +72,15 @@ The published conference workflow passes facilitator readiness and then fails du
 1. Seed or publish a WAIE revision whose three LLM nodes use an allowed provider-qualified model reference.
 2. Extend readiness to validate model references used by every LLM node in the selected template revision.
 3. Join the published workshop from a fresh browser context and complete an assessment using the seeded configuration.
+
+## Resolution
+
+- Configured all canonical WAIE LLM nodes with `openrouter/openrouter/free`.
+- Extended workshop readiness to reject unconfigured and unavailable template model references.
+- Kept browser tests deterministic through a debug-only mapping to `local/nodegrade-deterministic`.
+
+## Verification
+
+- `yarn test`: 300 backend tests and 59 frontend tests passed.
+- `yarn test:e2e`: 18 Chromium and Firefox tests passed.
+- `yarn typecheck`, `yarn lint:check`, `yarn test:specs`, and `yarn build` passed.

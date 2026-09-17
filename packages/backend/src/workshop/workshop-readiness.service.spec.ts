@@ -30,14 +30,18 @@ const workshopRow = (
 const catalog = (overrides: Partial<ModelCatalog> = {}): ModelCatalog => ({
   models: [
     {
-      ref: { providerKey: 'openai', modelId: 'gpt-4o-mini' },
-      label: 'GPT-4o mini',
-      providerName: 'OpenAI',
+      ref: { providerKey: 'openrouter', modelId: 'openrouter/free' },
+      label: 'OpenRouter Free',
+      providerName: 'OpenRouter',
       capabilities: { supportedParameters: [] },
     },
   ],
   providers: [
-    { providerKey: 'openai', providerName: 'OpenAI', status: 'AVAILABLE' },
+    {
+      providerKey: 'openrouter',
+      providerName: 'OpenRouter',
+      status: 'AVAILABLE',
+    },
   ],
   ...overrides,
 });
@@ -87,7 +91,11 @@ describe('WorkshopReadinessService', () => {
       catalog({
         models: [],
         providers: [
-          { providerKey: 'openai', providerName: 'OpenAI', status: 'UNREACHABLE' },
+          {
+            providerKey: 'openai',
+            providerName: 'OpenAI',
+            status: 'UNREACHABLE',
+          },
         ],
       }),
     );
@@ -107,6 +115,50 @@ describe('WorkshopReadinessService', () => {
     expect(await detailOf('models')).toMatchObject({
       status: 'FAIL',
       detail: expect.stringContaining('No model is allowed'),
+    });
+  });
+
+  it('fails when any template model node is unconfigured', async () => {
+    const content = JSON.parse(JSON.stringify(waieAssessmentTemplate.content));
+    content.nodes.find(
+      (node: { type: string }) => node.type === 'models/llm',
+    ).properties = {
+      model_ref: null,
+      needs_model_selection: true,
+    };
+    findUnique.mockResolvedValue(
+      workshopRow({
+        templateRevision: {
+          id: 'rev-unconfigured',
+          name: 'Unconfigured workflow',
+          content: JSON.stringify(content),
+        },
+      }),
+    );
+
+    expect(await detailOf('models')).toMatchObject({
+      status: 'FAIL',
+      detail: expect.stringContaining('1 model node'),
+    });
+  });
+
+  it('fails when the template-selected model is absent from the allowed catalog', async () => {
+    catalogOf.mockResolvedValue(
+      catalog({
+        models: [
+          {
+            ref: { providerKey: 'openrouter', modelId: 'another/model' },
+            label: 'Another model',
+            providerName: 'OpenRouter',
+            capabilities: { supportedParameters: [] },
+          },
+        ],
+      }),
+    );
+
+    expect(await detailOf('models')).toMatchObject({
+      status: 'FAIL',
+      detail: expect.stringContaining('openrouter/openrouter/free'),
     });
   });
 
@@ -159,6 +211,8 @@ describe('WorkshopReadinessService', () => {
   it('raises the unavailable error for an unknown workshop', async () => {
     findUnique.mockResolvedValue(null);
 
-    await expect(service.byId('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.byId('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

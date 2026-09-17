@@ -251,6 +251,18 @@ export const Editor = () => {
     setWorkflow(latest)
   }, [autosave, history, lgraph, token, workflowId])
 
+  const resetToTemplate = useCallback(async () => {
+    await api.resetWorkflow(token, workflowId)
+    const { workflow: restored } = await api.workflow(workflowId, token)
+    const parsed = parseWorkflow(restored.content ?? '{"nodes":[]}')
+    autosave.replaceWithLatest(restored.content ?? '{"nodes":[]}', restored.version)
+    prepareGraph(lgraph, parsed)
+    history.clear()
+    setSelection([])
+    setWorkflow(restored)
+    setNotice('Workflow reset to its source template revision.')
+  }, [autosave, history, lgraph, token, workflowId])
+
   const importWorkflow = useCallback(
     async (file: File) => {
       try {
@@ -357,10 +369,14 @@ export const Editor = () => {
         status={autosave.status}
         student={student}
         canSaveAs={!!token}
+        canReset={!!workflow.sourceTemplateRevisionId && !!token}
         ltiInstructor={ltiMode && !student}
         developerTools={developerTools}
         connectionStatus={connectionStatus}
-        onAdd={() => setPaletteOpen((open) => !open)}
+        onAdd={() => {
+          setPaletteOpen((open) => !open)
+          if (mobile && !paletteOpen) setRailOpen(false)
+        }}
         onTemplates={() =>
           navigate(
             `/templates?returnTo=${encodeURIComponent(location.pathname + location.search)}`
@@ -371,6 +387,7 @@ export const Editor = () => {
         onSaveAs={saveAs}
         onImport={importWorkflow}
         onExport={exportWorkflow}
+        onReset={resetToTemplate}
         onDeveloperTools={setDeveloperTools}
         onPublish={async () => {
           await api.publishWorkflow(token, workflowId)

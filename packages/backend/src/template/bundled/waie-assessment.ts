@@ -1,3 +1,4 @@
+import { PROVIDER_KEY_OPENROUTER } from '@haski/ta-lib';
 import type { BundledTemplate } from './bundled-template.js';
 
 const RUBRIC = [
@@ -25,10 +26,13 @@ const FEEDBACK = [
 ].join('\n');
 
 const llmProperties = (maxTokens: number) => ({
-  value: '',
-  model: '',
-  model_ref: null,
-  needs_model_selection: true,
+  value: 'openrouter/free',
+  model: 'openrouter/free',
+  model_ref: {
+    providerKey: PROVIDER_KEY_OPENROUTER,
+    modelId: 'openrouter/free',
+  },
+  needs_model_selection: false,
   max_tokens: maxTokens,
   temperature: 0.2,
   top_p: 1,
@@ -45,9 +49,8 @@ const llmProperties = (maxTokens: number) => ({
  * swap a feedback strategy or insert a validation step, and that is only editable if each
  * stage has its own prompt node rather than one monolithic prompt.
  *
- * Every model node ships unselected (`needs_model_selection`). Which models a participant
- * may pick is decided server-side by the provider policy (ADR-0008), so baking a model id
- * into shipped content would only produce a run that fails at execution time.
+ * Every model node starts on OpenRouter's free-model router. The facilitator controls
+ * access server-side through provider credentials and model policy (ADR-0008).
  */
 export const waieAssessmentTemplate: BundledTemplate = {
   slug: 'waie-assessment',
