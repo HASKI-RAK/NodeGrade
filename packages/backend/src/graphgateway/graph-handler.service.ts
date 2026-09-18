@@ -132,10 +132,19 @@ export class GraphHandlerService {
           ],
           [],
         )[0];
+        // The compiled graph renumbers nodes, so uniqueId is an execution id. Resolve
+        // it to editor identity the same way traces do, so the editor can locate the
+        // node that produced this output.
+        const source = this.executionSourceMaps
+          .get(correlation.runId)
+          ?.find((entry) => entry.executionId === Number(node.id));
         client.emit(event.eventName, {
           ...payload,
           value: output.value,
-          ...correlation,
+          wrapperId: source?.wrapperId ?? null,
+          sourceId: source?.sourceId ?? null,
+          runId: correlation.runId,
+          workflowId: correlation.workflowId,
           timestamp: new Date().toISOString(),
         });
       };

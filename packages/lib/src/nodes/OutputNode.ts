@@ -11,7 +11,12 @@ import { LGraphNode, LiteGraph } from './litegraph-extensions'
  * path: output/feedback
  */
 export class OutputNode extends LGraphNode {
-  properties: Omit<ServerEventPayload['outputSet'], keyof RunCorrelation>
+  // Editor identity (wrapperId/sourceId) is resolved by the server at emit time, so it
+  // is not a node property.
+  properties: Omit<
+    ServerEventPayload['outputSet'],
+    keyof RunCorrelation | 'wrapperId' | 'sourceId'
+  >
   constructor() {
     super()
     this.title = 'feedback output'

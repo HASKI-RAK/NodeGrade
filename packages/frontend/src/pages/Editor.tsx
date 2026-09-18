@@ -311,7 +311,11 @@ export const Editor = () => {
           }
         }
       }
-      const node = lgraph.getNodeById(nodeId)
+      // Top-level nodes: the compiler renumbers every node, so nodeId is the compiled
+      // id and only sourceId is the editor id.
+      const node = lgraph.getNodeById(
+        source?.wrapperId == null && source?.sourceId != null ? source.sourceId : nodeId
+      )
       if (!node) return
       canvas.selectNode(node)
       canvas.centerOnNode(node)
@@ -579,6 +583,7 @@ export const Editor = () => {
               trace={trace}
               onCancel={() => runId && cancelRun(runId)}
               onSelectTraceNode={selectTraceNode}
+              onSelectOutputNode={student ? undefined : selectTraceNode}
             />
           ) : (
             <NodeInspector

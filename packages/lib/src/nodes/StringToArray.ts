@@ -26,10 +26,11 @@ export class StringsToArray extends LGraphNode {
   //name of the function to call when executing
   async onExecute() {
     const output = []
-    if (this.getInputData(0) !== null) {
+    // An unconnected input reads as undefined, not null; neither belongs in the list.
+    if (this.getInputData(0) != null) {
       output.push(this.getInputData(0))
     }
-    if (this.getInputData(1) !== null) {
+    if (this.getInputData(1) != null) {
       output.push(this.getInputData(1))
     }
     this.properties.value = output

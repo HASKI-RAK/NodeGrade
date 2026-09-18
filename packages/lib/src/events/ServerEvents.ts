@@ -72,10 +72,15 @@ export type ServerEventPayload = {
   graphFinished: RunCorrelation & { graph: string }
   graphOperationFailed: GraphOperationFailure & Partial<RunCorrelation>
   outputSet: RunCorrelation & {
+    /** Id of the emitting node in the compiled execution graph. */
     uniqueId: string
     type: OutputType
     label: string
     value: string | number | string[]
+    /** Editor id of the innermost block wrapper, when the node ran inside one. */
+    wrapperId?: number | null
+    /** Editor id of the node that produced this output; lets the editor locate it. */
+    sourceId?: number | null
   }
   //feedback: string // string from the feedback node
   //successPercentage: number // can be used for cosine similarity and is indicated by a progress bar in the frontend. used by successPercentageNode

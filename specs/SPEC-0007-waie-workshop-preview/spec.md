@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-17
+updated: 2026-09-18
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -130,7 +130,11 @@ runtime input in the Test tab.
 
 WHEN a test run completes,
 the system SHALL display the resulting score, classification, and feedback in the
-results area.
+results area, each output on its own card titled by the output node's label.
+
+WHILE the preview is open in the editor (not the student view),
+each result card SHALL offer an action that selects and centers the node that produced
+the output on the canvas, including a node inside a block.
 
 ### FR-005 — Trace tab
 
@@ -203,7 +207,8 @@ Traces to: FR-002, FR-004
 ```gherkin
 Given the WAIE workflow is open in the editor
 When the user enters a student answer and runs the assessment
-Then the results area shows a score, a classification, and feedback
+Then the results area shows a score, a classification, and feedback as separate cards
+And each card offers to locate its output node on the canvas
 ```
 
 ### AC-003 — Question edited in inspector only
@@ -329,3 +334,4 @@ Then all preflight checks are displayed with pass/fail state
 | 2026-09-15 | Initial specification created |
 | 2026-09-15 | Review revision 2: maximum answer length added as workflow configuration (FR-008a/FR-008b, AC-006a, US-004); preflight wording unified — provider/model health check explicit in FR-009; dependencies re-pointed from the SPEC-0009 epic to SPEC-0010 and SPEC-0012 (composite references and allowed models) in prose and frontmatter |
 | 2026-09-17 | Implemented: canonical WAIE template shipped, preview Test/Trace tabs in English with workflow-configured answer bounds, workshop preflight and facilitator readiness view |
+| 2026-09-18 | FR-004/AC-002 refined: each result on its own card; editor-only jump from a card to its output node (`outputSet` now carries editor `sourceId`/`wrapperId`) |

@@ -4,15 +4,20 @@ import {
   RunState,
   ServerEventPayload
 } from '@haski/ta-lib'
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import {
-  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
+  Chip,
   FormControl,
+  IconButton,
   Stack,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material'
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
@@ -32,6 +37,9 @@ interface MyThemeComponentProps {
   color?: 'primary' | 'secondary'
 }
 
+/** A score at or above this value counts as passed (SPEC-0007/FR-004). */
+const PASS_THRESHOLD = 60
+
 /**
  * based on value successPercentage, color progress bar changes
  */
@@ -45,7 +53,7 @@ const BorderLinearProgress = styled(LinearProgress)<
   },
   [`& .${linearProgressClasses.bar}`]: {
     borderRadius: 5,
-    backgroundColor: value >= 60 ? '#388E3C' : '#308fe8'
+    backgroundColor: value >= PASS_THRESHOLD ? '#388E3C' : '#308fe8'
   }
 }))
 
@@ -66,70 +74,156 @@ const lengthError = (
   return messages.answerBoundsConflict(violation.minChars, violation.maxChars)
 }
 
+/** Selects and centers a node on the canvas, resolving block-inner nodes via source. */
+export type SelectGraphNode = (
+  nodeId: number,
+  source?: { wrapperId?: number | null; sourceId?: number | null }
+) => void
+
+type Output = ServerEventPayload['outputSet']
+
+/**
+ * One result on its own card: the output node's label as title, the value as body.
+ * The locate button is an editor affordance and only renders when a handler is given;
+ * students see the card without it.
+ */
+const ResultCard = ({
+  output,
+  messages,
+  onLocate
+}: {
+  output: Output
+  messages: PreviewMessages
+  onLocate?: () => void
+}) => {
+  const title =
+    output.type === 'classifications'
+      ? output.label || messages.classificationsHeading
+      : output.label
+  const passed =
+    output.type === 'score' &&
+    typeof output.value === 'number' &&
+    output.value >= PASS_THRESHOLD
+
+  const body = (() => {
+    switch (output.type) {
+      case 'text':
+        return (
+          <Typography
+            variant="body1"
+            sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+          >
+            {String(output.value).trim()}
+          </Typography>
+        )
+      case 'score':
+        if (typeof output.value !== 'number') return null
+        return (
+          <Stack spacing={1}>
+            <Typography variant="h4" component="p" fontWeight={600}>
+              {output.value}
+            </Typography>
+            {output.value >= 0 && output.value <= 100 && (
+              <BorderLinearProgress
+                variant="determinate"
+                value={output.value}
+                aria-label={title}
+              />
+            )}
+          </Stack>
+        )
+      case 'classifications':
+        if (!Array.isArray(output.value)) return null
+        return (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            {output.value
+              // Unconnected list inputs arrive as null over the wire; never show an empty chip.
+              .filter(
+                (classification): classification is string =>
+                  typeof classification === 'string' && classification.trim().length > 0
+              )
+              .map((classification, index) => (
+                <Chip
+                  key={`${index}-${classification}`}
+                  label={classification}
+                  variant="outlined"
+                />
+              ))}
+          </Stack>
+        )
+    }
+  })()
+
+  return (
+    <Card variant="outlined" component="article" aria-label={title}>
+      <CardContent sx={{ '&:last-child': { paddingBottom: 2 } }}>
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+            <Typography
+              variant="subtitle1"
+              component="h3"
+              fontWeight={600}
+              sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}
+            >
+              {title}
+            </Typography>
+            {passed && <Chip size="small" color="success" label={messages.passed} />}
+            {onLocate && (
+              <Tooltip title={messages.locateOutputNode(title)}>
+                <IconButton
+                  size="small"
+                  aria-label={messages.locateOutputNode(title)}
+                  onClick={onLocate}
+                >
+                  <CenterFocusStrongIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Stack>
+          {body}
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
 const Results = ({
   outputs,
-  messages
+  messages,
+  onSelectOutputNode
 }: {
-  outputs?: Record<string, ServerEventPayload['outputSet']>
+  outputs?: Record<string, Output>
   messages: PreviewMessages
+  onSelectOutputNode?: SelectGraphNode
 }) => {
   const values = Object.values(outputs ?? {})
+  const hasModelText = values.some((out) => out.type === 'text')
   return (
-    <Stack spacing={2} aria-label={messages.resultsHeading}>
+    <Stack spacing={1.5} aria-label={messages.resultsHeading}>
       <Typography variant="h6">{messages.resultsHeading}</Typography>
       {values.length === 0 && (
         <Typography color="text.secondary">{messages.resultsEmpty}</Typography>
       )}
-      {values.map((out) => {
-        switch (out.type) {
-          case 'text':
-            return (
-              <Stack key={out.uniqueId} spacing={0.5}>
-                <Typography variant="subtitle1">{out.label}</Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    maxWidth: '50rem',
-                    whiteSpace: 'pre-wrap',
-                    overflowWrap: 'anywhere'
-                  }}
-                >
-                  {String(out.value).trim()}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {messages.aiDisclaimer}
-                </Typography>
-              </Stack>
-            )
-          case 'score':
-            if (typeof out.value !== 'number') return null
-            return (
-              <Stack key={out.uniqueId} spacing={1}>
-                {out.value >= 60 && <Alert severity="success">{messages.passed}</Alert>}
-                <Typography variant="subtitle1">
-                  {out.label}: {out.value}
-                </Typography>
-                {out.value >= 0 && out.value <= 100 && (
-                  <BorderLinearProgress variant="determinate" value={out.value} />
-                )}
-              </Stack>
-            )
-          case 'classifications':
-            if (!Array.isArray(out.value)) return null
-            return (
-              <Stack key={out.uniqueId} spacing={0.5}>
-                <Typography variant="subtitle1">
-                  {messages.classificationsHeading}
-                </Typography>
-                {out.value.map((classification) => (
-                  <Typography variant="body1" key={classification}>
-                    {classification}
-                  </Typography>
-                ))}
-              </Stack>
-            )
-        }
-      })}
+      {values.map((out) => (
+        <ResultCard
+          key={out.uniqueId}
+          output={out}
+          messages={messages}
+          onLocate={
+            onSelectOutputNode &&
+            (() =>
+              onSelectOutputNode(Number(out.uniqueId), {
+                wrapperId: out.wrapperId ?? null,
+                sourceId: out.sourceId ?? null
+              }))
+          }
+        />
+      ))}
+      {hasModelText && (
+        <Typography variant="caption" color="text.secondary">
+          {messages.aiDisclaimer}
+        </Typography>
+      )}
     </Stack>
   )
 }
@@ -156,10 +250,12 @@ const TaskView = forwardRef<
     runState?: RunState
     trace?: ServerEventPayload['nodeExecutionChanged'][]
     onCancel?: () => void
-    onSelectTraceNode?: (
-      nodeId: number,
-      source?: { wrapperId?: number | null; sourceId?: number | null }
-    ) => void
+    onSelectTraceNode?: SelectGraphNode
+    /**
+     * Editor-only: when given, every result card offers a button that jumps to the
+     * output node that produced it. Leave undefined for students.
+     */
+    onSelectOutputNode?: SelectGraphNode
   }
 >(
   (
@@ -175,7 +271,8 @@ const TaskView = forwardRef<
       runState,
       trace = [],
       onCancel = () => undefined,
-      onSelectTraceNode = () => undefined
+      onSelectTraceNode = () => undefined,
+      onSelectOutputNode
     },
     ref
   ) => {
@@ -285,7 +382,11 @@ const TaskView = forwardRef<
                   </Button>
                   <Typography variant="caption">{messages.runHint}</Typography>
                 </Stack>
-                <Results outputs={outputs} messages={messages} />
+                <Results
+                  outputs={outputs}
+                  messages={messages}
+                  onSelectOutputNode={onSelectOutputNode}
+                />
               </Stack>
             </FormControl>
           </form>

@@ -93,11 +93,17 @@ test('a participant joins the WAIE workshop, edits the rubric, runs it and reloa
 
   await page.getByRole('tab', { name: 'Test' }).click()
   const results = page.getByLabel('Results')
-  await expect(results.getByText('Score: 100', { exact: true })).toBeVisible()
-  await expect(results.getByText('Passed', { exact: true })).toBeVisible()
-  await expect(results.getByText('Classification', { exact: true })).toBeVisible()
-  await expect(results.getByText('Feedback', { exact: true })).toBeVisible()
-  await expect(results.getByText(/Deterministic debug response/).first()).toBeVisible()
+  // Each output lands on its own card, titled by the output node's label.
+  const scoreCard = results.getByRole('article', { name: 'Score' })
+  await expect(scoreCard.getByText('100', { exact: true })).toBeVisible()
+  await expect(scoreCard.getByText('Passed', { exact: true })).toBeVisible()
+  await expect(results.getByRole('article', { name: 'Classification' })).toBeVisible()
+  const feedbackCard = results.getByRole('article', { name: 'Feedback' })
+  await expect(feedbackCard.getByText(/Deterministic debug response/)).toBeVisible()
+  // The facilitator can jump from a card to the node that produced it.
+  await expect(
+    results.getByRole('button', { name: 'Locate Feedback on the canvas' })
+  ).toBeVisible()
 
   await page.reload()
   await waitForEditor(page)

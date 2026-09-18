@@ -287,4 +287,92 @@ describe('GraphHandlerService run ownership', () => {
       .map(([, eventPayload]) => eventPayload)[0];
     expect(failure.message).toContain('Feedback Generator');
   });
+
+  it('resolves outputSet to the editor node that produced it, inside and outside blocks', async () => {
+    const handler = service();
+    const socket = client('client-1', 'workspace-1');
+    // Editor ids deliberately differ from the sequential execution ids the compiler
+    // assigns (top-level output is editor node 42 but executes as node 1).
+    const graph = {
+      nodes: [
+        {
+          id: 42,
+          type: 'output/output',
+          pos: [0, 0],
+          title: 'Feedback output',
+          properties: {
+            uniqueId: '42',
+            type: 'text',
+            label: 'Feedback',
+            value: 'unchanged',
+          },
+        },
+        {
+          id: 7,
+          type: 'graph/subgraph',
+          pos: [0, 0],
+          title: 'Scoring',
+          properties: { templateBoundary: [] },
+          subgraph: {
+            nodes: [
+              {
+                id: 3,
+                type: 'output/output',
+                pos: [0, 0],
+                title: 'Score output',
+                properties: {
+                  uniqueId: '3',
+                  type: 'score',
+                  label: 'Score',
+                  value: 0,
+                },
+              },
+            ],
+            links: [],
+            groups: [],
+            config: {},
+            extra: {},
+            version: 0.4,
+          },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-outputs',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(graph),
+    });
+
+    const outputs = jest
+      .mocked(socket.emit)
+      .mock.calls.filter(([eventName]) => eventName === 'outputSet')
+      .map(([, eventPayload]) => eventPayload);
+    expect(outputs).toHaveLength(2);
+    expect(outputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Feedback',
+          wrapperId: null,
+          sourceId: 42,
+          workflowId: 'workflow-1',
+        }),
+        expect.objectContaining({
+          label: 'Score',
+          wrapperId: 7,
+          sourceId: 3,
+          workflowId: 'workflow-1',
+        }),
+      ]),
+    );
+    // Only run correlation travels with the output, not the internal run record.
+    expect(outputs[0]).not.toHaveProperty('controller');
+    expect(outputs[0]).not.toHaveProperty('clientId');
+  });
 });
