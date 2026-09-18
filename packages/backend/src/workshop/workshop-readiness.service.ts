@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 import {
+  graphModelNodes,
   graphNodeTypes,
   parseGraphContent,
   TemplateContentError,
@@ -131,7 +132,8 @@ export class WorkshopReadinessService {
       );
     try {
       const missing = graphNodeTypes(parseGraphContent(content)).filter(
-        (type) => getNodeDefinition(type) === undefined,
+        (type) =>
+          type !== 'graph/subgraph' && getNodeDefinition(type) === undefined,
       );
       return missing.length === 0
         ? pass(
@@ -168,9 +170,7 @@ export class WorkshopReadinessService {
 
     let modelRefs: { providerKey: string; modelId: string }[];
     try {
-      const modelNodes = parseGraphContent(content).nodes.filter(
-        (node) => node.type === 'models/llm',
-      );
+      const modelNodes = graphModelNodes(parseGraphContent(content));
       const invalid = modelNodes.filter((node) => {
         const properties = node.properties;
         if (typeof properties !== 'object' || properties === null) return true;
