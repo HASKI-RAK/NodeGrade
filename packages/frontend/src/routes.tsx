@@ -32,6 +32,7 @@ export const routes: RouteObject[] = [
   { path: '/admin/workshops', element: <AdminPage /> },
 
   { path: '/admin/providers', element: <AdminPage /> },
+  { path: '/admin/templates', element: <AdminPage /> },
   { path: '/lti/register', element: <LtiRegister /> },
   { path: '*', element: <NotFoundPage /> }
 ]

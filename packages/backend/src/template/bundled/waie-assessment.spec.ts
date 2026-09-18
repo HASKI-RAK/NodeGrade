@@ -10,7 +10,9 @@ const nodesOfType = (type: string) =>
 const links = (waieAssessmentTemplate.content.links ?? []) as Link[];
 
 const feeds = (originId: number, targetId: number): boolean =>
-  links.some(([, origin, , target]) => origin === originId && target === targetId);
+  links.some(
+    ([, origin, , target]) => origin === originId && target === targetId,
+  );
 
 /**
  * The canonical WAIE content (SPEC-0007/FR-001, AC-001). The shape is the product
@@ -62,20 +64,25 @@ describe('WAIE assessment template', () => {
   });
 
   it('declares its answer length bounds on the answer node (FR-007, FR-008a)', () => {
-    expect(resolveAnswerConstraints(waieAssessmentTemplate.content.nodes)).toEqual({
+    expect(
+      resolveAnswerConstraints(waieAssessmentTemplate.content.nodes),
+    ).toEqual({
       minChars: 20,
       maxChars: 1500,
     });
   });
 
-  it('ships every model unselected so the provider policy decides (ADR-0008)', () => {
+  it('ships every model configured for the OpenRouter free-model router', () => {
     for (const node of nodesOfType('models/llm')) {
       const properties = node.properties as {
-        model_ref: unknown;
+        model_ref: { providerKey: string; modelId: string };
         needs_model_selection: boolean;
       };
-      expect(properties.model_ref).toBeNull();
-      expect(properties.needs_model_selection).toBe(true);
+      expect(properties.model_ref).toEqual({
+        providerKey: 'openrouter',
+        modelId: 'openrouter/free',
+      });
+      expect(properties.needs_model_selection).toBe(false);
     }
   });
 });

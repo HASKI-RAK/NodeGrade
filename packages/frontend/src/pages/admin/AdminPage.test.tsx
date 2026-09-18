@@ -58,6 +58,18 @@ describe('provider administration', () => {
     })
   })
 
+  it('provides a scroll container for settings beyond the viewport', async () => {
+    renderProviders()
+
+    await screen.findByRole('heading', { name: 'LLM providers' })
+
+    expect(screen.getByRole('main')).toHaveStyle({
+      boxSizing: 'border-box',
+      height: '100%',
+      overflow: 'auto'
+    })
+  })
+
   it('renders provider navigation and preserves a stored key on ordinary save', async () => {
     renderProviders()
     expect(await screen.findByRole('heading', { name: 'LLM providers' })).toBeVisible()
@@ -68,6 +80,10 @@ describe('provider administration', () => {
     expect(screen.getByRole('link', { name: 'Providers' })).toHaveAttribute(
       'href',
       '/admin/providers'
+    )
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
+      'href',
+      '/admin/templates'
     )
     await screen.findByRole('heading', { name: 'OpenAI' })
 

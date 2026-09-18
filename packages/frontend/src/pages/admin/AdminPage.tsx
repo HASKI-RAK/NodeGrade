@@ -20,6 +20,8 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { apiRequest, type WorkshopReadiness } from '@/api/http'
 
+import { TemplateAdmin } from './TemplateAdmin'
+
 type Session = { enabled: boolean; authenticated: boolean }
 type Workshop = {
   id: string
@@ -108,7 +110,15 @@ export const AdminPage = () => {
       />
     )
   return (
-    <Box maxWidth={1000} mx="auto" p={4}>
+    <Box
+      component="main"
+      boxSizing="border-box"
+      height="100%"
+      maxWidth={1000}
+      mx="auto"
+      overflow="auto"
+      p={4}
+    >
       <Typography variant="h4">Administration</Typography>
       <Stack direction="row" spacing={1} my={2}>
         <Button
@@ -125,8 +135,21 @@ export const AdminPage = () => {
         >
           Providers
         </Button>
+        <Button
+          component={Link}
+          to="/admin/templates"
+          variant={location.pathname.endsWith('templates') ? 'contained' : 'outlined'}
+        >
+          Templates
+        </Button>
       </Stack>
-      {location.pathname.endsWith('providers') ? <ProviderAdmin /> : <WorkshopAdmin />}
+      {location.pathname.endsWith('providers') ? (
+        <ProviderAdmin />
+      ) : location.pathname.endsWith('templates') ? (
+        <TemplateAdmin />
+      ) : (
+        <WorkshopAdmin />
+      )}
     </Box>
   )
 }

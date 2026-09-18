@@ -15,9 +15,9 @@ function run(args) {
 
 function printEndpoints() {
   console.log('NodeGrade debug endpoints:')
-  console.log(
-    `  UI:        http://localhost:${process.env.NODEGRADE_DEBUG_FRONTEND_PORT ?? '15173'}/workshop/WAVE-2026`
-  )
+  const ui = `http://localhost:${process.env.NODEGRADE_DEBUG_FRONTEND_PORT ?? '15173'}`
+  console.log(`  UI:        ${ui}/workshop/WAVE-2026`)
+  console.log(`  WAIE:      ${ui}/workshop/WAIE-2026`)
   console.log(
     `  Backend:   http://localhost:${process.env.NODEGRADE_DEBUG_BACKEND_PORT ?? '15000'}/health`
   )

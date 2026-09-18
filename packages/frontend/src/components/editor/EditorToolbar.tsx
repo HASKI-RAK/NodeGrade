@@ -40,6 +40,7 @@ export const EditorToolbar = ({
   status,
   student,
   canSaveAs,
+  canReset,
   ltiInstructor,
   developerTools,
   connectionStatus,
@@ -50,6 +51,7 @@ export const EditorToolbar = ({
   onSaveAs,
   onImport,
   onExport,
+  onReset,
   onDeveloperTools,
   onPublish,
   onRetry,
@@ -60,6 +62,7 @@ export const EditorToolbar = ({
   status: SaveStatus
   student: boolean
   canSaveAs: boolean
+  canReset: boolean
   ltiInstructor: boolean
   developerTools: boolean
   connectionStatus: string
@@ -70,6 +73,7 @@ export const EditorToolbar = ({
   onSaveAs: (name: string) => Promise<void>
   onImport: (file: File) => Promise<void>
   onExport: () => void
+  onReset: () => Promise<void>
   onDeveloperTools: (enabled: boolean) => void
   onPublish: () => Promise<void>
   onRetry: () => void
@@ -83,6 +87,8 @@ export const EditorToolbar = ({
 }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [name, setName] = useState(`${workflowName} copy`)
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -154,6 +160,16 @@ export const EditorToolbar = ({
             }}
           >
             Save as…
+          </MenuItem>
+        )}
+        {!student && canReset && (
+          <MenuItem
+            onClick={() => {
+              setAnchor(null)
+              setResetOpen(true)
+            }}
+          >
+            Reset to source template…
           </MenuItem>
         )}
         {!student && (
@@ -244,6 +260,33 @@ export const EditorToolbar = ({
             onClick={() => void onSaveAs(name.trim()).then(() => setSaveAsOpen(false))}
           >
             Create copy
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs">
+        <DialogTitle>Reset to source template?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This restores the template revision used to create this workflow and discards
+            every graph edit.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetOpen(false)}>Cancel</Button>
+          <Button
+            color="error"
+            disabled={resetting}
+            onClick={async () => {
+              setResetting(true)
+              try {
+                await onReset()
+                setResetOpen(false)
+              } finally {
+                setResetting(false)
+              }
+            }}
+          >
+            Reset workflow
           </Button>
         </DialogActions>
       </Dialog>

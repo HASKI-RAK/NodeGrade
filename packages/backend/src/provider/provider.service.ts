@@ -6,6 +6,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  KATALYST_MODEL_QWEN_FLASH,
+  PROVIDER_KEY_KATALYST,
   PROVIDER_KEY_LOCAL,
   PROVIDER_KEY_OPENAI,
   PROVIDER_KEY_OPENROUTER,
@@ -37,6 +39,7 @@ type SeedProvider = {
   baseUrl: string | null;
   enabled: boolean;
   apiKey?: string;
+  policy?: ModelPolicy;
 };
 
 export type RuntimeProviderConfig = {
@@ -88,6 +91,7 @@ export class ProviderService implements OnApplicationBootstrap {
     const modelWorkerUrl = process.env.MODEL_WORKER_URL?.trim();
     const openAiKey = process.env.OPENAI_API_KEY?.trim();
     const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+    const katalystKey = process.env.KATALYST_API_KEY?.trim();
     return [
       {
         key: PROVIDER_KEY_LOCAL,
@@ -112,6 +116,18 @@ export class ProviderService implements OnApplicationBootstrap {
         baseUrl: 'https://openrouter.ai/api/v1',
         enabled: Boolean(openRouterKey),
         apiKey: openRouterKey || undefined,
+      },
+      {
+        key: PROVIDER_KEY_KATALYST,
+        type: 'OPENAI_COMPATIBLE',
+        displayName: 'KATALYST vLLM',
+        baseUrl: 'https://vllm.katalyst-education.de/v1',
+        enabled: Boolean(katalystKey),
+        apiKey: katalystKey || undefined,
+        policy: {
+          mode: 'ALLOWLIST',
+          allowedModels: [KATALYST_MODEL_QWEN_FLASH],
+        },
       },
     ];
   }
@@ -144,11 +160,13 @@ export class ProviderService implements OnApplicationBootstrap {
           enabled: seed.enabled,
           apiKeyEnc,
           apiKeyHint: seed.apiKey ? safeHint(seed.apiKey) : null,
-          // A seeded cloud provider starts closed: an environment key says a credential
-          // exists, not that every model it can reach may be spent (SPEC-0012/FR-002).
+          // Seed policies keep the reachable model set explicit (SPEC-0012/FR-002).
           modelPolicy: {
             create: {
-              mode: isCloudProvider(seed.type) ? 'DENY_ALL' : 'ALLOW_ALL',
+              ...(seed.policy ?? {
+                mode: isCloudProvider(seed.type) ? 'DENY_ALL' : 'ALLOW_ALL',
+                allowedModels: [],
+              }),
             },
           },
         },

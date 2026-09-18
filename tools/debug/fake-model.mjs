@@ -23,6 +23,15 @@ function readBody(request) {
   })
 }
 
+function embedding(value) {
+  const vector = Array.from({ length: 8 }, () => 1)
+  for (const [index, character] of [...value].entries()) {
+    vector[index % vector.length] += character.codePointAt(0) ?? 0
+  }
+  const magnitude = Math.sqrt(vector.reduce((sum, entry) => sum + entry ** 2, 0))
+  return vector.map((entry) => entry / magnitude)
+}
+
 const server = createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     json(response, 200, { status: 'ok', service: 'nodegrade-deterministic-model' })
@@ -61,6 +70,17 @@ const server = createServer(async (request, response) => {
           total_tokens: 12
         }
       })
+    } catch {
+      json(response, 400, { error: { message: 'Request body must be valid JSON.' } })
+    }
+    return
+  }
+
+  if (request.method === 'POST' && request.url === '/sentence_embedding') {
+    try {
+      const body = await readBody(request)
+      const sentence = typeof body.sentence === 'string' ? body.sentence : ''
+      json(response, 200, embedding(sentence))
     } catch {
       json(response, 400, { error: { message: 'Request body must be valid JSON.' } })
     }

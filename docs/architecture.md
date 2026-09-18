@@ -163,6 +163,7 @@ Backend reads the environment through `src/config/configuration.ts` (`@nestjs/co
 cached): port, CORS origins, frontend URL, cookie insecurity switch, node run timeout,
 worker URLs, xAPI credentials. Read directly from the environment elsewhere:
 `DATABASE_URL` (Prisma), `ADMIN_USERNAME`/`ADMIN_PASSWORD` (facilitator login),
+`KATALYST_API_KEY` (optional bundled KATALYST provider),
 `PROVIDER_ENCRYPTION_KEY` (credential cipher), `CONTENT_MIGRATION_ENABLED`. See
 `.env_template`.
 

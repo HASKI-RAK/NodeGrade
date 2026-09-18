@@ -48,12 +48,13 @@ Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
 LTI launch and registration       → packages/backend/src/lti/, packages/lti/
 Specification consistency rules   → tools/spec-lint/
+Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
 Schema change                     → packages/backend/prisma/schema.prisma + migrations/
 Content schema backfill           → packages/backend/src/migration/
 ```
 
-Specification status: `specs/index.md` holds the authoritative table — waves 1 to 5 and
-wave 7 are implemented; SPEC-0008 is deferred.
+Specification status: `specs/index.md` holds the authoritative table — every wave is
+implemented.
 Wave-1 implementation notes and escalations live in `docs/wave-1-plan.md`.
 
 ## Commands

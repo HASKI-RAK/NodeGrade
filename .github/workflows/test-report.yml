@@ -15,7 +15,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Enable Corepack (Yarn 4)
         run: |
@@ -24,6 +24,11 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --immutable
+
+      # The backend imports @haski/ta-lib from its build output; without this the report
+      # records failures that are only a missing dist.
+      - name: Build
+        run: yarn build
 
       - name: Run tests with JSON report
         run: yarn test:report

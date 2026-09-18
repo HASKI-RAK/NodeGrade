@@ -29,7 +29,12 @@ services:
       SIMILARITY_WORKER_URL: http://models:8002
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      KATALYST_API_KEY: ${KATALYST_API_KEY:-}
       PROVIDER_ENCRYPTION_KEY: ${PROVIDER_ENCRYPTION_KEY:-}
+      # Without both of these the admin area stays disabled, and nobody can create the
+      # workshop this stack exists to serve.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
       - '5000:5000'
     depends_on:

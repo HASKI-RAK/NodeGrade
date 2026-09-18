@@ -13,6 +13,8 @@ jobs:
   verify:
     name: Typecheck, lint, test, build
     runs-on: ubuntu-latest
+    # The three jobs run in parallel, so this is also the pipeline's budget (NFR-001).
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Enable Corepack (Yarn 4)
         run: |
@@ -29,6 +31,15 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --immutable
+
+      # The Prisma client is generated into src/generated (gitignored), so a fresh
+      # checkout has no client until this runs. Generate uses only the schema, no
+      # database connection, but prisma.config.ts reads DATABASE_URL so a dummy
+      # value is provided for config evaluation.
+      - name: Generate Prisma client
+        run: yarn workspace backend exec prisma generate
+        env:
+          DATABASE_URL: postgresql://nodegrade:nodegrade@localhost:5432/nodegrade?schema=public
 
       # The backend imports @haski/ta-lib from its build output, so the library has to be
       # compiled before anything can be typechecked or tested.
@@ -44,9 +55,10 @@ jobs:
       - name: Test
         run: yarn test
 
-  specs:
-    name: Specification lint
+  e2e:
+    name: Browser smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,7 +66,61 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Enable Corepack (Yarn 4)
+        run: |
+          corepack enable
+          corepack prepare yarn@4.7.0 --activate
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Install browsers
+        run: yarn playwright install --with-deps chromium firefox
+
+      # Starting the stack here rather than letting Playwright's webServer do it keeps the
+      # image build out of that step's timeout, and `--wait` fails the job on an unhealthy
+      # container instead of on a confusing navigation error minutes later.
+      - name: Start the debug stack
+        run: yarn debug:up
+
+      # Every model call goes to the deterministic worker in the stack. No provider secret
+      # is available to this job on purpose (SPEC-0008/FR-006).
+      - name: Run the browser suite
+        run: yarn test:e2e
+
+      # `yarn debug:logs` follows the stream, which would hang the job; CI wants a snapshot.
+      - name: Collect stack logs
+        if: failure()
+        run: docker compose -f docker-compose.debug.yml logs --tail 400
+
+      - name: Upload the Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodegrade-playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+      - name: Stop the debug stack
+        if: always()
+        run: yarn debug:down
+
+  specs:
+    name: Specification lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       # The linter reads specs/ with the standard library only, so it needs no install.
       - name: Lint specifications
