@@ -86,8 +86,15 @@ const Results = ({
             return (
               <Stack key={out.uniqueId} spacing={0.5}>
                 <Typography variant="subtitle1">{out.label}</Typography>
-                <Typography style={{ maxWidth: '50rem' }} variant="body1">
-                  {String(out.value)}
+                <Typography
+                  variant="body1"
+                  sx={{
+                    maxWidth: '50rem',
+                    whiteSpace: 'pre-wrap',
+                    overflowWrap: 'anywhere'
+                  }}
+                >
+                  {String(out.value).trim()}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {messages.aiDisclaimer}
@@ -245,10 +252,8 @@ const TaskView = forwardRef<
             />
           )}
           <Typography
-            style={{
-              maxWidth: '60rem' // Set a maximum width
-            }}
             variant="body1"
+            sx={{ maxWidth: '60rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
           >
             {question || messages.questionMissing}
           </Typography>

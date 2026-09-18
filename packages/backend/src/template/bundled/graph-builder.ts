@@ -1,0 +1,515 @@
+import {
+  KATALYST_MODEL_QWEN_FLASH,
+  PROVIDER_KEY_KATALYST,
+} from '@haski/ta-lib';
+import type { GraphContent, GraphNode } from '../template-content.js';
+
+/**
+ * Declarative construction of bundled graph content.
+ *
+ * Hand-writing a LiteGraph serialization means keeping four things in agreement by eye:
+ * the `link` id on every input slot, the `links` array on every output slot, the global
+ * `links` table, and `last_node_id`/`last_link_id`. A workshop graph with forty nodes and
+ * fifty links is exactly where that agreement breaks. The builder owns the bookkeeping;
+ * the template module only declares nodes and which slot feeds which.
+ *
+ * Slot declarations mirror what each node's constructor adds. They are a static table on
+ * purpose: instantiating LiteGraph nodes at import time would couple template modules to
+ * registration order, and the bundled-template spec already proves the result loads.
+ */
+
+type Slot = { name: string; type: string };
+
+type SlotTable = { inputs: Slot[]; outputs: Slot[] };
+
+const slot = (name: string, type = name): Slot => ({ name, type });
+
+const NODE_SLOTS: Record<string, SlotTable> = {
+  'input/question': { inputs: [], outputs: [slot('string')] },
+  'input/answer': { inputs: [], outputs: [slot('string')] },
+  'input/sample-solution': { inputs: [], outputs: [slot('string')] },
+  'basic/textfield': { inputs: [], outputs: [slot('string')] },
+  'utils/concat-string': {
+    inputs: [slot('string'), slot('string')],
+    outputs: [slot('string')],
+  },
+  'basic/prompt-message': {
+    inputs: [slot('string')],
+    outputs: [slot('message')],
+  },
+  'models/llm': {
+    inputs: [slot('message'), slot('messages', '*')],
+    outputs: [slot('string')],
+  },
+  'preprocessing/extract-number': {
+    inputs: [slot('string')],
+    outputs: [slot('number')],
+  },
+  'math/math-operation': {
+    inputs: [slot('number'), slot('number')],
+    outputs: [slot('number')],
+  },
+  'math/precision': { inputs: [slot('number')], outputs: [slot('number')] },
+  'text/keyword-check': {
+    inputs: [
+      slot('keywords (comma-separated)', 'string'),
+      slot('text', 'string'),
+    ],
+    outputs: [
+      slot('present keywords', 'string'),
+      slot('missing keywords', 'string'),
+    ],
+  },
+  'models/sentence-transformer': {
+    inputs: [slot('string')],
+    outputs: [slot('[number]')],
+  },
+  'models/cosine-similarity': {
+    inputs: [slot('[number]'), slot('[number]')],
+    outputs: [slot('number')],
+  },
+  'output/output': { inputs: [slot('*')], outputs: [] },
+};
+
+export type NodeRef = { readonly id: number; readonly type: string };
+
+type Link = [number, number, number, number, number, string];
+
+type Group = {
+  title: string;
+  bounding: [number, number, number, number];
+  color: string;
+  font_size: number;
+};
+
+type NodeSpec = {
+  type: string;
+  title: string;
+  pos: [number, number];
+  size?: [number, number];
+  properties?: Record<string, unknown>;
+  widgetsValues?: unknown[];
+};
+
+type PendingNode = NodeSpec & { id: number };
+
+/** Model parameters every workshop LLM node starts with. */
+export type LlmSettings = {
+  maxTokens: number;
+  temperature: number;
+};
+
+/**
+ * KATALYST's Qwen deployment always reasons before it answers and the reasoning tokens
+ * count against `max_tokens`. A budget sized for the visible reply alone therefore
+ * truncates or empties the reply. Live runs showed the feedback stage deliberating for
+ * ~1900 reasoning tokens on an answer that missed every criterion, so 2048 was not
+ * enough; 4096 leaves headroom on every stage below.
+ */
+export const KATALYST_LLM: LlmSettings = { maxTokens: 4096, temperature: 0.1 };
+
+export const katalystLlmProperties = ({
+  maxTokens,
+  temperature,
+}: LlmSettings): Record<string, unknown> => ({
+  value: KATALYST_MODEL_QWEN_FLASH,
+  model: KATALYST_MODEL_QWEN_FLASH,
+  model_ref: {
+    providerKey: PROVIDER_KEY_KATALYST,
+    modelId: KATALYST_MODEL_QWEN_FLASH,
+  },
+  needs_model_selection: false,
+  max_tokens: maxTokens,
+  temperature,
+  top_p: 0.9,
+  top_k: 40,
+  presence_penalty: 0,
+});
+
+const katalystLlmWidgets = ({
+  maxTokens,
+  temperature,
+}: LlmSettings): unknown[] => [
+  maxTokens,
+  temperature,
+  0.9,
+  40,
+  0,
+  KATALYST_MODEL_QWEN_FLASH,
+];
+
+export class GraphBuilder {
+  private readonly nodes: PendingNode[] = [];
+  private readonly links: Link[] = [];
+  private readonly groups: Group[] = [];
+
+  add(spec: NodeSpec): NodeRef {
+    if (!NODE_SLOTS[spec.type])
+      throw new Error(`GraphBuilder has no slot table for ${spec.type}`);
+    const id = this.nodes.length + 1;
+    this.nodes.push({ ...spec, id });
+    return { id, type: spec.type };
+  }
+
+  /** Connects `from`'s output slot to `to`'s input slot and returns the link id. */
+  link(from: NodeRef, fromSlot: number, to: NodeRef, toSlot: number): number {
+    const outputs = NODE_SLOTS[from.type].outputs;
+    const inputs = NODE_SLOTS[to.type].inputs;
+    const output = outputs[fromSlot];
+    const input = inputs[toSlot];
+    if (!output)
+      throw new Error(`${from.type}#${from.id} has no output slot ${fromSlot}`);
+    if (!input)
+      throw new Error(`${to.type}#${to.id} has no input slot ${toSlot}`);
+    const occupied = this.links.find(
+      ([, , , targetId, targetSlot]) =>
+        targetId === to.id && targetSlot === toSlot,
+    );
+    if (occupied)
+      throw new Error(
+        `${to.type}#${to.id} input ${toSlot} is already fed by link ${occupied[0]}`,
+      );
+    const id = this.links.length + 1;
+    this.links.push([id, from.id, fromSlot, to.id, toSlot, output.type]);
+    return id;
+  }
+
+  group(title: string, bounding: Group['bounding'], color: string): void {
+    this.groups.push({ title, bounding, color, font_size: 24 });
+  }
+
+  // ---- Node conveniences -------------------------------------------------------------
+
+  question(title: string, pos: [number, number], value: string): NodeRef {
+    return this.add({
+      type: 'input/question',
+      title,
+      pos,
+      size: [340, 150],
+      properties: { value },
+    });
+  }
+
+  answer(
+    title: string,
+    pos: [number, number],
+    bounds: { minChars: number; maxChars: number },
+  ): NodeRef {
+    return this.add({
+      type: 'input/answer',
+      title,
+      pos,
+      size: [340, 90],
+      properties: { value: '', ...bounds },
+    });
+  }
+
+  sampleSolution(title: string, pos: [number, number], value: string): NodeRef {
+    return this.add({
+      type: 'input/sample-solution',
+      title,
+      pos,
+      size: [340, 170],
+      properties: { value },
+    });
+  }
+
+  textfield(
+    title: string,
+    pos: [number, number],
+    value: string,
+    size: [number, number] = [340, 120],
+  ): NodeRef {
+    return this.add({
+      type: 'basic/textfield',
+      title,
+      pos,
+      size,
+      properties: { precision: 1, value },
+    });
+  }
+
+  /** `upper` then `lower`, separated by a single space (the node's only join mode). */
+  concat(
+    title: string,
+    pos: [number, number],
+    upper: NodeRef,
+    lower: NodeRef,
+    slots: { upper?: number; lower?: number } = {},
+  ): NodeRef {
+    const node = this.add({
+      type: 'utils/concat-string',
+      title,
+      pos,
+      size: [240, 80],
+      properties: { value: '', space: true },
+      widgetsValues: [true],
+    });
+    this.link(upper, slots.upper ?? 0, node, 0);
+    this.link(lower, slots.lower ?? 0, node, 1);
+    return node;
+  }
+
+  /**
+   * Joins any number of string sources in order through a chain of concat nodes laid out
+   * downwards from `pos`. Returns the node carrying the fully assembled string.
+   */
+  join(
+    title: string,
+    pos: [number, number],
+    parts: readonly NodeRef[],
+    rowHeight = 110,
+  ): NodeRef {
+    if (parts.length < 2) throw new Error(`${title}: join needs two parts`);
+    const [first, second, ...rest] = parts;
+    const step = (index: number) => `${title} ${index + 1}/${parts.length - 1}`;
+    let assembled = this.concat(step(0), pos, first, second);
+    rest.forEach((part, index) => {
+      assembled = this.concat(
+        step(index + 1),
+        [pos[0], pos[1] + (index + 1) * rowHeight],
+        assembled,
+        part,
+      );
+    });
+    return assembled;
+  }
+
+  promptMessage(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'basic/prompt-message',
+      title,
+      pos,
+      size: [260, 80],
+      properties: { value: { role: 'user', content: '' } },
+      widgetsValues: ['user'],
+    });
+    this.link(source, 0, node, 0);
+    return node;
+  }
+
+  llm(
+    title: string,
+    pos: [number, number],
+    message: NodeRef,
+    settings: LlmSettings = KATALYST_LLM,
+  ): NodeRef {
+    const node = this.add({
+      type: 'models/llm',
+      title,
+      pos,
+      size: [320, 220],
+      properties: katalystLlmProperties(settings),
+      widgetsValues: katalystLlmWidgets(settings),
+    });
+    this.link(message, 0, node, 0);
+    return node;
+  }
+
+  /** Prompt text → message → model in one call. Returns the LLM node. */
+  llmStage(
+    title: string,
+    pos: [number, number],
+    prompt: NodeRef,
+    settings: LlmSettings = KATALYST_LLM,
+  ): NodeRef {
+    const message = this.promptMessage(`${title} message`, pos, prompt);
+    return this.llm(
+      `${title} model`,
+      [pos[0] + 300, pos[1]],
+      message,
+      settings,
+    );
+  }
+
+  extractNumber(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'preprocessing/extract-number',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value: '' },
+    });
+    this.link(source, 0, node, 0);
+    return node;
+  }
+
+  math(
+    title: string,
+    pos: [number, number],
+    operation: '+' | '-' | '*' | '/',
+    left: NodeRef,
+    right: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'math/math-operation',
+      title,
+      pos,
+      size: [220, 90],
+      properties: { operation, valueOne: 0, valueTwo: 0 },
+      widgetsValues: [operation],
+    });
+    this.link(left, 0, node, 0);
+    this.link(right, 0, node, 1);
+    return node;
+  }
+
+  precision(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+    digits: number,
+  ): NodeRef {
+    const node = this.add({
+      type: 'math/precision',
+      title,
+      pos,
+      size: [220, 80],
+      properties: { value: -1, precision: digits },
+      widgetsValues: [digits],
+    });
+    this.link(source, 0, node, 0);
+    return node;
+  }
+
+  keywordCheck(
+    title: string,
+    pos: [number, number],
+    keywords: NodeRef,
+    text: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'text/keyword-check',
+      title,
+      pos,
+      size: [300, 110],
+      properties: {
+        useSemantic: false,
+        presentKeywords: '',
+        missingKeywords: '',
+      },
+      widgetsValues: [false],
+    });
+    this.link(keywords, 0, node, 0);
+    this.link(text, 0, node, 1);
+    return node;
+  }
+
+  sentenceTransformer(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'models/sentence-transformer',
+      title,
+      pos,
+      size: [260, 60],
+      properties: { value: -1 },
+    });
+    this.link(source, 0, node, 0);
+    return node;
+  }
+
+  cosineSimilarity(
+    title: string,
+    pos: [number, number],
+    left: NodeRef,
+    right: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'models/cosine-similarity',
+      title,
+      pos,
+      size: [260, 80],
+      properties: { value: -1 },
+    });
+    this.link(left, 0, node, 0);
+    this.link(right, 0, node, 1);
+    return node;
+  }
+
+  output(
+    label: string,
+    pos: [number, number],
+    source: NodeRef,
+    sourceSlot = 0,
+    type: 'text' | 'score' | 'classifications' = 'text',
+  ): NodeRef {
+    const node = this.add({
+      type: 'output/output',
+      title: `${label} output`,
+      pos,
+      size: [260, 80],
+      properties: { uniqueId: '', type, label, value: '' },
+      widgetsValues: [label, type],
+    });
+    this.link(source, sourceSlot, node, 0);
+    return node;
+  }
+
+  // ---- Serialization -----------------------------------------------------------------
+
+  build(): GraphContent {
+    const nodes: GraphNode[] = this.nodes.map((pending) => {
+      const table = NODE_SLOTS[pending.type];
+      const inputs = table.inputs.map((input, slotIndex) => ({
+        name: input.name,
+        type: input.type,
+        link:
+          this.links.find(
+            ([, , , targetId, targetSlot]) =>
+              targetId === pending.id && targetSlot === slotIndex,
+          )?.[0] ?? null,
+      }));
+      const outputs = table.outputs.map((output, slotIndex) => ({
+        name: output.name,
+        type: output.type,
+        links: this.links
+          .filter(
+            ([, originId, originSlot]) =>
+              originId === pending.id && originSlot === slotIndex,
+          )
+          .map(([id]) => id),
+      }));
+      const properties =
+        pending.type === 'output/output'
+          ? { ...pending.properties, uniqueId: String(pending.id) }
+          : (pending.properties ?? {});
+      return {
+        id: pending.id,
+        type: pending.type,
+        pos: pending.pos,
+        size: pending.size ?? [260, 100],
+        flags: {},
+        order: pending.id - 1,
+        mode: 0,
+        inputs,
+        outputs,
+        title: pending.title,
+        properties,
+        ...(pending.widgetsValues
+          ? { widgets_values: pending.widgetsValues }
+          : {}),
+      };
+    });
+    return {
+      last_node_id: this.nodes.length,
+      last_link_id: this.links.length,
+      nodes,
+      links: this.links,
+      groups: this.groups,
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+  }
+}
