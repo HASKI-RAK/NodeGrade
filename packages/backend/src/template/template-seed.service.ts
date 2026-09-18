@@ -1,6 +1,10 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import { BUNDLED_TEMPLATES, type BundledTemplate } from './bundled/index.js';
+import {
+  BUNDLED_TEMPLATES,
+  RETIRED_TEMPLATE_SLUGS,
+  type BundledTemplate,
+} from './bundled/index.js';
 import { hashContent } from './template-content.js';
 import { TemplateService } from './template.service.js';
 
@@ -8,6 +12,8 @@ export type SeedResult = {
   created: number;
   updated: number;
   skipped: number;
+  /** Retired bundled templates that were still published and are now unpublished. */
+  retired: number;
 };
 
 /**
@@ -34,9 +40,9 @@ export class TemplateSeedService implements OnApplicationBootstrap {
 
     try {
       const result = await this.seed();
-      if (result.created > 0 || result.updated > 0) {
+      if (result.created > 0 || result.updated > 0 || result.retired > 0) {
         this.logger.log(
-          `Bundled templates: ${result.created} created, ${result.updated} updated, ${result.skipped} unchanged`,
+          `Bundled templates: ${result.created} created, ${result.updated} updated, ${result.skipped} unchanged, ${result.retired} retired`,
         );
       }
     } catch (error) {
@@ -47,15 +53,46 @@ export class TemplateSeedService implements OnApplicationBootstrap {
 
   async seed(
     bundled: BundledTemplate[] = BUNDLED_TEMPLATES,
+    retired: readonly string[] = RETIRED_TEMPLATE_SLUGS,
   ): Promise<SeedResult> {
-    const result: SeedResult = { created: 0, updated: 0, skipped: 0 };
+    const result: SeedResult = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      retired: 0,
+    };
 
     for (const template of bundled) {
       const outcome = await this.seedOne(template);
       result[outcome] += 1;
     }
+    for (const slug of retired) {
+      if (await this.retireOne(slug)) result.retired += 1;
+    }
 
     return result;
+  }
+
+  /**
+   * A retired slug stops being offered in the gallery. Revisions stay, so workflows and
+   * workshops created from it keep resolving; a facilitator who edited it keeps it as is,
+   * by the same ownership rule as `seedOne`.
+   */
+  private async retireOne(slug: string): Promise<boolean> {
+    const existing = await this.prisma.template.findUnique({
+      where: { slug },
+      select: { id: true, published: true, deletedAt: true },
+    });
+    if (!existing || !existing.published || existing.deletedAt) return false;
+
+    const facilitatorEdits = await this.prisma.templateRevision.count({
+      where: { templateId: existing.id, origin: 'FACILITATOR' },
+    });
+    if (facilitatorEdits > 0) return false;
+
+    await this.templates.setPublished(existing.id, false);
+    this.logger.log(`Retired bundled template "${slug}" (unpublished).`);
+    return true;
   }
 
   private async seedOne(
