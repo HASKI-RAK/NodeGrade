@@ -114,9 +114,10 @@ describe('compileEditorGraphForExecution', () => {
     ]);
     expect(compiled.content.links).toHaveLength(2);
     // Outer link reaches the inner watch; inner text feeds the inner watch too.
-    // Both links target the same execution node on the same slot.
+    // Both links target the same execution node on the same slot. Untitled
+    // nodes trace under their type name, never "node N".
     const watchExecutionId = compiled.sourceMap.find(
-      (entry) => entry.traceLabel === 'Feedback Generator / node 1',
+      (entry) => entry.traceLabel === 'Feedback Generator / watch',
     )?.executionId;
     expect(watchExecutionId).toBeDefined();
     for (const link of compiled.content.links as unknown[][]) {
@@ -124,7 +125,7 @@ describe('compileEditorGraphForExecution', () => {
       expect(link[4]).toBe(0);
     }
     const watchEntry = compiled.sourceMap.find(
-      (entry) => entry.traceLabel === 'Feedback Generator / node 1',
+      (entry) => entry.traceLabel === 'Feedback Generator / watch',
     );
     expect(watchEntry).toMatchObject({ wrapperId: 2, sourceId: 1 });
     expect(watchEntry?.wrapperPath).toEqual(['Feedback Generator']);
@@ -279,7 +280,7 @@ describe('compileEditorGraphForExecution', () => {
         registeredType: registered(['basic/watch']),
       }),
     ).toThrow(
-      /Feedback Generator \/ node 1: missing required input Text to review/,
+      /Feedback Generator \/ watch: missing required input Text to review/,
     );
   });
 

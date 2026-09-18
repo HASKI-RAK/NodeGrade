@@ -70,7 +70,13 @@ const asGraph = (value: unknown): GraphContent | null =>
 
 const nodeTitle = (node: GraphNode, fallback: string): string => {
   const title = (node as { title?: unknown }).title;
-  return typeof title === 'string' && title.length > 0 ? title : fallback;
+  if (typeof title === 'string' && title.length > 0) return title;
+  // Untitled nodes must trace by name, not number: the type short name
+  // ("watch" for basic/watch) matches the palette and TraceView tests.
+  const definition = getNodeDefinition(node.type);
+  if (definition) return definition.title;
+  const short = node.type.split('/').pop();
+  return short && short.length > 0 ? short : fallback;
 };
 
 const boundaryOf = (node: GraphNode): BoundaryPort[] => {
