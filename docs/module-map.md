@@ -62,9 +62,14 @@ Primary entry points: `template.service.ts`, `template.controller.ts`,
 Bundled graphs are TypeScript modules under `bundled/`. The three WAIE tutorial graphs
 (`bundled/workshop-*.ts`, exported together as `WORKSHOP_TEMPLATES`) are declared through
 `bundled/graph-builder.ts`, which owns slot wiring, link ids and `last_*_id` bookkeeping so a
-template states only nodes and connections. `packages/backend/scripts/run-workshop-live.ts`
-(`yarn workspace backend workshop:live`) runs those graphs headlessly against the real
-KATALYST deployment with predefined test answers — the facilitator's pre-workshop check.
+template states only nodes and connections. Their subject matter is everyday science (day
+and night, the water cycle, sharing a pizza) so participants evaluate the assessment
+workflow rather than their own knowledge. Slugs are named after the assessment concept,
+not the example, so an example can change without a new slug; slugs that did change are
+listed in `RETIRED_TEMPLATE_SLUGS` and the seeder unpublishes them on boot.
+`packages/backend/scripts/run-workshop-live.ts` (`yarn workspace backend workshop:live`)
+runs those graphs headlessly against the real KATALYST deployment with the prepared test
+answers — the facilitator's pre-workshop check.
 
 Tests: `packages/backend/src/template/**/*.spec.ts`
 
