@@ -24,7 +24,9 @@ const payload = (requestId: string) => ({
   graph: JSON.stringify(new LGraph().serialize()),
 });
 
-const service = (workspaceConcurrentRuns = DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns) =>
+const service = (
+  workspaceConcurrentRuns = DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns,
+) =>
   new GraphHandlerService(
     {
       getExecutionContent: jest
@@ -180,5 +182,106 @@ describe('GraphHandlerService run ownership', () => {
 
     expect(owned.signal.aborted).toBe(true);
     expect(other.signal.aborted).toBe(false);
+  });
+
+  it('compiles subgraph wrappers before execution and labels traces by block', async () => {
+    const handler = service();
+    const socket = client('client-1', 'workspace-1');
+    const graph = {
+      nodes: [
+        {
+          id: 1,
+          type: 'graph/subgraph',
+          pos: [0, 0],
+          title: 'Feedback Generator',
+          properties: { templateBoundary: [] },
+          subgraph: {
+            nodes: [
+              {
+                id: 1,
+                type: 'basic/watch',
+                pos: [0, 0],
+                inputs: [{ name: 'value', type: '*', link: null }],
+                outputs: [],
+                title: 'Inner watch',
+              },
+            ],
+            links: [],
+            groups: [],
+            config: {},
+            extra: {},
+            version: 0.4,
+          },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-block',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(graph),
+    });
+
+    const traces = jest
+      .mocked(socket.emit)
+      .mock.calls.filter(([eventName]) => eventName === 'nodeExecutionChanged')
+      .map(([, eventPayload]) => eventPayload);
+    expect(traces.length).toBeGreaterThan(0);
+    expect(traces[0]).toMatchObject({
+      nodeTitle: 'Feedback Generator / Inner watch',
+    });
+  });
+
+  it('reports an uncompilable block as a failed run with the block path', async () => {
+    const handler = service();
+    const socket = client('client-1', 'workspace-1');
+    const graph = {
+      nodes: [
+        {
+          id: 1,
+          type: 'graph/subgraph',
+          pos: [0, 0],
+          title: 'Feedback Generator',
+          properties: { templateBoundary: [] },
+          subgraph: {
+            nodes: [{ id: 1, type: 'input/telepathy', pos: [0, 0] }],
+            links: [],
+            groups: [],
+            config: {},
+            extra: {},
+            version: 0.4,
+          },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-bad-block',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(graph),
+    });
+
+    const states = jest
+      .mocked(socket.emit)
+      .mock.calls.filter(([eventName]) => eventName === 'runStateChanged')
+      .map(([, eventPayload]) => eventPayload);
+    expect(states.map((state) => state.state)).toContain('failed');
+    const failure = jest
+      .mocked(socket.emit)
+      .mock.calls.filter(([eventName]) => eventName === 'graphOperationFailed')
+      .map(([, eventPayload]) => eventPayload)[0];
+    expect(failure.message).toContain('Feedback Generator');
   });
 });
