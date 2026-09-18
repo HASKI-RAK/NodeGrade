@@ -19,6 +19,7 @@ import type {
   NodeDefinition,
   NodePropertyDefinition
 } from './NodeDefinition'
+import { applyWrappedText } from './widgets/WrappedTextPreview'
 import { NumberNode } from './NumberNode'
 import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
@@ -449,7 +450,33 @@ export function loadLegacyWidgetProperties(
   }
 }
 
+/**
+ * Text-like property keys that render the wrapped compact preview with
+ * seamless click-to-edit. These are `Question`, `Sample solution` and
+ * `Textfield` — every `Textfield` subclass stores its content in `value`,
+ * plus the plain textfield itself. `Answer input` keeps its legacy slot-label
+ * rendering: its `value` is runtime input, not authored text.
+ */
+const WRAPPED_TEXT_NODES: Readonly<Record<string, string>> = {
+  [QuestionNode.getPath()]: 'value',
+  [SampleSolutionNode.getPath()]: 'value',
+  [Textfield.getPath()]: 'value'
+}
+
 export function compactNodeWidgets(node: LiteGraphNode): void {
+  // Free-text nodes lost their canvas widget: shrinking them row-by-row
+  // would clip the new wrapped preview. Only enforce the minimum footprint;
+  // serialized sizes (e.g. bundled templates) are preserved as-is so saved
+  // layouts never shrink on load.
+  if (node.type && WRAPPED_TEXT_NODES[node.type]) {
+    Reflect.set(node, 'widgets', [])
+    Reflect.set(node, 'serialize_widgets', false)
+    node.size = [Math.max(node.size[0], 180), Math.max(node.size[1], 64)]
+    if (Reflect.get(node, '__compactDefinitionApplied')) return
+    Reflect.set(node, '__compactDefinitionApplied', true)
+    applyWrappedText(node, WRAPPED_TEXT_NODES[node.type])
+    return
+  }
   Reflect.set(node, 'widgets', [])
   Reflect.set(node, 'serialize_widgets', false)
   const portRows = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0)

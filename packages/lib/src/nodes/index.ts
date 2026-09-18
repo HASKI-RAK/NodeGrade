@@ -82,3 +82,16 @@ export {
   getNodeDefinitions,
   loadLegacyWidgetProperties
 } from './NodeDefinitionRegistry'
+export {
+  applyWrappedText,
+  drawWrappedText,
+  fitLinesToBox,
+  isInsideTextArea,
+  readTextValue,
+  startInlineEdit,
+  wrapTextLines,
+  wrappedTextTop,
+  WRAPPED_TEXT_COLOR,
+  WRAPPED_TEXT_FONT,
+  WRAPPED_TEXT_LINE_HEIGHT
+} from './widgets/WrappedTextPreview'
