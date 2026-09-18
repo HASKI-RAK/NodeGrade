@@ -1,7 +1,7 @@
 import { LiteGraph } from '@haski/ta-lib'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { GraphHistory } from '@/utils/graphHistory'
 
@@ -123,5 +123,45 @@ describe('NodeInspector', () => {
     )
     await userEvent.click(screen.getByText('Advanced'))
     expect(screen.getByLabelText('Top K')).toBeDisabled()
+  })
+
+  it('shows block provenance and opens the nested graph', async () => {
+    const graph = new LiteGraph.LGraph()
+    const history = new GraphHistory(
+      graph,
+      () => [],
+      () => undefined
+    )
+    const block = LiteGraph.createNode('graph/subgraph')
+    block.title = 'Feedback generator'
+    block.properties.templateBlock = {
+      templateId: 'template-1',
+      templateRevision: 3,
+      templateName: 'Feedback generator',
+      insertedAt: '2026-09-18T10:00:00.000Z'
+    }
+    block.properties.templateDescription = 'Generates formative feedback.'
+    block.properties.templateBoundary = [
+      {
+        key: 'text',
+        label: 'Text to review',
+        dataType: 'string',
+        direction: 'input',
+        internalNodeId: 1,
+        internalSlot: 0,
+        required: true,
+        description: 'Participant response.'
+      }
+    ]
+    const onOpenBlock = vi.fn()
+
+    render(
+      <NodeInspector selection={[block]} history={history} onOpenBlock={onOpenBlock} />
+    )
+    expect(screen.getByText('Source template revision 3')).toBeVisible()
+    expect(screen.getByText('Text to review · input · required')).toBeVisible()
+    expect(screen.getByText('Participant response.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Open block' }))
+    expect(onOpenBlock).toHaveBeenCalledWith(block)
   })
 })

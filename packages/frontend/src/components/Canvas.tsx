@@ -10,6 +10,7 @@ type CanvasProps = {
   developerTools?: boolean
   onReady?: (canvas: LGraphCanvas) => void
   onSelectionChange?: (nodes: LGraphNode[]) => void
+  onOpenSubgraph?: (node: LGraphNode) => void
 }
 
 const Canvas = (props: CanvasProps) => {
@@ -35,6 +36,15 @@ const Canvas = (props: CanvasProps) => {
       lcanvas.current.allow_searchbox = !!props.developerTools
       lcanvas.current.onSelectionChange = (nodes) =>
         props.onSelectionChange?.(Object.values(nodes))
+      // Suppress the legacy LiteGraph node panel for template blocks. The React
+      // inspector owns the Open block action, so the native panel would only
+      // duplicate the drill-down affordance.
+      lcanvas.current.onShowNodePanel = (node) => {
+        if (node.type === 'graph/subgraph') props.onOpenSubgraph?.(node)
+      }
+      lcanvas.current.onNodeDblClicked = (node) => {
+        if (node.type === 'graph/subgraph') props.onOpenSubgraph?.(node)
+      }
       props.onReady?.(lcanvas.current)
       props.lgraph.setDirtyCanvas(true, true)
     }
@@ -49,6 +59,7 @@ const Canvas = (props: CanvasProps) => {
     props.developerTools,
     props.lgraph,
     props.onReady,
+    props.onOpenSubgraph,
     props.onSelectionChange,
     props.readOnly
   ])

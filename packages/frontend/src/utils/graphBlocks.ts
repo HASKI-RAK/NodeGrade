@@ -116,7 +116,8 @@ export const insertBlock = ({
   content,
   requiredNodeTypes,
   interfaces,
-  provenance
+  provenance,
+  description
 }: {
   graph: LGraph
   canvas: LGraphCanvas
@@ -124,6 +125,7 @@ export const insertBlock = ({
   requiredNodeTypes: string[]
   interfaces: TemplateInterfaces | null
   provenance: TemplateBlockProvenance
+  description?: string | null
 }): { nodes: LGraphNode[]; suggestions: ConnectionSuggestion[] } => {
   const missing = requiredNodeTypes.filter(
     (type) => !LiteGraph.registered_node_types[type]
@@ -144,6 +146,7 @@ export const insertBlock = ({
   if (!wrapper) throw new Error('Could not create Subgraph wrapper.')
   wrapper.title = provenance.templateName
   wrapper.properties.templateBlock = { ...provenance }
+  wrapper.properties.templateDescription = description ?? ''
   wrapper.properties.templateBoundary = interfaces.boundary.map((port) => ({ ...port }))
 
   const byOldId = new Map<number, LGraphNode>()
@@ -153,7 +156,9 @@ export const insertBlock = ({
     byOldId.set(serialized.id, node)
   })
   block.links?.forEach(([, sourceId, sourceSlot, targetId, targetSlot]) => {
-    byOldId.get(sourceId)?.connect(sourceSlot, byOldId.get(targetId), targetSlot)
+    const source = byOldId.get(sourceId)
+    const target = byOldId.get(targetId)
+    if (source && target) source.connect(sourceSlot, target, targetSlot)
   })
   interfaces.boundary.forEach((port) => {
     const target = byOldId.get(port.internalNodeId)

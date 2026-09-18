@@ -176,4 +176,34 @@ describe('subgraph block insertion', () => {
       })
     ).toThrow('references node 99')
   })
+
+  it('round-trips wrapper provenance and nested content through serialization', () => {
+    const graph = new LGraph()
+    const { nodes } = insertBlock({
+      graph,
+      canvas: canvas(),
+      content,
+      requiredNodeTypes: ['basic/watch', 'basic/string'],
+      interfaces,
+      provenance,
+      description: 'Generates formative feedback.'
+    })
+    const serialized = graph.serialize()
+    const restored = new LGraph()
+    restored.configure(structuredClone(serialized))
+    const wrapper = restored.getNodeById(nodes[0].id)
+    if (!wrapper) throw new Error('Wrapper did not survive serialization.')
+    expect(wrapper.type).toBe('graph/subgraph')
+    expect(wrapper.properties.templateBlock).toEqual(provenance)
+    expect(wrapper.properties.templateDescription).toBe('Generates formative feedback.')
+    expect(wrapper.properties.templateBoundary).toEqual(interfaces.boundary)
+    const inner = (wrapper as LGraphNode & { subgraph: LGraph }).subgraph.serialize()
+    expect(inner.nodes.map(({ type }) => type)).toEqual([
+      'basic/watch',
+      'basic/string',
+      'graph/input',
+      'graph/output'
+    ])
+    expect(inner.links).toHaveLength(2)
+  })
 })
