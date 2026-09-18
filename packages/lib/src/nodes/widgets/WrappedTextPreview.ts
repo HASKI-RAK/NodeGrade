@@ -28,10 +28,17 @@ export const WRAPPED_TEXT_ELLIPSIS = '…'
 const FLAG = '__wrappedTextApplied'
 const EDIT_INPUT_ID = (node: LGraphNode): string => `wrappedText${node.id}`
 
-/** Top edge of the text area: below the port rows, never inside the slots. */
+/**
+ * Top edge of the text area, right below the port rows. LiteGraph centres
+ * slot `i` at `(i + 0.7) * NODE_SLOT_HEIGHT` and draws its label with an
+ * alphabetic baseline at `+5`, so the last row's glyphs end near
+ * `rows * 20 + 2`; its own widgets start at `max_y + 2 = rows * 20 + 6`.
+ * Using the same origin keeps the preview snug under the slots instead of
+ * leaving a dead band, and lets the 64px minimum node show two lines.
+ */
 export const wrappedTextTop = (node: LGraphNode): number => {
   const portRows = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0)
-  return Math.max(30, portRows * 20 + 14)
+  return portRows * 20 + 6
 }
 
 /** Read the text value, tolerating the `{ content }` envelope some nodes use. */
@@ -65,10 +72,39 @@ const splitLongWord = (
 }
 
 /**
+ * A wrap unit: `text` is placed on the line, `glue` means it continues the
+ * previous unit without a space (the tail of a hyphenated word).
+ */
+type WrapToken = { text: string; glue: boolean }
+
+/**
+ * Tokenize a paragraph the way the browser breaks lines: at spaces, and after
+ * a hyphen that sits between two non-space characters (`trade-off` → `trade-`
+ * + `off`). Matching the textarea's break opportunities keeps the inline
+ * editor's line breaks identical to the canvas preview.
+ */
+const tokenizeParagraph = (paragraph: string): WrapToken[] => {
+  const tokens: WrapToken[] = []
+  for (const word of paragraph.split(' ')) {
+    if (!word) continue
+    let start = 0
+    for (let index = 0; index < word.length - 1; index += 1) {
+      if (word[index] === '-' && word[index + 1] !== '-' && index > start) {
+        tokens.push({ text: word.slice(start, index + 1), glue: start > 0 })
+        start = index + 1
+      }
+    }
+    tokens.push({ text: word.slice(start), glue: start > 0 })
+  }
+  return tokens
+}
+
+/**
  * Word-wrap paragraphs for a canvas context. Keeps explicit newlines (unlike
  * the old single-line preview, which collapsed all whitespace), wraps on
- * spaces, and char-splits words longer than the line. Pure: takes the text
- * and width, returns wrapped lines with no truncation applied.
+ * spaces and after hyphens, and char-splits words longer than the line.
+ * Pure: takes the text and width, returns wrapped lines with no truncation
+ * applied.
  */
 export const wrapTextLines = (
   context: CanvasRenderingContext2D,
@@ -78,26 +114,27 @@ export const wrapTextLines = (
   const lines: string[] = []
   for (const paragraph of text.split('\n')) {
     let line = ''
-    const words = paragraph.split(' ').filter((part) => part.length > 0)
-    if (!words.length) {
+    const tokens = tokenizeParagraph(paragraph)
+    if (!tokens.length) {
       lines.push('')
       continue
     }
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word
+    for (const token of tokens) {
+      const joiner = token.glue ? '' : ' '
+      const candidate = line ? `${line}${joiner}${token.text}` : token.text
       if (context.measureText(candidate).width <= maxWidth) {
         line = candidate
       } else if (!line) {
-        // Single word wider than the box: spill it across lines.
-        const parts = splitLongWord(context, word, maxWidth)
+        // Single token wider than the box: spill it across lines.
+        const parts = splitLongWord(context, token.text, maxWidth)
         line = parts.pop() ?? ''
         lines.push(...parts)
       } else {
         lines.push(line)
-        if (context.measureText(word).width <= maxWidth) {
-          line = word
+        if (context.measureText(token.text).width <= maxWidth) {
+          line = token.text
         } else {
-          const parts = splitLongWord(context, word, maxWidth)
+          const parts = splitLongWord(context, token.text, maxWidth)
           line = parts.pop() ?? ''
           lines.push(...parts)
         }
@@ -264,7 +301,11 @@ export const startInlineEdit = (
   input.style.border = 'none'
   input.style.margin = '0px'
   input.style.outline = 'none'
-  input.style.padding = `0px 0px 0px ${WRAPPED_TEXT_PAD_X}px`
+  // The overlay is placed at the text origin (node x + PAD_X) with the exact
+  // wrap width, so the content box has no padding of its own: padding here
+  // would shift glyphs right and narrow the wrap, making lines break
+  // differently from the canvas preview.
+  input.style.padding = '0px'
   input.style.font = WRAPPED_TEXT_FONT
   input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT}px`
   input.style.color = WRAPPED_TEXT_COLOR
