@@ -32,6 +32,15 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      # The Prisma client is generated into src/generated (gitignored), so a fresh
+      # checkout has no client until this runs. Generate uses only the schema, no
+      # database connection, but prisma.config.ts reads DATABASE_URL so a dummy
+      # value is provided for config evaluation.
+      - name: Generate Prisma client
+        run: yarn workspace backend exec prisma generate
+        env:
+          DATABASE_URL: postgresql://nodegrade:nodegrade@localhost:5432/nodegrade?schema=public
+
       # The backend imports @haski/ta-lib from its build output, so the library has to be
       # compiled before anything can be typechecked or tested.
       - name: Build
