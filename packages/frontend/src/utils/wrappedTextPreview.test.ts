@@ -1,4 +1,9 @@
-import { compactNodeWidgets, LiteGraph, wrapTextLines } from '@haski/ta-lib'
+import {
+  compactNodeWidgets,
+  LiteGraph,
+  wrappedTextTop,
+  wrapTextLines
+} from '@haski/ta-lib'
 import type { LGraphNode } from 'litegraph.js'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -86,22 +91,37 @@ describe('wrapped text preview', () => {
     const stub = stubContext()
     stub.draw(node)
     expect(stub.calls.length).toBeGreaterThan(1)
-    expect(stub.calls.join(' ')).toContain('Explain the Strategy')
-    expect(stub.calls.join(' ')).toContain('trade-off')
+    expect(stub.calls[0]).toContain('Explain the Strategy')
+    // Hyphenated words may split across lines ("trade-" / "off."), so compare
+    // the concatenated text rather than a space-joined one.
+    expect(stub.calls.join('')).toContain('trade-off')
+  })
+
+  it('starts the text right below the port row', () => {
+    const node = makeNode({ value: 'x' }, [180, 64])
+    compactNodeWidgets(node)
+    // One output slot: LiteGraph's own widgets begin at rows*20 + 6 = 26.
+    expect(wrappedTextTop(node)).toBe(26)
   })
 
   it('truncates with an ellipsis only when text overflows the node height', () => {
-    const node = makeNode({ value: 'one two three four five six seven' }, [180, 64])
+    const node = makeNode(
+      { value: 'one two three four five six seven eight nine ten eleven twelve' },
+      [180, 64]
+    )
     compactNodeWidgets(node)
     const stub = stubContext()
     stub.draw(node)
-    expect(stub.calls.length).toBe(1)
-    expect(stub.calls[0]).toMatch(/…$/)
+    // 64px node: (64 - 26 - 9) / 13 -> two visible lines, last one elided.
+    expect(stub.calls.length).toBe(2)
+    expect(stub.calls[1]).toMatch(/…$/)
+    expect(stub.calls.join(' ')).not.toContain('twelve')
     node.size = [180, 200]
     const grown = stubContext()
     grown.draw(node)
-    expect(grown.calls.length).toBeGreaterThan(1)
-    expect(grown.calls.join(' ')).toContain('seven')
+    expect(grown.calls.length).toBeGreaterThan(2)
+    expect(grown.calls.join(' ')).toContain('twelve')
+    expect(grown.calls.at(-1)).not.toMatch(/…$/)
   })
 
   it('opens the inline editor on text click and edits the property', () => {
@@ -160,6 +180,25 @@ describe('wrapped text preview', () => {
       1000
     )
     expect(lines).toEqual(['a b', 'c d'])
+  })
+
+  it('breaks after hyphens like the browser so the editor wraps identically', () => {
+    // 5px per char, 50px wide: "one trade-" (10 chars) fits exactly, so the
+    // hyphen is a break opportunity and "off." wraps — as a textarea would.
+    const lines = wrapTextLines(
+      measureStub({}) as CanvasRenderingContext2D,
+      'one trade-off.',
+      50
+    )
+    expect(lines).toEqual(['one trade-', 'off.'])
+    // Hyphen glue joins without a space and stays on one line when it fits.
+    expect(
+      wrapTextLines(measureStub({}) as CanvasRenderingContext2D, 'trade-off', 1000)
+    ).toEqual(['trade-off'])
+    // A leading dash or a double dash is not a break opportunity.
+    expect(
+      wrapTextLines(measureStub({}) as CanvasRenderingContext2D, '-x a--b', 1000)
+    ).toEqual(['-x a--b'])
   })
 
   it('installs click-to-edit without widgets and keeps node serializable', () => {
