@@ -1,4 +1,4 @@
-import { LGraph } from '@haski/ta-lib'
+import { applyCanvasTheme, LGraph } from '@haski/ta-lib'
 import { LGraphCanvas, type LGraphNode } from 'litegraph.js'
 import { useEffect, useRef } from 'react'
 
@@ -31,6 +31,10 @@ const Canvas = (props: CanvasProps) => {
         lcanvas.current.render_connections_shadows = false
         lcanvas.current.render_shadows = false
         lcanvas.current.connections_width = 3
+        // Dark blue-gray canvas + grid tile that the node fills are tuned
+        // against (see CANVAS_THEME); LiteGraph's stock #222 barely separates
+        // from the node bodies.
+        applyCanvasTheme(lcanvas.current)
         installDebugBridge(props.lgraph, lcanvas.current)
       } else {
         // Update the graph reference if canvas already exists

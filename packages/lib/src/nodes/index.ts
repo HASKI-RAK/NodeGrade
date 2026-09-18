@@ -70,10 +70,17 @@ export {
 
 export {
   LGraphNode,
+  CANVAS_THEME,
   CATEGORY_COLORS,
   LINK_TYPE_COLORS,
   LINK_TYPE_SHAPES
 } from './litegraph-extensions/LGraphNode'
+export {
+  applyCanvasTheme,
+  createGridTile,
+  GRID_CELL_SIZE,
+  GRID_TILE_SIZE
+} from './litegraph-extensions/canvasTheme'
 export * from './NodeDefinition'
 export {
   compactNodeWidgets,

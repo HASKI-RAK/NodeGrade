@@ -1,5 +1,5 @@
 /* eslint-disable immutable/no-mutation */
-import type { LGraphCanvas, LGraphNode, Vector2 } from 'litegraph.js'
+import { type LGraphCanvas, type LGraphNode, LiteGraph, type Vector2 } from 'litegraph.js'
 
 /**
  * Wrapped compact text preview with seamless click-to-edit.
@@ -354,7 +354,9 @@ export const startInlineEdit = (
   input.style.font = WRAPPED_TEXT_FONT
   input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT}px`
   input.style.color = WRAPPED_TEXT_COLOR
-  input.style.backgroundColor = '#2B2D3A'
+  // Same fill as the node body underneath, whichever theme is active, so the
+  // overlay is invisible except for the caret.
+  input.style.backgroundColor = nodeBodyColor(node)
   input.style.borderRadius = '2px'
   input.style.resize = 'none'
   input.style.overflow = 'hidden'
@@ -421,6 +423,12 @@ export const startInlineEdit = (
   input.setSelectionRange(input.value.length, input.value.length)
   canvas.setDirty(true, true)
   return true
+}
+
+/** Resolve the node body fill the same way LiteGraph's `drawNode` does. */
+const nodeBodyColor = (node: LGraphNode): string => {
+  const ctor = node.constructor as { bgcolor?: string }
+  return node.bgcolor || ctor.bgcolor || LiteGraph.NODE_DEFAULT_BGCOLOR
 }
 
 const commitValue = (node: LGraphNode, key: string, next: string): void => {
