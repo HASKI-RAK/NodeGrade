@@ -1,8 +1,8 @@
 import {
+  type BlockBoundaryPort,
   compactNodeWidgets,
   LiteGraph,
   loadLegacyWidgetProperties,
-  type BlockBoundaryPort,
   type TemplateBlockProvenance
 } from '@haski/ta-lib'
 import type { LGraph, LGraphCanvas, LGraphNode, SerializedLGraphNode } from 'litegraph.js'
