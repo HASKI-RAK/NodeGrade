@@ -3,6 +3,9 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 RUN corepack enable
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace manifests first for layer caching
 COPY package.json yarn.lock .yarnrc.yml ./
@@ -20,6 +23,7 @@ COPY packages/backend ./packages/backend
 # Backend imports @haski/ta-lib and @haski/lti, so build them first
 RUN yarn workspace @haski/ta-lib build
 RUN yarn workspace @haski/lti build
+RUN DATABASE_URL="postgresql://nodegrade:nodegrade@db:5432/nodegrade?schema=public" yarn workspace backend prisma generate
 RUN yarn workspace backend build
 
 # Runtime stage
@@ -28,6 +32,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 RUN corepack enable
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests and install full deps (prisma CLI needed for migrations)
 COPY package.json yarn.lock .yarnrc.yml ./
