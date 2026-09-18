@@ -68,7 +68,12 @@ export {
   StringsToArray
 }
 
-export { LGraphNode } from './litegraph-extensions/LGraphNode'
+export {
+  LGraphNode,
+  CATEGORY_COLORS,
+  LINK_TYPE_COLORS,
+  LINK_TYPE_SHAPES
+} from './litegraph-extensions/LGraphNode'
 export * from './NodeDefinition'
 export {
   compactNodeWidgets,

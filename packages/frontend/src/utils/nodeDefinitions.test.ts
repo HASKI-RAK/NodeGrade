@@ -1,7 +1,10 @@
 import {
+  CATEGORY_COLORS,
   getDefinedNodeConstructors,
   getNodeDefinition,
   getNodeDefinitions,
+  LINK_TYPE_COLORS,
+  LINK_TYPE_SHAPES,
   LiteGraph,
   loadLegacyWidgetProperties
 } from '@haski/ta-lib'
@@ -65,5 +68,41 @@ describe('node definition registry', () => {
     })
 
     expect(node.properties.separator).toBe('\n')
+  })
+
+  it('color-codes every port by type with a matching shape', () => {
+    for (const Node of getDefinedNodeConstructors()) {
+      const node = new Node()
+      for (const slot of [...(node.inputs ?? []), ...(node.outputs ?? [])]) {
+        const color = LINK_TYPE_COLORS[slot.type as keyof typeof LINK_TYPE_COLORS]
+        expect(slot.color_on).toBe(color)
+        expect(slot.color_off).toBe(color)
+        expect(slot.shape).toBe(
+          LINK_TYPE_SHAPES[slot.type as keyof typeof LINK_TYPE_SHAPES]
+        )
+      }
+    }
+  })
+
+  it('restyles legacy ports on configure and keeps titles readable', () => {
+    const node = LiteGraph.createNode('basic/prompt-message')
+    node.inputs?.forEach((slot) => {
+      slot.color_off = '#00FF0060'
+      slot.shape = undefined
+    })
+    node.configure({ ...node.serialize(), inputs: node.inputs, outputs: node.outputs })
+    expect(node.inputs?.[0].color_on).toBe(LINK_TYPE_COLORS.string)
+    expect(node.inputs?.[0].color_off).toBe(LINK_TYPE_COLORS.string)
+    expect(node.outputs?.[0].color_on).toBe(LINK_TYPE_COLORS.message)
+
+    // Titles stay near-white on the dark bar; the category signal is the pill
+    // plus the status dot, never a full-bleed tint.
+    expect(LiteGraph.NODE_TITLE_COLOR).toBe('#F5F7FA')
+    for (const Node of getDefinedNodeConstructors()) {
+      const category = Node.definition.category
+      expect(Reflect.get(Node, 'title_text_color')).toBe('#F5F7FA')
+      expect(Reflect.get(Node, 'boxcolor')).toBe(CATEGORY_COLORS[category])
+      expect(Reflect.get(Node, 'color')).toBeUndefined()
+    }
   })
 })
