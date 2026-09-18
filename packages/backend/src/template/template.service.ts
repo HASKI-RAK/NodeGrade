@@ -15,7 +15,9 @@ import {
   graphNodeTypes,
   hashContent,
   parseGraphContent,
+  validateNestedGraph,
 } from './template-content.js';
+import { getNodeDefinition } from '@haski/ta-lib';
 
 export type TemplateMetadata = {
   name: string;
@@ -356,9 +358,12 @@ export class TemplateService {
     return JSON.stringify(this.validate(content));
   }
 
-  private validate(content: string) {
+  private validate(
+    content: string,
+  ): import('./template-content.js').GraphContent {
+    let parsed: import('./template-content.js').GraphContent;
     try {
-      return parseGraphContent(content);
+      parsed = parseGraphContent(content);
     } catch (error) {
       if (error instanceof TemplateContentError) {
         throw new BadRequestException({
@@ -368,6 +373,20 @@ export class TemplateService {
       }
       throw error;
     }
+    // Gate-4 limits enforce on write: depth, node/link counts, boundary integrity.
+    // graph/subgraph is a container, not a registered node definition.
+    const issues = validateNestedGraph(parsed, {
+      registeredType: (type) =>
+        type === 'graph/subgraph' || getNodeDefinition(type) !== undefined,
+    });
+    if (issues.length > 0) {
+      const first = issues[0];
+      throw new BadRequestException({
+        code: 'template_content_invalid',
+        message: `${first.path}: ${first.message}`,
+      });
+    }
+    return parsed;
   }
 
   private interfacesFor(kind: TemplateKind, input: RevisionInput) {

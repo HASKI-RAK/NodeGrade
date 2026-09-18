@@ -175,6 +175,34 @@ describe('TemplateService', () => {
       expect(template.create).not.toHaveBeenCalled();
     });
 
+    it('rejects nested content that breaks block limits', async () => {
+      const { service, template } = build();
+      const nested = JSON.stringify({
+        nodes: [
+          {
+            id: 1,
+            type: 'graph/subgraph',
+            title: 'Block',
+            properties: { templateBoundary: [] },
+            subgraph: {
+              nodes: [{ id: 1, type: 'input/telepathy' }],
+              links: [],
+            },
+          },
+        ],
+        links: [],
+      });
+
+      await expect(
+        service.createTemplate({
+          slug: 'demo',
+          kind: 'WORKFLOW',
+          revision: { name: 'Demo', content: nested },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(template.create).not.toHaveBeenCalled();
+    });
+
     it('reports a taken slug as a conflict', async () => {
       const { service, template } = build();
       template.create.mockRejectedValue(
@@ -309,9 +337,7 @@ describe('TemplateService', () => {
       const { service, workflow, templateRevision } = build();
       workflow.count.mockResolvedValue(1);
 
-      await expect(
-        service.deleteRevision('tpl-1', 1),
-      ).rejects.toMatchObject({
+      await expect(service.deleteRevision('tpl-1', 1)).rejects.toMatchObject({
         status: 409,
         response: { code: 'revision_referenced' },
       });

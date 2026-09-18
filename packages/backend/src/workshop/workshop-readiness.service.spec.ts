@@ -202,6 +202,91 @@ describe('WorkshopReadinessService', () => {
     expect(await detailOf('node_types')).toMatchObject({ status: 'FAIL' });
   });
 
+  it('sees nested node types and model references inside blocks', async () => {
+    const content = {
+      nodes: [
+        {
+          id: 1,
+          type: 'graph/subgraph',
+          title: 'Feedback Generator',
+          properties: { templateBoundary: [] },
+          subgraph: {
+            nodes: [
+              {
+                id: 1,
+                type: 'models/llm',
+                properties: {
+                  model_ref: {
+                    providerKey: 'openrouter',
+                    modelId: 'openrouter/free',
+                  },
+                  needs_model_selection: false,
+                },
+              },
+            ],
+            links: [],
+          },
+        },
+      ],
+      links: [],
+    };
+    findUnique.mockResolvedValue(
+      workshopRow({
+        templateRevision: {
+          id: 'rev-nested',
+          name: 'Nested workflow',
+          content: JSON.stringify(content),
+        },
+      }),
+    );
+
+    expect(await detailOf('node_types')).toMatchObject({ status: 'PASS' });
+    expect(await detailOf('models')).toMatchObject({ status: 'PASS' });
+  });
+
+  it('fails nested content with an unregistered inner type or unconfigured inner model', async () => {
+    const content = {
+      nodes: [
+        {
+          id: 1,
+          type: 'graph/subgraph',
+          title: 'Feedback Generator',
+          properties: { templateBoundary: [] },
+          subgraph: {
+            nodes: [
+              { id: 1, type: 'input/telepathy' },
+              {
+                id: 2,
+                type: 'models/llm',
+                properties: { model_ref: null, needs_model_selection: true },
+              },
+            ],
+            links: [],
+          },
+        },
+      ],
+      links: [],
+    };
+    findUnique.mockResolvedValue(
+      workshopRow({
+        templateRevision: {
+          id: 'rev-nested-bad',
+          name: 'Nested workflow',
+          content: JSON.stringify(content),
+        },
+      }),
+    );
+
+    expect(await detailOf('node_types')).toMatchObject({
+      status: 'FAIL',
+      detail: expect.stringContaining('input/telepathy'),
+    });
+    expect(await detailOf('models')).toMatchObject({
+      status: 'FAIL',
+      detail: expect.stringContaining('1 model node'),
+    });
+  });
+
   it('resolves a participant code the same way joining does', async () => {
     await service.byCode('abcd-efgh');
 

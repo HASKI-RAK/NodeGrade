@@ -17,6 +17,11 @@ import { buildNodeExecutionEnv } from '../config/node-env.js';
 import { configuration } from '../config/configuration.js';
 import { executeLgraph, GraphExecutionError } from '../core/Graph.js';
 import {
+  compileEditorGraphForExecution,
+  SubgraphCompileError,
+} from '../core/subgraph-compiler.js';
+import { parseGraphContent } from '../template/template-content.js';
+import {
   sanitizeExecutionError,
   sanitizeTraceOutputs,
 } from '../core/trace-sanitizer.js';
@@ -40,6 +45,16 @@ type ActiveRun = {
 export class GraphHandlerService {
   private readonly logger = new Logger(GraphHandlerService.name);
   private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly executionSourceMaps = new Map<
+    string,
+    {
+      executionId: number;
+      traceLabel: string;
+      wrapperId: number | null;
+      sourceId: number;
+      wrapperPath: string[];
+    }[]
+  >();
 
   constructor(
     private readonly workflows: WorkflowService,
@@ -47,6 +62,39 @@ export class GraphHandlerService {
     private readonly modelRuntime: ProviderRuntimeService,
     private readonly limits: ExecutionLimitsService,
   ) {}
+
+  /**
+   * Compiles the encapsulated editor graph into an ephemeral flat execution graph.
+   * The persisted workflow stays nested; only the compiled content executes.
+   */
+  private compileForExecution(graphContent: string): {
+    content?: string;
+    sourceMap?: {
+      executionId: number;
+      traceLabel: string;
+      wrapperId: number | null;
+      sourceId: number;
+      wrapperPath: string[];
+    }[];
+    error?: { code: 'node_failed'; message: string };
+  } {
+    try {
+      const compiled = compileEditorGraphForExecution(
+        parseGraphContent(graphContent),
+      );
+      return {
+        content: JSON.stringify(compiled.content),
+        sourceMap: compiled.sourceMap,
+      };
+    } catch (error) {
+      const message =
+        error instanceof SubgraphCompileError
+          ? error.message
+          : 'The workflow could not be prepared for execution.';
+      this.logger.warn(`Subgraph compilation failed: ${message}`);
+      return { error: { code: 'node_failed', message } };
+    }
+  }
 
   /**
    * Adds execution handling to nodes in the graph
@@ -310,13 +358,35 @@ export class GraphHandlerService {
         auth?.ltiCookie?.isEditor === false,
       );
       const graphContent = payload.graph ?? persistedContent;
+      const compiled = this.compileForExecution(graphContent);
+      if (compiled.error) {
+        emitEvent(client, 'runStateChanged', {
+          requestId: run.requestId,
+          runId: run.runId,
+          workflowId: run.workflowId,
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          error: compiled.error,
+        });
+        emitEvent(client, 'graphOperationFailed', {
+          operation: 'run',
+          code: 'run-failed',
+          message: compiled.error.message,
+          retryable: false,
+          runId: run.runId,
+          workflowId: run.workflowId,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
       const lgraph = new LGraph();
 
       // Add the node execution handling BEFORE configuring
       this.addOnNodeAdded(lgraph, client, run);
 
       this.logger.debug('Configuring graph from client payload');
-      lgraph.configure(JSON.parse(graphContent));
+      lgraph.configure(JSON.parse(compiled.content ?? '{}'));
+      this.executionSourceMaps.set(run.runId, compiled.sourceMap ?? []);
 
       // Hydrate all nodes that were added during configure
       await this.hydrateExistingNodes(lgraph);
@@ -422,11 +492,15 @@ export class GraphHandlerService {
           timeoutMs: configuration().runNodeTimeoutMs,
           mapOutputs: (outputs) => sanitizeTraceOutputs(outputs, []),
           onNodeEvent: (event) => {
+            const sourceMap = this.executionSourceMaps.get(run!.runId);
+            const source = sourceMap?.find(
+              (entry) => entry.executionId === Number(event.node.id),
+            );
             emitEvent(client, 'nodeExecutionChanged', {
               runId: run!.runId,
               workflowId: run!.workflowId,
               nodeId: Number(event.node.id),
-              nodeTitle: event.node.title,
+              nodeTitle: source?.traceLabel ?? event.node.title,
               nodeType: event.node.type ?? 'unknown',
               state: event.state,
               timestamp: event.timestamp,
@@ -434,6 +508,9 @@ export class GraphHandlerService {
               durationMs: event.durationMs,
               outputs: event.outputs,
               warnings: event.warnings,
+              wrapperId: source?.wrapperId ?? null,
+              sourceId: source?.sourceId ?? null,
+              wrapperPath: source?.wrapperPath ?? [],
               error: event.error
                 ? sanitizeExecutionError(event.error)
                 : undefined,
@@ -586,7 +663,10 @@ export class GraphHandlerService {
         });
       }
     } finally {
-      if (run) this.activeRuns.delete(run.runId);
+      if (run) {
+        this.activeRuns.delete(run.runId);
+        this.executionSourceMaps.delete(run.runId);
+      }
     }
   }
 }

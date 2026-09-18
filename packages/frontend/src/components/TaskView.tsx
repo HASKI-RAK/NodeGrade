@@ -149,7 +149,10 @@ const TaskView = forwardRef<
     runState?: RunState
     trace?: ServerEventPayload['nodeExecutionChanged'][]
     onCancel?: () => void
-    onSelectTraceNode?: (nodeId: number) => void
+    onSelectTraceNode?: (
+      nodeId: number,
+      source?: { wrapperId?: number | null; sourceId?: number | null }
+    ) => void
   }
 >(
   (

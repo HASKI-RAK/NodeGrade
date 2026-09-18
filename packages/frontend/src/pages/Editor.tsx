@@ -7,6 +7,7 @@ import {
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   Snackbar,
   Typography,
@@ -103,8 +104,13 @@ export const Editor = () => {
   const [connectionSuggestions, setConnectionSuggestions] = useState<
     ConnectionSuggestion[]
   >([])
+  const [openBlockContext, setOpenBlockContext] = useState<{
+    node: LGraphNode
+    label: string
+  } | null>(null)
   const taskView = useRef<TaskViewHandle | null>(null)
   const navigationBypass = useRef<string | null>(null)
+  const parentViewport = useRef<{ offset: [number, number]; scale: number } | null>(null)
   const lgraph = useMemo(() => new LiteGraph.LGraph(), [])
   const theme = useTheme()
   const mobile = useMediaQuery(theme.breakpoints.down('md'))
@@ -215,6 +221,60 @@ export const Editor = () => {
     [student]
   )
 
+  const rememberParentViewport = useCallback(() => {
+    if (!canvas) return
+    parentViewport.current = {
+      offset: [canvas.ds.offset[0], canvas.ds.offset[1]],
+      scale: canvas.ds.scale
+    }
+  }, [canvas])
+
+  const showOpenBlock = useCallback(
+    (node: LGraphNode) => {
+      if (node.type !== 'graph/subgraph') return
+      rememberParentViewport()
+      setOpenBlockContext({
+        node,
+        label:
+          typeof node.properties.templateBlock === 'object' &&
+          node.properties.templateBlock !== null &&
+          'templateName' in node.properties.templateBlock
+            ? String(node.properties.templateBlock.templateName)
+            : node.title
+      })
+      setSelection([])
+    },
+    [rememberParentViewport]
+  )
+
+  const openBlock = useCallback(
+    (node: LGraphNode) => {
+      if (!canvas || node.type !== 'graph/subgraph' || !('subgraph' in node)) return
+      // Double-click fires both onShowNodePanel and onNodeDblClicked through the
+      // same Canvas callback. Opening twice would throw because the canvas graph
+      // already equals the subgraph.
+      if (canvas.graph === (node.subgraph as LGraph)) {
+        showOpenBlock(node)
+        return
+      }
+      showOpenBlock(node)
+      canvas.openSubgraph(node.subgraph as LGraph)
+    },
+    [canvas, showOpenBlock]
+  )
+
+  const closeBlock = useCallback(() => {
+    if (!canvas) return
+    canvas.closeSubgraph()
+    if (parentViewport.current) {
+      canvas.ds.offset = [...parentViewport.current.offset]
+      canvas.ds.scale = parentViewport.current.scale
+    }
+    canvas.setDirty(true, true)
+    setOpenBlockContext(null)
+    setSelection([])
+  }, [canvas])
+
   const showPreview = useCallback(() => {
     setRailMode('preview')
     setRailOpen(true)
@@ -227,9 +287,32 @@ export const Editor = () => {
   }, [showPreview])
 
   const selectTraceNode = useCallback(
-    (nodeId: number) => {
+    (
+      nodeId: number,
+      source?: { wrapperId?: number | null; sourceId?: number | null }
+    ) => {
+      if (!canvas) return
+      // Block steps carry compiled flat ids; resolve them to editor identity via
+      // the structured source the server emits. Open the block, then select the
+      // inner node inside the subgraph.
+      if (source?.wrapperId != null && source?.sourceId != null) {
+        const wrapper = lgraph.getNodeById(source.wrapperId)
+        if (wrapper && wrapper.type === 'graph/subgraph' && 'subgraph' in wrapper) {
+          openBlock(wrapper)
+          const inner = (wrapper.subgraph as LGraph).getNodeById(source.sourceId)
+          if (inner) {
+            canvas.selectNode(inner)
+            canvas.centerOnNode(inner)
+            setSelection([inner])
+            if (mobile) setRailOpen(false)
+            else setRailMode('preview')
+            lgraph.setDirtyCanvas(true, true)
+            return
+          }
+        }
+      }
       const node = lgraph.getNodeById(nodeId)
-      if (!node || !canvas) return
+      if (!node) return
       canvas.selectNode(node)
       canvas.centerOnNode(node)
       setSelection([node])
@@ -237,7 +320,7 @@ export const Editor = () => {
       else setRailMode('preview')
       lgraph.setDirtyCanvas(true, true)
     },
-    [canvas, lgraph, mobile]
+    [canvas, lgraph, mobile, openBlock]
   )
 
   const reloadLatest = useCallback(async () => {
@@ -319,7 +402,14 @@ export const Editor = () => {
             canvas,
             content: detail.revision.content,
             requiredNodeTypes: detail.revision.requiredNodeTypes,
-            interfaces: detail.revision.interfaces
+            interfaces: detail.revision.interfaces,
+            provenance: {
+              templateId: block.id,
+              templateRevision: detail.revision.revision,
+              templateName: detail.revision.name,
+              insertedAt: new Date().toISOString()
+            },
+            description: detail.revision.description
           }).suggestions
         })
         setConnectionSuggestions(suggestions)
@@ -419,14 +509,45 @@ export const Editor = () => {
             }}
           />
         )}
-        <Box sx={{ minWidth: 0, flex: 1, height: '100%' }}>
-          <Canvas
-            lgraph={lgraph}
-            readOnly={student}
-            developerTools={developerTools}
-            onReady={setCanvas}
-            onSelectionChange={selectNodes}
-          />
+        <Box
+          sx={{
+            minWidth: 0,
+            flex: 1,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {openBlockContext && (
+            <Box
+              aria-label="Graph breadcrumb"
+              sx={{
+                px: 2,
+                py: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                borderBottom: 1,
+                borderColor: 'divider',
+                bgcolor: 'background.paper'
+              }}
+            >
+              <Button size="small" onClick={closeBlock}>
+                Back workflow
+              </Button>
+              <Typography variant="body2">Workflow / {openBlockContext.label}</Typography>
+            </Box>
+          )}
+          <Box sx={{ minHeight: 0, flex: 1 }}>
+            <Canvas
+              lgraph={lgraph}
+              readOnly={student}
+              developerTools={developerTools}
+              onReady={setCanvas}
+              onSelectionChange={selectNodes}
+              onOpenSubgraph={openBlock}
+            />
+          </Box>
         </Box>
         <EditorRail mobile={mobile} open={railOpen} onClose={() => setRailOpen(false)}>
           {!!connectionSuggestions.length && (
@@ -464,6 +585,7 @@ export const Editor = () => {
               selection={selection}
               history={history}
               modelCatalog={modelCatalog}
+              onOpenBlock={openBlock}
             />
           )}
         </EditorRail>

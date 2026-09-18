@@ -1,4 +1,4 @@
-import type { ModelCatalog } from '@haski/ta-lib'
+import type { BlockInterfaces, ModelCatalog } from '@haski/ta-lib'
 
 import { getConfig } from '@/utils/config'
 
@@ -67,16 +67,7 @@ export type Workflow = {
 }
 
 export type TemplateKind = 'WORKFLOW' | 'BLOCK'
-export type TemplateInterfacePort = {
-  nodeId: number
-  slot: number
-  name: string
-  type: string
-}
-export type TemplateInterfaces = {
-  inputs?: TemplateInterfacePort[]
-  outputs?: TemplateInterfacePort[]
-}
+export type TemplateInterfaces = BlockInterfaces
 export type WorkflowTemplate = {
   id: string
   slug: string

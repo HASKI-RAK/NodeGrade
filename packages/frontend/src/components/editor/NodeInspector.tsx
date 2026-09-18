@@ -306,11 +306,13 @@ const PropertyEditor = ({
 export const NodeInspector = ({
   selection,
   history,
-  modelCatalog = []
+  modelCatalog = [],
+  onOpenBlock
 }: {
   selection: LGraphNode[]
   history: GraphHistory
   modelCatalog?: ModelCatalogEntry[]
+  onOpenBlock?: (node: LGraphNode) => void
 }) => {
   if (!selection.length)
     return (
@@ -331,6 +333,61 @@ export const NodeInspector = ({
       </Box>
     )
   const node = selection[0]
+  if (
+    node.type === 'graph/subgraph' &&
+    typeof node.properties.templateBlock === 'object' &&
+    node.properties.templateBlock !== null
+  ) {
+    const provenance = node.properties.templateBlock as {
+      templateName?: unknown
+      templateRevision?: unknown
+    }
+    const boundary = Array.isArray(node.properties.templateBoundary)
+      ? (node.properties.templateBoundary as Array<{
+          key: string
+          label: string
+          direction: 'input' | 'output'
+          description?: string
+          required?: boolean
+        }>)
+      : []
+    return (
+      <Stack spacing={2} p={3} sx={{ overflowY: 'auto' }}>
+        <Box>
+          <Typography variant="h6">
+            {String(provenance.templateName ?? node.title)}
+          </Typography>
+          {!!node.properties.templateDescription && (
+            <Typography color="text.secondary" variant="body2">
+              {String(node.properties.templateDescription)}
+            </Typography>
+          )}
+        </Box>
+        <Typography variant="body2">
+          Source template revision {String(provenance.templateRevision ?? '')}
+        </Typography>
+        <Box>
+          <Typography variant="subtitle2">Boundary ports</Typography>
+          {boundary.map((port) => (
+            <Box key={port.key} mt={1}>
+              <Typography variant="body2">
+                {port.label} · {port.direction}
+                {port.required ? ' · required' : ''}
+              </Typography>
+              {port.description && (
+                <Typography color="text.secondary" variant="caption">
+                  {port.description}
+                </Typography>
+              )}
+            </Box>
+          ))}
+        </Box>
+        <Button variant="contained" onClick={() => onOpenBlock?.(node)}>
+          Open block
+        </Button>
+      </Stack>
+    )
+  }
   const definition = node.type ? getNodeDefinition(node.type) : undefined
   if (!definition)
     return (
