@@ -1,4 +1,10 @@
-import { compactNodeWidgets, LiteGraph, loadLegacyWidgetProperties } from '@haski/ta-lib'
+import {
+  compactNodeWidgets,
+  LiteGraph,
+  loadLegacyWidgetProperties,
+  type BlockBoundaryPort,
+  type TemplateBlockProvenance
+} from '@haski/ta-lib'
 import type { LGraph, LGraphCanvas, LGraphNode, SerializedLGraphNode } from 'litegraph.js'
 
 import type { TemplateInterfaces } from '@/api/http'
@@ -10,6 +16,7 @@ type BlockNode = Omit<SerializedLGraphNode, 'id' | 'type' | 'pos'> & {
 }
 type BlockLink = [number, number, number, number, number, string]
 type BlockGraph = { nodes: BlockNode[]; links?: BlockLink[] }
+type SubgraphNode = LGraphNode & { subgraph: LGraph }
 
 export type ConnectionSuggestion = {
   direction: 'input' | 'output'
@@ -49,104 +56,148 @@ export const parseBlockGraph = (content: string): BlockGraph => {
   return parsed
 }
 
+const validateBoundary = (block: BlockGraph, boundary: BlockBoundaryPort[]) => {
+  const nodes = new Map(block.nodes.map((node) => [node.id, node]))
+  const keys = new Set<string>()
+  for (const port of boundary) {
+    if (keys.has(port.key))
+      throw new Error(`Block boundary key ${port.key} is duplicated.`)
+    keys.add(port.key)
+    const node = nodes.get(port.internalNodeId)
+    if (!node)
+      throw new Error(
+        `Block boundary ${port.label} references node ${port.internalNodeId}, which is missing.`
+      )
+    const slots = port.direction === 'input' ? node.inputs : node.outputs
+    if (!slots?.[port.internalSlot])
+      throw new Error(
+        `Block boundary ${port.label} references missing ${port.direction} slot ${port.internalSlot}.`
+      )
+  }
+}
+
+const createInnerNode = (serialized: BlockNode): LGraphNode => {
+  const node = LiteGraph.createNode(serialized.type)
+  if (!node) throw new Error(`Could not create node type ${serialized.type}.`)
+  const clean: SerializedLGraphNode = {
+    ...serialized,
+    id: -1,
+    inputs: serialized.inputs?.map((input) => ({ ...input, link: null })),
+    outputs: serialized.outputs?.map((output) => ({ ...output, links: [] }))
+  }
+  node.configure(clean)
+  loadLegacyWidgetProperties(node, clean)
+  compactNodeWidgets(node)
+  return node
+}
+
+const createBoundaryAdapter = (
+  wrapper: SubgraphNode,
+  port: BlockBoundaryPort,
+  target: LGraphNode
+) => {
+  const type = port.direction === 'input' ? 'graph/input' : 'graph/output'
+  const adapter = LiteGraph.createNode(type)
+  if (!adapter) throw new Error(`Could not create node type ${type}.`)
+  wrapper.subgraph.add(adapter)
+  adapter.setProperty('name', port.label)
+  adapter.setProperty('type', port.dataType)
+  adapter.pos =
+    port.direction === 'input'
+      ? [target.pos[0] - 260, target.pos[1]]
+      : [target.pos[0] + (target.size?.[0] ?? 160) + 80, target.pos[1]]
+  if (port.direction === 'input') adapter.connect(0, target, port.internalSlot)
+  else target.connect(port.internalSlot, adapter, 0)
+}
+
 export const insertBlock = ({
   graph,
   canvas,
   content,
   requiredNodeTypes,
-  interfaces
+  interfaces,
+  provenance
 }: {
   graph: LGraph
   canvas: LGraphCanvas
   content: string
   requiredNodeTypes: string[]
   interfaces: TemplateInterfaces | null
+  provenance: TemplateBlockProvenance
 }): { nodes: LGraphNode[]; suggestions: ConnectionSuggestion[] } => {
   const missing = requiredNodeTypes.filter(
     (type) => !LiteGraph.registered_node_types[type]
   )
   if (missing.length)
     throw new Error(`Block requires unavailable node types: ${missing.join(', ')}`)
+  if (!interfaces?.boundary.length) throw new Error('Block template has no boundary.')
+
   const block = parseBlockGraph(content)
-  if (!block.nodes.length) return { nodes: [], suggestions: [] }
+  if (!block.nodes.length) throw new Error('Block template has no internal nodes.')
+  validateBoundary(block, interfaces.boundary)
+
   const existingNodes = graph.serialize().nodes.flatMap(({ id }) => {
     const node = graph.getNodeById(id)
     return node ? [node] : []
   })
+  const wrapper = LiteGraph.createNode('graph/subgraph') as SubgraphNode | null
+  if (!wrapper) throw new Error('Could not create Subgraph wrapper.')
+  wrapper.title = provenance.templateName
+  wrapper.properties.templateBlock = { ...provenance }
+  wrapper.properties.templateBoundary = interfaces.boundary.map((port) => ({ ...port }))
 
-  const left = Math.min(...block.nodes.map((node) => node.pos[0]))
-  const top = Math.min(...block.nodes.map((node) => node.pos[1]))
-  const right = Math.max(
-    ...block.nodes.map((node) => node.pos[0] + (node.size?.[0] ?? 160))
-  )
-  const bottom = Math.max(
-    ...block.nodes.map((node) => node.pos[1] + (node.size?.[1] ?? 80))
-  )
+  const byOldId = new Map<number, LGraphNode>()
+  block.nodes.forEach((serialized) => {
+    const node = createInnerNode(serialized)
+    wrapper.subgraph.add(node)
+    byOldId.set(serialized.id, node)
+  })
+  block.links?.forEach(([, sourceId, sourceSlot, targetId, targetSlot]) => {
+    byOldId.get(sourceId)?.connect(sourceSlot, byOldId.get(targetId), targetSlot)
+  })
+  interfaces.boundary.forEach((port) => {
+    const target = byOldId.get(port.internalNodeId)
+    if (target) createBoundaryAdapter(wrapper, port, target)
+  })
+
+  const longestLabel = Math.max(...interfaces.boundary.map((port) => port.label.length))
+  wrapper.size = [Math.max(300, longestLabel * 8 + 140), 100]
   const center = canvas.convertCanvasToOffset([
     canvas.canvas.width / 2,
     canvas.canvas.height / 2
   ])
-  const delta: [number, number] = [
-    center[0] - (left + right) / 2,
-    center[1] - (top + bottom) / 2
-  ]
-  const byOldId = new Map<number, LGraphNode>()
-
-  block.nodes.forEach((serialized) => {
-    const node = LiteGraph.createNode(serialized.type)
-    if (!node) throw new Error(`Could not create node type ${serialized.type}.`)
-    const position: [number, number] = [
-      serialized.pos[0] + delta[0],
-      serialized.pos[1] + delta[1]
-    ]
-    const clean: SerializedLGraphNode = {
-      ...serialized,
-      id: -1,
-      pos: position,
-      inputs: serialized.inputs?.map((input) => ({ ...input, link: null })),
-      outputs: serialized.outputs?.map((output) => ({ ...output, links: [] }))
-    }
-    node.configure(clean)
-    loadLegacyWidgetProperties(node, clean)
-    compactNodeWidgets(node)
-    graph.add(node)
-    byOldId.set(serialized.id, node)
-  })
-
-  block.links?.forEach(([, sourceId, sourceSlot, targetId, targetSlot]) => {
-    const source = byOldId.get(sourceId)
-    const target = byOldId.get(targetId)
-    if (source && target) source.connect(sourceSlot, target, targetSlot)
-  })
+  wrapper.pos = [center[0] - wrapper.size[0] / 2, center[1] - wrapper.size[1] / 2]
+  graph.add(wrapper)
 
   const compatible = (first: string | -1, second: string) =>
     first === '*' || second === '*' || first === second
-  const mapPorts = (direction: 'input' | 'output'): ConnectionSuggestion[] =>
-    (interfaces?.[`${direction}s`] ?? []).flatMap((port) => {
-      const node = byOldId.get(port.nodeId)
-      if (!node) return []
-      return existingNodes.flatMap((existing) => {
-        const slots =
-          direction === 'input' ? (existing.outputs ?? []) : (existing.inputs ?? [])
-        return slots.flatMap((slot, existingSlot) =>
-          compatible(slot.type, port.type)
-            ? [
-                {
-                  direction,
-                  nodeId: node.id,
-                  slot: port.slot,
-                  existingNodeId: existing.id,
-                  existingSlot,
-                  name: port.name,
-                  type: port.type
-                }
-              ]
-            : []
-        )
-      })
+  const suggestions = interfaces.boundary.flatMap((port) => {
+    const wrapperPorts = interfaces.boundary.filter(
+      (candidate) => candidate.direction === port.direction
+    )
+    const slot = wrapperPorts.findIndex((candidate) => candidate.key === port.key)
+    return existingNodes.flatMap((existing) => {
+      const slots =
+        port.direction === 'input' ? (existing.outputs ?? []) : (existing.inputs ?? [])
+      return slots.flatMap((candidate, existingSlot) =>
+        compatible(candidate.type, port.dataType)
+          ? [
+              {
+                direction: port.direction,
+                nodeId: wrapper.id,
+                slot,
+                existingNodeId: existing.id,
+                existingSlot,
+                name: port.label,
+                type: port.dataType
+              }
+            ]
+          : []
+      )
     })
-  const nodes = [...byOldId.values()]
-  canvas.selectNodes(nodes)
+  })
+
+  canvas.selectNodes([wrapper])
   graph.setDirtyCanvas(true, true)
-  return { nodes, suggestions: [...mapPorts('input'), ...mapPorts('output')] }
+  return { nodes: [wrapper], suggestions }
 }

@@ -319,7 +319,13 @@ export const Editor = () => {
             canvas,
             content: detail.revision.content,
             requiredNodeTypes: detail.revision.requiredNodeTypes,
-            interfaces: detail.revision.interfaces
+            interfaces: detail.revision.interfaces,
+            provenance: {
+              templateId: block.id,
+              templateRevision: detail.revision.revision,
+              templateName: detail.revision.name,
+              insertedAt: new Date().toISOString()
+            }
           }).suggestions
         })
         setConnectionSuggestions(suggestions)
