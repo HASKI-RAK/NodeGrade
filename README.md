@@ -2,7 +2,10 @@
 
 ## Overview
 
-This repository provides an app for automated task evaluation. Using an intuitive node graph interface, users can create and configure tasks, which are then evaluated by a by the system. The system consults worker units if necessary. The worker units are models hosted using the openAPI standard.
+NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
+`/admin`, create a workshop from a published template revision, and hand out an
+eight-character code; each participant browser gets an isolated workspace with its own
+workflow copy, edits it in a LiteGraph editor, and runs it against LLM and NLP providers.
 
 Following articles have been published concerning this project:
 
@@ -10,10 +13,37 @@ Following articles have been published concerning this project:
 
 ---
 
-This mono repository, named `NodeGrade`, is designed to encompass a server, a frontend Progressive Web Application (PWA) developed in React, and a shared library package.
+This monorepo, named `NodeGrade`, holds a NestJS 12 + Prisma 7 + PostgreSQL backend, a
+React 19 + Vite 8 + MUI 7 + litegraph.js PWA frontend, a shared graph/event library
+(`@haski/ta-lib`), an LTI 1.3 library (`@haski/lti`), and a Python Flask
+sentence-embedding worker.
 Created and maintained by David Fischer.
 
 ![Thumbnail](.github/thumbnail.png)
+
+## Features
+
+- **Workshops:** `DRAFT` / `PUBLISHED` / `CLOSED` lifecycle, eight-character join codes,
+  per-browser isolated workspaces, entry preflight and facilitator readiness panel
+  (backend, template, node types, models).
+- **Templates:** `WORKFLOW` and `BLOCK` kinds, immutable revisions, gallery at
+  `/templates`, block insertion with boundary ports and provenance, bundled seeding.
+- **Editor:** node palette, inspector, autosave with `Saved` indicator, optimistic
+  `ETag` / `If-Match` saves, Preview + Run assessment, per-node Trace.
+- **Providers:** `local` / `OpenAI` / `OpenRouter` / OpenAI-compatible endpoints,
+  encrypted API keys, `DENY_ALL` / `ALLOWLIST` / `ALLOW_ALL` model policies enforced
+  server-side on catalog and execution, deployment-wide execution limits.
+- **Integrations:** LTI basic launch to `LTI` workspaces, xAPI initial + completed
+  statements, 60-day workspace retention, room-tolerant creation throttling.
+
+**Who this is for:** facilitators and participants start at
+[Running a workshop](#running-a-workshop) and
+[Instructions for participants](#instructions-for-participants); developers and operators
+start at [Getting Started](#getting-started) and [Deployment](#deployment).
+
+How it fits together: `docs/architecture.md` (runtime, transports, execution flow),
+`docs/module-map.md` (where code lives), `specs/index.md` (all waves implemented),
+`docs/adr/` (decisions ADR-0001 through ADR-0008).
 
 ## Getting Started
 
@@ -56,12 +86,17 @@ This will launch both the server and the frontend PWA in development mode.
 
 ### Workshop flow
 
-Facilitators sign in at `/admin`, create a workshop from a published template revision,
-and publish its eight-character code. Participants enter the code at `/` or open
-`/workshop/<code>`; each browser receives an isolated workspace and workflow copy.
+Workshops move `DRAFT` → `PUBLISHED` → `CLOSED`. Facilitators sign in at `/admin`,
+create a workshop from a published template revision, and publish its eight-character
+code. Participants enter the code at `/` or open `/workshop/<code>`; entry runs a
+preflight (backend, template, node types, models) and only then mints an isolated
+workspace with its own workflow copy. Closing stops new joins; handed-out workspaces
+keep their content until retention removes them.
 
-Workflow persistence uses REST with optimistic version checks. Graph execution uses
-Socket.IO and a workspace-scoped workflow ID.
+Workflow persistence uses REST with `If-Match` / `ETag` optimistic versions. Graph
+execution uses Socket.IO (`runGraph` / `cancelRun`, `runStateChanged` /
+`nodeExecutionChanged` / `outputSet` / `graphFinished`) and a workspace-scoped
+workflow ID.
 
 See [Running a workshop](#running-a-workshop) for the facilitator checklist and
 [Instructions for participants](#instructions-for-participants) for the handout text.
@@ -87,19 +122,45 @@ The request uses the facilitator session and CSRF header from the admin API.
 
 ## Structure
 
-The project is structured into multiple workspaces located under `packages/*`, enabling seamless integration and development of the individual components.
+The project is structured into Yarn 4 workspaces under `packages/*`, plus the embedding
+worker, specs, and tooling.
 
-### Server
+### Backend
 
-The server component, implemented in TypeScript, stores workspace-scoped workflows with [Prisma](https://www.prisma.io/) and PostgreSQL. REST handles persistence while WebSockets stream graph execution events.
+NestJS 12 + Prisma 7 + PostgreSQL in `packages/backend/src/` (`main.ts`,
+`app/app.module.ts`). REST persists workflows with `If-Match` / `ETag` optimistic
+versions; Socket.IO (`graphgateway/`, `core/Graph.ts`) runs graphs and streams trace
+events typed in `@haski/ta-lib`. Modules: `auth/` (facilitator sessions + CSRF),
+`workspace/` (tokens, guards, retention), `workflow/` (CRUD, slugs, draft vs published
+projection), `template/` (immutable revisions, gallery, bundled seeding), `workshop/`
+(lifecycle, join codes, readiness), `provider/` (credentials, catalog, model policy,
+execution limits), `migration/` (content backfills), `lti/`, `benchmark/`.
+Backend is ESM: relative imports carry a `.js` extension. Never edit
+`src/generated/prisma` or `dist/` by hand.
 
 ### Frontend PWA
 
-Developed in React, the frontend PWA offers a responsive and interactive user experience. It provides a node editor for creating and configuring tasks. Users see a form for submitting their solution to the task, which is then evaluated by the server.
+React 19 + Vite 8 + MUI 7 + litegraph.js in `packages/frontend/src/` (`main.tsx`,
+`routes.tsx`). Routes: `/` code entry, `/workshop/:code` join, `/templates` gallery,
+`/workflows` list, `/editor/:workflowId` and `/student/:workflowId` editor,
+`/admin/workshops|providers|templates`, `/lti/register`. The editor
+(`pages/Editor.tsx`, `components/editor/`) offers palette, inspector, rail, and toolbar
+with autosave; Preview runs an assessment and Trace shows per-node steps. Server calls go
+only through `api/http.ts` and `utils/socket.ts`; sessions live in
+`store/workspaceSession.ts` and `store/workspaceStore.ts`.
 
-### Library Package
+### Shared libraries and workers
 
-The library package includes shared resources and utilities used across the server and the frontend PWA. These include node types and websocket message types.
+- `packages/lib/src/` (`@haski/ta-lib`): the single source of node types (`nodes/` +
+  `NodeDefinitionRegistry.ts`), model refs, and the socket event contract
+  (`events/ServerEvents.ts`). After editing it, run
+  `yarn workspace @haski/ta-lib build` before trusting backend typecheck or tests.
+- `packages/lti/` (`@haski/lti`): LTI 1.3 launch handling used by the backend.
+- `models/`: Flask + sentence-transformers embedding/similarity worker
+  (`models/Dockerfile` builds it).
+- `packages/backend/prisma/`: schema + migrations; `e2e/`: Playwright browser coverage;
+  `tools/debug/`: deterministic debug stack; `tools/spec-lint/`: `specs/` consistency
+  linter; `specs/`, `docs/adr/`: requirements and decisions.
 
 ## Example Usage
 
@@ -119,8 +180,46 @@ same on every run and no API key is needed.
 ## Docker
 
 `yarn debug:up` starts PostgreSQL, the backend, frontend, and deterministic
-OpenAI-compatible model worker. `yarn debug:down` stops the stack and
-`yarn debug:reset` recreates its database.
+OpenAI-compatible model worker (ports `15xxx` / `18000`). `yarn debug:status` and
+`yarn debug:logs` inspect it, `yarn debug:down` stops it, and `yarn debug:reset`
+recreates its database.
+
+## Providers and model governance
+
+Providers live in `/admin/providers`: `local` (from `MODEL_WORKER_URL`), `OpenAI`,
+`OpenRouter`, and custom OpenAI-compatible endpoints. API keys are stored AES-256-GCM
+encrypted in `Provider.apiKeyEnc` and never returned by an API; nodes receive
+credentials only through the injected `ModelCompletionRuntime`. Seeded cloud providers
+start `DENY_ALL`; the local worker starts `ALLOW_ALL`.
+
+Each provider carries a model policy, enforced server-side in `ProviderRuntimeService`
+on both the catalog (`GET /api/models` returns only permitted models) and execution
+(`complete()` refuses an excluded `ModelRef` before any request leaves the process).
+Editor filtering is presentation only:
+
+- `DENY_ALL`: participants get nothing from this provider.
+- `ALLOWLIST`: only the listed model ids may run.
+- `ALLOW_ALL`: every catalog model may run.
+
+A deployment-wide execution-limits singleton caps in-flight runs per workspace and holds
+a permit gate in front of provider requests; both are re-read per request, so a saved
+change applies without a restart.
+
+## LTI, xAPI, retention, and limits
+
+- **Workspaces:** `BROWSER`, `WORKSHOP`, and `LTI` kinds. Participant authorization comes
+  from the bearer access token only (`WorkspaceGuard` + `@CurrentWorkspace()`); no
+  handler takes a workspace id from path, query, or body.
+- **LTI:** a basic launch maps to an `LTI` workspace (editor or published projection via
+  the launch cookie) and registration lives at `/lti/register`.
+- **xAPI:** graph runs emit initial + completed statements when `XAPI_ENDPOINT`,
+  `XAPI_USERNAME`, and `XAPI_PASSWORD` are set.
+- **Retention:** idle browser workspaces and ended workshop workspaces are deleted after
+  60 days (sweep every 6h; `RETENTION_ENABLED=false` keeps everything). `LTI` workspaces
+  are never swept.
+- **Abuse guards:** one workspace holds at most `WORKSPACE_MAX_WORKFLOWS` workflows
+  (default 50, `LTI` exempt); one address may create `WORKSPACE_CREATE_MAX` workspaces
+  per `WORKSPACE_CREATE_WINDOW_MS`, sized so a whole room arriving at once still joins.
 
 ## Deployment
 
@@ -145,6 +244,14 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `MODEL_WORKER_URL` | An OpenAI-compatible endpoint offered as the `local` provider. |
 | `SIMILARITY_WORKER_URL` | The embedding worker used by the NLP nodes. |
 | `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | Seed credentials for the cloud providers. A seeded cloud provider starts with its model policy set to deny-all; a facilitator opens it in `/admin/providers`. |
+| `BEARER_TOKEN` | Auth for a custom OpenAI-compatible endpoint, when needed. |
+| `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
+| `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
+| `RETENTION_ENABLED` | Delete idle browser and ended workshop workspaces after 60 days (default true). |
+| `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
+| `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window (room-tolerant join throttle). |
+| `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
+| `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
 
 Apply schema migrations on every release, before the new backend serves traffic:
 
@@ -181,7 +288,12 @@ Release checklist:
 ## Authoring a template
 
 Template revisions are immutable (ADR-0003): new content is always a new revision, never an
-edit of an existing one. There are two ways in.
+edit of an existing one. Templates come in two kinds: `WORKFLOW` (a whole assessment) and
+`BLOCK` (a reusable capability with declared inputs/outputs). The gallery at `/templates`
+lists published templates with node/link previews; inserting a block remaps identities,
+places content near the viewport, suggests connections, records provenance, and undoes in
+one step. Subgraph-wrapper blocks are an expansion track; see
+`docs/subgraph-template-block-plan.md`. There are two ways in.
 
 **Ship it with the deployment.** Add a module to
 `packages/backend/src/template/bundled/` exporting a `BundledTemplate`, and list it in
@@ -239,12 +351,13 @@ Hand out the code and these five lines:
 ## Scripts
 
 - **Development**: `yarn dev` - Runs both the server and frontend in development mode.
-- **Lint**: `yarn lint` - Lints the codebase for both the server and frontend.
-- **Unit tests**: `yarn test` - Runs backend and frontend tests.
-- **Database integration**: `yarn test:int` - Checks PostgreSQL constraints.
-- **Browser smoke tests**: `yarn test:e2e` - Walks the workshop flow in Chrome and Firefox
-  against the debug stack, which it starts itself.
-- **Specification lint**: `yarn lint:specs` - Checks `specs/` for structural consistency.
+- **Build**: `yarn build` - Topological build of all workspaces.
+- **Typecheck**: `yarn typecheck` - Backend plus frontend `tsc --noEmit`.
+- **Lint**: `yarn lint:check` - ESLint with zero warnings (backend plus frontend).
+- **Unit tests**: `yarn test` - Backend jest plus frontend vitest.
+- **Database integration**: `yarn test:int` - Backend `*.int-spec.ts` against debug Postgres on 15432.
+- **Browser smoke tests**: `yarn test:e2e` - Playwright in Chrome and Firefox; boots the debug stack itself.
+- **Specification lint**: `yarn lint:specs` - Checks `specs/` for structural consistency (`yarn test:specs` covers it).
 
 Pull requests run the typecheck, lint, unit test, build, browser smoke test and
 specification lint jobs in `.github/workflows/pr.yml`. Making them block a merge is a
