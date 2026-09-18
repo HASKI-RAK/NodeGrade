@@ -35,7 +35,10 @@ export const TraceView = ({
   runState?: RunState
   trace: ServerEventPayload['nodeExecutionChanged'][]
   onCancel: () => void
-  onSelectNode: (nodeId: number) => void
+  onSelectNode: (
+    nodeId: number,
+    source?: { wrapperId?: number | null; sourceId?: number | null }
+  ) => void
 }) => {
   const groups = groupTraceByBlock(trace)
   return (
@@ -51,14 +54,18 @@ export const TraceView = ({
       {trace.length === 0 && (
         <Typography color="text.secondary">Run workflow to see trace.</Typography>
       )}
-      {groups.map((group) =>
+      {groups.map((group, index) =>
         group.block === null ? (
           group.steps.map((step) => (
-            <TraceStep key={step.nodeId} step={step} onSelectNode={onSelectNode} />
+            <TraceStep
+              key={`${step.nodeId}-${index}`}
+              step={step}
+              onSelectNode={onSelectNode}
+            />
           ))
         ) : (
           <Box
-            key={group.block}
+            key={`${group.block}-${index}`}
             aria-label={`Trace group ${group.block}`}
             sx={{
               border: 1,
@@ -73,7 +80,7 @@ export const TraceView = ({
             </Typography>
             {group.steps.map((step) => (
               <TraceStep
-                key={step.nodeId}
+                key={`${step.nodeId}-${index}`}
                 step={step}
                 inner
                 onSelectNode={onSelectNode}
@@ -88,19 +95,19 @@ export const TraceView = ({
 
 type TraceStep = ServerEventPayload['nodeExecutionChanged']
 
+// Grouping is presentation only: the server emits structured wrapperId/sourceId on
+// every step, and the block label derives from wrapperPath. Titles containing " / "
+// never misgroup because grouping keys on identity, not on parsed titles.
 const groupTraceByBlock = (
   trace: TraceStep[]
 ): { block: string | null; steps: TraceStep[] }[] => {
   const groups: { block: string | null; steps: TraceStep[] }[] = []
+  const blockOf = (step: TraceStep): string | null =>
+    step.wrapperId != null && step.wrapperPath?.length
+      ? step.wrapperPath.join(' / ')
+      : null
   for (const step of trace) {
-    const separator = step.nodeTitle.indexOf(' / ')
-    if (separator === -1) {
-      const last = groups[groups.length - 1]
-      if (last && last.block === null) last.steps.push(step)
-      else groups.push({ block: null, steps: [step] })
-      continue
-    }
-    const block = step.nodeTitle.slice(0, separator)
+    const block = blockOf(step)
     const last = groups[groups.length - 1]
     if (last && last.block === block) last.steps.push(step)
     else groups.push({ block, steps: [step] })
@@ -115,22 +122,30 @@ const TraceStep = ({
 }: {
   step: TraceStep
   inner?: boolean
-  onSelectNode: (nodeId: number) => void
+  onSelectNode: (
+    nodeId: number,
+    source?: { wrapperId?: number | null; sourceId?: number | null }
+  ) => void
 }) => {
   const [expanded, setExpanded] = useState(false)
   const innerTitle = inner
     ? step.nodeTitle.split(' / ').slice(1).join(' / ')
     : step.nodeTitle
+  const select = () => {
+    if (step.wrapperId != null || step.sourceId != null)
+      onSelectNode(step.nodeId, { wrapperId: step.wrapperId, sourceId: step.sourceId })
+    else onSelectNode(step.nodeId)
+  }
   return (
     <Box
       role="button"
       tabIndex={0}
       aria-label={`Select ${step.nodeTitle}`}
-      onClick={() => onSelectNode(step.nodeId)}
+      onClick={select}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          onSelectNode(step.nodeId)
+          select()
         }
       }}
       sx={{

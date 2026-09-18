@@ -36,6 +36,7 @@ describe('bundled templates', () => {
           flags: {},
           order: 0,
           mode: 0,
+          title: 'Feedback Generator',
           inputs: [{ name: 'Text', type: 'string', link: null }],
           outputs: [{ name: 'Feedback', type: 'string', links: null }],
           properties: {
@@ -59,6 +60,7 @@ describe('bundled templates', () => {
                 flags: {},
                 order: 0,
                 mode: 0,
+                title: 'Feedback prompt',
                 properties: { value: { role: 'user', content: '' } },
               },
             ],
@@ -77,7 +79,7 @@ describe('bundled templates', () => {
       version: 0.4,
     };
     const graph = new LGraph();
-    graph.configure(serialized as SerializedGraph);
+    graph.configure(serialized as unknown as SerializedGraph);
 
     const wrapper = graph.serialize().nodes[0] as unknown as {
       properties: { templateBlock: { templateRevision: number } };

@@ -399,18 +399,26 @@ export function compileEditorGraphForExecution(
       for (const port of requiredInputs) {
         const innerConnected = connectedInputs.get(port.internalNodeId);
         const innerLinks = nested.links ?? [];
+        const innerNodesById = byIdIn(nested);
         const hasInnerSource = innerLinks.some((link) => {
           if (!Array.isArray(link)) return false;
-          const [, , , targetId, targetSlot] = link as [
+          const [, originId, , targetId, targetSlot] = link as [
             unknown,
             number,
             number,
             number,
             number,
           ];
-          return (
-            targetId === port.internalNodeId && targetSlot === port.internalSlot
-          );
+          if (
+            targetId !== port.internalNodeId ||
+            targetSlot !== port.internalSlot
+          )
+            return false;
+          // Adapter links always terminate at the inner slot by construction
+          // (graph/input connects adapter output 0 into the inner input). Only a
+          // non-adapter origin counts as a real inner source.
+          const origin = innerNodesById.get(originId);
+          return !!origin && origin.type !== 'graph/input';
         });
         if (!innerConnected?.has(port.internalSlot) && !hasInnerSource) {
           const inner = byIdIn(nested).get(port.internalNodeId);

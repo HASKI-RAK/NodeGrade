@@ -235,6 +235,9 @@ describe('GraphHandlerService run ownership', () => {
     expect(traces.length).toBeGreaterThan(0);
     expect(traces[0]).toMatchObject({
       nodeTitle: 'Feedback Generator / Inner watch',
+      wrapperId: 1,
+      sourceId: 1,
+      wrapperPath: ['Feedback Generator'],
     });
   });
 

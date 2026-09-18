@@ -47,7 +47,13 @@ export class GraphHandlerService {
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly executionSourceMaps = new Map<
     string,
-    { executionId: number; traceLabel: string }[]
+    {
+      executionId: number;
+      traceLabel: string;
+      wrapperId: number | null;
+      sourceId: number;
+      wrapperPath: string[];
+    }[]
   >();
 
   constructor(
@@ -63,7 +69,13 @@ export class GraphHandlerService {
    */
   private compileForExecution(graphContent: string): {
     content?: string;
-    sourceMap?: { executionId: number; traceLabel: string }[];
+    sourceMap?: {
+      executionId: number;
+      traceLabel: string;
+      wrapperId: number | null;
+      sourceId: number;
+      wrapperPath: string[];
+    }[];
     error?: { code: 'node_failed'; message: string };
   } {
     try {
@@ -481,14 +493,14 @@ export class GraphHandlerService {
           mapOutputs: (outputs) => sanitizeTraceOutputs(outputs, []),
           onNodeEvent: (event) => {
             const sourceMap = this.executionSourceMaps.get(run!.runId);
-            const traceLabel = sourceMap?.find(
+            const source = sourceMap?.find(
               (entry) => entry.executionId === Number(event.node.id),
-            )?.traceLabel;
+            );
             emitEvent(client, 'nodeExecutionChanged', {
               runId: run!.runId,
               workflowId: run!.workflowId,
               nodeId: Number(event.node.id),
-              nodeTitle: traceLabel ?? event.node.title,
+              nodeTitle: source?.traceLabel ?? event.node.title,
               nodeType: event.node.type ?? 'unknown',
               state: event.state,
               timestamp: event.timestamp,
@@ -496,6 +508,9 @@ export class GraphHandlerService {
               durationMs: event.durationMs,
               outputs: event.outputs,
               warnings: event.warnings,
+              wrapperId: source?.wrapperId ?? null,
+              sourceId: source?.sourceId ?? null,
+              wrapperPath: source?.wrapperPath ?? [],
               error: event.error
                 ? sanitizeExecutionError(event.error)
                 : undefined,

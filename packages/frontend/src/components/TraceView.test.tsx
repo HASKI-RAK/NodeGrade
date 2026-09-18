@@ -35,7 +35,10 @@ describe('TraceView', () => {
     expect(screen.getByText('top_k was ignored for model-a on openai.')).toBeVisible()
   })
 
-  it('groups block traces under the wrapper label with inner detail', () => {
+  it('groups block traces under the wrapper label with inner detail', async () => {
+    const onSelectNode = vi.fn()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
     render(
       <TraceView
         runState="completed"
@@ -48,6 +51,9 @@ describe('TraceView', () => {
             nodeTitle: 'Feedback Generator / Feedback model',
             nodeType: 'models/llm',
             state: 'completed',
+            wrapperId: 9,
+            sourceId: 2,
+            wrapperPath: ['Feedback Generator'],
             outputs: [
               {
                 slot: 0,
@@ -66,11 +72,14 @@ describe('TraceView', () => {
             nodeId: 2,
             nodeTitle: 'Feedback Generator / Feedback',
             nodeType: 'output/output',
-            state: 'completed'
+            state: 'completed',
+            wrapperId: 9,
+            sourceId: 3,
+            wrapperPath: ['Feedback Generator']
           }
         ]}
         onCancel={vi.fn()}
-        onSelectNode={vi.fn()}
+        onSelectNode={onSelectNode}
       />
     )
 
@@ -80,5 +89,31 @@ describe('TraceView', () => {
       screen.getByLabelText('Select Feedback Generator / Feedback model')
     ).toBeVisible()
     expect(screen.getByText('Show 1 more output')).toBeVisible()
+    await user.click(screen.getByLabelText('Select Feedback Generator / Feedback model'))
+    expect(onSelectNode).toHaveBeenCalledWith(1, { wrapperId: 9, sourceId: 2 })
+  })
+
+  it('never groups a plain node whose title contains a slash', () => {
+    render(
+      <TraceView
+        runState="completed"
+        trace={[
+          {
+            runId: 'run-1',
+            workflowId: 'workflow-1',
+            timestamp: '2026-09-18T00:00:00.000Z',
+            nodeId: 1,
+            nodeTitle: 'A / B',
+            nodeType: 'basic/watch',
+            state: 'completed'
+          }
+        ]}
+        onCancel={vi.fn()}
+        onSelectNode={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByLabelText('Trace group A')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Select A / B')).toBeVisible()
   })
 })

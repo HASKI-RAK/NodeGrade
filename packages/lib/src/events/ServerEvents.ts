@@ -62,6 +62,12 @@ export type ServerEventPayload = {
     outputs?: TraceOutput[]
     error?: TraceError
     warnings?: ModelExecutionWarning[]
+    /** Editor id of the innermost block wrapper, when the node ran inside one. */
+    wrapperId?: number | null
+    /** Editor id of the inner node, when the node ran inside a block. */
+    sourceId?: number | null
+    /** Wrapper path from the outermost block, e.g. ["Feedback Generator"]. */
+    wrapperPath?: string[]
   }
   graphFinished: RunCorrelation & { graph: string }
   graphOperationFailed: GraphOperationFailure & Partial<RunCorrelation>

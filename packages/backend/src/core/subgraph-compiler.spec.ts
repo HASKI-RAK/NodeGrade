@@ -283,6 +283,54 @@ describe('compileEditorGraphForExecution', () => {
     );
   });
 
+  it('treats an adapter-only inner link as unconnected for required inputs', () => {
+    // Regression: the editor adapter always wires graph/input into the inner slot,
+    // so a check counting any inner link as a source never fires.
+    const content = {
+      nodes: [
+        wrapper(
+          2,
+          'Feedback Generator',
+          {
+            nodes: [
+              innerWatch(1),
+              {
+                id: 3,
+                type: 'graph/input',
+                pos: [0, 0],
+                inputs: [],
+                outputs: [{ name: 'Text', type: 'string' }],
+                properties: { name: 'Text', type: 'string' },
+              },
+            ],
+            links: [[1, 3, 0, 1, 0, 'string']],
+          },
+          [
+            {
+              key: 'text',
+              label: 'Text to review',
+              dataType: 'string',
+              direction: 'input',
+              internalNodeId: 1,
+              internalSlot: 0,
+              required: true,
+            },
+          ],
+        ),
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+    expect(() =>
+      compileEditorGraphForExecution(content as never, {
+        registeredType: registered(['basic/watch']),
+      }),
+    ).toThrow(/missing required input Text to review/);
+  });
+
   it('executes compiled async inner nodes through the awaited runner', async () => {
     const { executeLgraph } = await import('./Graph.js');
     const content = {

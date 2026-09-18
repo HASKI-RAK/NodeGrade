@@ -287,9 +287,32 @@ export const Editor = () => {
   }, [showPreview])
 
   const selectTraceNode = useCallback(
-    (nodeId: number) => {
+    (
+      nodeId: number,
+      source?: { wrapperId?: number | null; sourceId?: number | null }
+    ) => {
+      if (!canvas) return
+      // Block steps carry compiled flat ids; resolve them to editor identity via
+      // the structured source the server emits. Open the block, then select the
+      // inner node inside the subgraph.
+      if (source?.wrapperId != null && source?.sourceId != null) {
+        const wrapper = lgraph.getNodeById(source.wrapperId)
+        if (wrapper && wrapper.type === 'graph/subgraph' && 'subgraph' in wrapper) {
+          openBlock(wrapper)
+          const inner = (wrapper.subgraph as LGraph).getNodeById(source.sourceId)
+          if (inner) {
+            canvas.selectNode(inner)
+            canvas.centerOnNode(inner)
+            setSelection([inner])
+            if (mobile) setRailOpen(false)
+            else setRailMode('preview')
+            lgraph.setDirtyCanvas(true, true)
+            return
+          }
+        }
+      }
       const node = lgraph.getNodeById(nodeId)
-      if (!node || !canvas) return
+      if (!node) return
       canvas.selectNode(node)
       canvas.centerOnNode(node)
       setSelection([node])
@@ -297,7 +320,7 @@ export const Editor = () => {
       else setRailMode('preview')
       lgraph.setDirtyCanvas(true, true)
     },
-    [canvas, lgraph, mobile]
+    [canvas, lgraph, mobile, openBlock]
   )
 
   const reloadLatest = useCallback(async () => {
