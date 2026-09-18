@@ -97,9 +97,26 @@ export const feedbackGeneratorBlock: BundledTemplate = {
     version: 0.4,
   },
   interfaces: {
-    inputs: [
-      { nodeId: 1, slot: 0, name: 'Text to give feedback on', type: 'string' },
+    boundary: [
+      {
+        key: 'text',
+        label: 'Text to give feedback on',
+        dataType: 'string',
+        direction: 'input',
+        internalNodeId: 1,
+        internalSlot: 0,
+        required: true,
+        description: 'Participant response or other text to evaluate.',
+      },
+      {
+        key: 'feedback',
+        label: 'Feedback text',
+        dataType: 'string',
+        direction: 'output',
+        internalNodeId: 2,
+        internalSlot: 0,
+        description: 'Generated formative feedback.',
+      },
     ],
-    outputs: [{ nodeId: 2, slot: 0, name: 'Feedback text', type: 'string' }],
   },
 };
