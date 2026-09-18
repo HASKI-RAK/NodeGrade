@@ -59,6 +59,13 @@ Primary entry points: `template.service.ts`, `template.controller.ts`,
 `admin-template.controller.ts`, `template-seed.service.ts`, `template-content.ts`,
 `template.serializer.ts`, `bundled/index.ts`
 
+Bundled graphs are TypeScript modules under `bundled/`. The three WAIE tutorial graphs
+(`bundled/workshop-*.ts`, exported together as `WORKSHOP_TEMPLATES`) are declared through
+`bundled/graph-builder.ts`, which owns slot wiring, link ids and `last_*_id` bookkeeping so a
+template states only nodes and connections. `packages/backend/scripts/run-workshop-live.ts`
+(`yarn workspace backend workshop:live`) runs those graphs headlessly against the real
+KATALYST deployment with predefined test answers — the facilitator's pre-workshop check.
+
 Tests: `packages/backend/src/template/**/*.spec.ts`
 
 ## Workshops

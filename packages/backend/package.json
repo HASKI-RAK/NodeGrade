@@ -24,6 +24,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:report": "mkdir -p ../../reports && jest --json --outputFile=../../reports/jest-results.json --testLocationInResults",
     "debug:seed": "tsx ./scripts/seed-debug.ts",
+    "workshop:live": "tsx ./scripts/run-workshop-live.ts",
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\" --max-warnings=0",
     "typecheck": "tsc --noEmit"
   },
