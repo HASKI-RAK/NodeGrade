@@ -18,11 +18,20 @@ import type { LGraphCanvas, LGraphNode, Vector2 } from 'litegraph.js'
  * `Textfield.onMouseDown` editor did.
  */
 
-export const WRAPPED_TEXT_FONT = '11px sans-serif'
-export const WRAPPED_TEXT_COLOR = '#d4d7dd'
-export const WRAPPED_TEXT_LINE_HEIGHT = 13
+/**
+ * Body text metrics shared by the wrapped preview, the single-line compact
+ * preview and the inline editor. 13px sits one step under the 14px slot
+ * labels and titles so the node's actual content no longer reads as a
+ * footnote, and stays legible when the canvas is zoomed out. The color is a
+ * notch brighter than `NODE_TEXT_COLOR` (slot labels) and just under
+ * `NODE_TITLE_COLOR`, keeping the title > body > label hierarchy.
+ */
+export const WRAPPED_TEXT_FONT_SIZE = 13
+export const WRAPPED_TEXT_FONT = `${WRAPPED_TEXT_FONT_SIZE}px sans-serif`
+export const WRAPPED_TEXT_COLOR = '#E6E9EF'
+export const WRAPPED_TEXT_LINE_HEIGHT = 17
 export const WRAPPED_TEXT_PAD_X = 10
-export const WRAPPED_TEXT_PAD_BOTTOM = 9
+export const WRAPPED_TEXT_PAD_BOTTOM = 8
 export const WRAPPED_TEXT_ELLIPSIS = '…'
 
 const FLAG = '__wrappedTextApplied'
@@ -34,12 +43,20 @@ const EDIT_INPUT_ID = (node: LGraphNode): string => `wrappedText${node.id}`
  * alphabetic baseline at `+5`, so the last row's glyphs end near
  * `rows * 20 + 2`; its own widgets start at `max_y + 2 = rows * 20 + 6`.
  * Using the same origin keeps the preview snug under the slots instead of
- * leaving a dead band, and lets the 64px minimum node show two lines.
+ * leaving a dead band.
  */
 export const wrappedTextTop = (node: LGraphNode): number => {
   const portRows = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0)
   return portRows * 20 + 6
 }
+
+/**
+ * Smallest node height that still shows two lines of body text. Used as the
+ * compaction floor for text nodes so a shrunken node never degrades to a
+ * single elided line.
+ */
+export const wrappedTextMinHeight = (node: LGraphNode): number =>
+  wrappedTextTop(node) + WRAPPED_TEXT_LINE_HEIGHT * 2 + WRAPPED_TEXT_PAD_BOTTOM
 
 /** Read the text value, tolerating the `{ content }` envelope some nodes use. */
 export const readTextValue = (node: LGraphNode, key: string): string => {
@@ -206,6 +223,34 @@ export const drawWrappedText = (
   context.restore()
 }
 
+/**
+ * Draw the one-line compact preview used by every other `keyValue` node
+ * (model name, output label, separator, ...). Same font and color as the
+ * wrapped preview so all node bodies read alike; the line is cut by measured
+ * width, not by a character count, so it fills wide nodes and never spills
+ * out of narrow ones. Baseline sits `PAD_BOTTOM` above the node's bottom edge.
+ */
+export const drawSingleLinePreview = (
+  node: LGraphNode,
+  context: CanvasRenderingContext2D,
+  text: string
+): void => {
+  if (node.flags?.collapsed) return
+  const value = text.replace(/\s+/g, ' ').trim()
+  if (!value) return
+  const width = node.size[0] - WRAPPED_TEXT_PAD_X * 2
+  if (width <= 0) return
+  context.save()
+  context.fillStyle = WRAPPED_TEXT_COLOR
+  context.font = WRAPPED_TEXT_FONT
+  context.textBaseline = 'alphabetic'
+  context.textAlign = 'left'
+  const { visible } = fitLinesToBox(wrapTextLines(context, value, width), 1)
+  const [line = ''] = visible
+  context.fillText(line, WRAPPED_TEXT_PAD_X, node.size[1] - WRAPPED_TEXT_PAD_BOTTOM)
+  context.restore()
+}
+
 type TextGraphCanvas = LGraphCanvas & {
   ds: { scale: number }
   convertOffsetToCanvas: (pos: Vector2) => Vector2
@@ -334,7 +379,7 @@ export const startInlineEdit = (
     input.style.top = `${rect.top + canvasY * cssPerUnitY}px`
     input.style.width = `${Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2) * cssPerUnitX}px`
     input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * cssPerUnitY}px`
-    input.style.fontSize = `${11 * scaleY}px`
+    input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scaleY}px`
     input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scaleY}px`
     animationFrameId = window.requestAnimationFrame(updateInputBounds)
   }
