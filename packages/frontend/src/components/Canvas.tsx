@@ -27,6 +27,10 @@ const Canvas = (props: CanvasProps) => {
         lcanvas.current.allow_interaction = !props.readOnly
         lcanvas.current.allow_dragnodes = !props.readOnly
         lcanvas.current.allow_reconnect_links = !props.readOnly
+        // Flat matte wires: no glow or shadow on connections.
+        lcanvas.current.render_connections_shadows = false
+        lcanvas.current.render_shadows = false
+        lcanvas.current.connections_width = 3
         installDebugBridge(props.lgraph, lcanvas.current)
       } else {
         // Update the graph reference if canvas already exists
