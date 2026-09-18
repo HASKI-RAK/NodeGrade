@@ -230,7 +230,11 @@ describe('TaskView', () => {
     )
 
     expect(screen.getByText('Run: running')).toBeVisible()
+    // Steps are collapsed by default: the duration chip shows in the header.
     expect(screen.getByText('12 ms')).toBeVisible()
+    expect(screen.queryByText(longValue)).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText('Toggle Intermediate'))
+    // Long values stay truncated inside the expanded step until expanded.
     expect(screen.queryByText(longValue)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show more' }))
     expect(screen.getByText(longValue)).toBeVisible()
