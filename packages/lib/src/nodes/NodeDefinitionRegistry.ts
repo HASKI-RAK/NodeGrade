@@ -19,7 +19,12 @@ import type {
   NodeDefinition,
   NodePropertyDefinition
 } from './NodeDefinition'
-import { applyWrappedText } from './widgets/WrappedTextPreview'
+import {
+  applyWrappedText,
+  drawSingleLinePreview,
+  readTextValue,
+  wrappedTextMinHeight
+} from './widgets/WrappedTextPreview'
 import { NumberNode } from './NumberNode'
 import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
@@ -465,13 +470,16 @@ const WRAPPED_TEXT_NODES: Readonly<Record<string, string>> = {
 
 export function compactNodeWidgets(node: LiteGraphNode): void {
   // Free-text nodes lost their canvas widget: shrinking them row-by-row
-  // would clip the new wrapped preview. Only enforce the minimum footprint;
-  // serialized sizes (e.g. bundled templates) are preserved as-is so saved
-  // layouts never shrink on load.
+  // would clip the new wrapped preview. Only enforce the minimum footprint
+  // (room for two lines); serialized sizes (e.g. bundled templates) are
+  // preserved as-is so saved layouts never shrink on load.
   if (node.type && WRAPPED_TEXT_NODES[node.type]) {
     Reflect.set(node, 'widgets', [])
     Reflect.set(node, 'serialize_widgets', false)
-    node.size = [Math.max(node.size[0], 180), Math.max(node.size[1], 64)]
+    node.size = [
+      Math.max(node.size[0], 180),
+      Math.max(node.size[1], wrappedTextMinHeight(node))
+    ]
     if (Reflect.get(node, '__compactDefinitionApplied')) return
     Reflect.set(node, '__compactDefinitionApplied', true)
     applyWrappedText(node, WRAPPED_TEXT_NODES[node.type])
@@ -494,22 +502,7 @@ export function compactNodeWidgets(node: LiteGraphNode): void {
     'onDrawForeground',
     function (this: LiteGraphNode, context: CanvasRenderingContext2D) {
       if (typeof previousDraw === 'function') Reflect.apply(previousDraw, this, [context])
-      const raw = this.properties[keyProperty.key]
-      const nested =
-        typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'content') : raw
-      const value = String(nested ?? '')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (!value) return
-      context.save()
-      context.fillStyle = '#d4d7dd'
-      context.font = '11px sans-serif'
-      context.fillText(
-        value.length > 34 ? `${value.slice(0, 33)}…` : value,
-        10,
-        this.size[1] - 9
-      )
-      context.restore()
+      drawSingleLinePreview(this, context, readTextValue(this, keyProperty.key))
     }
   )
 }

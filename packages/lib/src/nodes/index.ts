@@ -84,14 +84,17 @@ export {
 } from './NodeDefinitionRegistry'
 export {
   applyWrappedText,
+  drawSingleLinePreview,
   drawWrappedText,
   fitLinesToBox,
   isInsideTextArea,
   readTextValue,
   startInlineEdit,
   wrapTextLines,
+  wrappedTextMinHeight,
   wrappedTextTop,
   WRAPPED_TEXT_COLOR,
   WRAPPED_TEXT_FONT,
+  WRAPPED_TEXT_FONT_SIZE,
   WRAPPED_TEXT_LINE_HEIGHT
 } from './widgets/WrappedTextPreview'

@@ -1,6 +1,9 @@
 import {
   compactNodeWidgets,
   LiteGraph,
+  WRAPPED_TEXT_COLOR,
+  WRAPPED_TEXT_FONT,
+  wrappedTextMinHeight,
   wrappedTextTop,
   wrapTextLines
 } from '@haski/ta-lib'
@@ -104,6 +107,18 @@ describe('wrapped text preview', () => {
     expect(wrappedTextTop(node)).toBe(26)
   })
 
+  it('never compacts a text node below two lines of body text', () => {
+    const node = makeNode({ value: 'x' }, [180, 40])
+    compactNodeWidgets(node)
+    // top 26 + two 17px lines + 8px bottom padding.
+    expect(wrappedTextMinHeight(node)).toBe(68)
+    expect(node.size[1]).toBe(68)
+    // Larger saved sizes are left alone.
+    const tall = makeNode({ value: 'x' }, [180, 130])
+    compactNodeWidgets(tall)
+    expect(tall.size[1]).toBe(130)
+  })
+
   it('truncates with an ellipsis only when text overflows the node height', () => {
     const node = makeNode(
       { value: 'one two three four five six seven eight nine ten eleven twelve' },
@@ -112,7 +127,7 @@ describe('wrapped text preview', () => {
     compactNodeWidgets(node)
     const stub = stubContext()
     stub.draw(node)
-    // 64px node: (64 - 26 - 9) / 13 -> two visible lines, last one elided.
+    // Minimum node (68px): (68 - 26 - 8) / 17 -> two visible lines, last elided.
     expect(stub.calls.length).toBe(2)
     expect(stub.calls[1]).toMatch(/…$/)
     expect(stub.calls.join(' ')).not.toContain('twelve')
@@ -122,6 +137,26 @@ describe('wrapped text preview', () => {
     expect(grown.calls.length).toBeGreaterThan(2)
     expect(grown.calls.join(' ')).toContain('twelve')
     expect(grown.calls.at(-1)).not.toMatch(/…$/)
+  })
+
+  it('renders other compact nodes with the same body style, cut by width', () => {
+    const node = LiteGraph.createNode<LGraphNode>('output/output')
+    node.properties.label = 'Expected words found in the learner answer today'
+    node.size = [180, 64] as unknown as LGraphNode['size']
+    compactNodeWidgets(node)
+    const stub = stubContext()
+    stub.draw(node)
+    expect(stub.fonts.at(-1)).toBe(WRAPPED_TEXT_FONT)
+    expect(stub.fillStyles.at(-1)).toBe(WRAPPED_TEXT_COLOR)
+    // 160px of room at 5px/char: one line, elided at a word boundary.
+    expect(stub.calls).toHaveLength(1)
+    expect(stub.calls[0]).toMatch(/…$/)
+    expect(stub.calls[0].length).toBeLessThanOrEqual(33)
+    // A wide node shows the whole label instead of a fixed 34-char cut.
+    node.size = [400, 64] as unknown as LGraphNode['size']
+    const wide = stubContext()
+    wide.draw(node)
+    expect(wide.calls).toEqual(['Expected words found in the learner answer today'])
   })
 
   it('opens the inline editor on text click and edits the property', () => {
@@ -234,8 +269,9 @@ describe('wrapped text preview', () => {
       return { font: stub.fonts.at(-1), fillStyle: stub.fillStyles.at(-1) }
     })
     for (const draw of draws) {
-      expect(draw.font).toBe('11px sans-serif')
-      expect(draw.fillStyle).toBe('#d4d7dd')
+      expect(draw.font).toBe(WRAPPED_TEXT_FONT)
+      expect(draw.font).toBe('13px sans-serif')
+      expect(draw.fillStyle).toBe(WRAPPED_TEXT_COLOR)
     }
   })
 })
