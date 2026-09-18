@@ -56,6 +56,29 @@ export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   Assessment: '#FBBF24'
 }
 
+/**
+ * Surface palette for the graph canvas. LiteGraph ships a neutral `#222`
+ * clear color plus a grid tile of `#222`/`#191919`/`#141414`; the old node
+ * fill `#2B2D3A` sat at 1.17:1 against it, so nodes barely separated from
+ * the background. This palette pushes the canvas down and the node up on
+ * the same blue-gray hue: body over canvas is 1.77:1, and every text color
+ * stays above 6:1 on the body (`WRAPPED_TEXT_COLOR` 8.4, `NODE_TEXT_COLOR`
+ * 6.3, `NODE_TITLE_COLOR` 9.5). The title bar is a shade darker than the
+ * body so the header reads as a header without a saturated fill.
+ */
+export const CANVAS_THEME = {
+  /** Flat clear color; the only thing painted below 0.5 zoom. */
+  canvas: '#14161C',
+  /** Fine grid every 10 units, drawn at half alpha by LiteGraph at 1x. */
+  gridMinor: '#1C1F28',
+  /** Coarse grid every 100 units. */
+  gridMajor: '#0E1015',
+  /** Node body fill (`NODE_DEFAULT_BGCOLOR`). */
+  nodeBody: '#3B4056',
+  /** Node title bar fill (`NODE_DEFAULT_COLOR`). */
+  nodeTitle: '#2F3346'
+} as const
+
 interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
   init?(env: Record<string, unknown>): void

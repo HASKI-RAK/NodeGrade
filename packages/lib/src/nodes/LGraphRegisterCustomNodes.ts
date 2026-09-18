@@ -1,6 +1,6 @@
 /* eslint-disable immutable/no-mutation */
 import { LGraphCanvas, LiteGraph } from './litegraph-extensions'
-import { CATEGORY_COLORS, LINK_TYPE_COLORS } from './litegraph-extensions/LGraphNode'
+import { CANVAS_THEME, CATEGORY_COLORS, LINK_TYPE_COLORS } from './litegraph-extensions/LGraphNode'
 import { getDefinedNodeConstructors } from './NodeDefinitionRegistry'
 
 export function LGraphRegisterCustomNodes() {
@@ -23,11 +23,13 @@ export function LGraphRegisterCustomNodes() {
     Node.prototype.shape = 'round'
   }
 
-  // Styling: dark elevated nodes, flat matte wires (no glow/shadow).
+  // Styling: dark elevated nodes, flat matte wires (no glow/shadow). Node
+  // fills come from CANVAS_THEME so they stay in step with the canvas
+  // background applied per instance by `applyCanvasTheme`.
   LiteGraph.NODE_TITLE_COLOR = '#F5F7FA'
   LiteGraph.NODE_TEXT_COLOR = '#C6CBD6'
-  LiteGraph.NODE_DEFAULT_BGCOLOR = '#2B2D3A'
-  LiteGraph.NODE_DEFAULT_COLOR = '#2B2D3A'
+  LiteGraph.NODE_DEFAULT_BGCOLOR = CANVAS_THEME.nodeBody
+  LiteGraph.NODE_DEFAULT_COLOR = CANVAS_THEME.nodeTitle
   LiteGraph.NODE_DEFAULT_SHAPE = 'round'
   LiteGraph.LINK_COLOR = '#8A8FA0'
   LiteGraph.EVENT_LINK_COLOR = '#8A8FA0'
