@@ -3,6 +3,7 @@ import {
   getDefinedNodeConstructors,
   getNodeDefinition,
   getNodeDefinitions,
+  getPillLabel,
   LINK_TYPE_COLORS,
   LINK_TYPE_SHAPES,
   LiteGraph,
@@ -96,13 +97,33 @@ describe('node definition registry', () => {
     expect(node.outputs?.[0].color_on).toBe(LINK_TYPE_COLORS.message)
 
     // Titles stay near-white on the dark bar; the category signal is the pill
-    // plus the status dot, never a full-bleed tint.
+    // fill plus the status dot, never a full-bleed tint.
     expect(LiteGraph.NODE_TITLE_COLOR).toBe('#F5F7FA')
     for (const Node of getDefinedNodeConstructors()) {
       const category = Node.definition.category
       expect(Reflect.get(Node, 'title_text_color')).toBe('#F5F7FA')
       expect(Reflect.get(Node, 'boxcolor')).toBe(CATEGORY_COLORS[category])
       expect(Reflect.get(Node, 'color')).toBeUndefined()
+    }
+  })
+
+  it('labels pills with the node type while keeping the category color', () => {
+    expect(getPillLabel({ title: 'Answer Input', category: 'Assessment' })).toBe(
+      'ANSWER INPUT'
+    )
+    expect(getPillLabel({ title: 'Textfield', category: 'Essential' })).toBe(
+      'TEXTFIELD'
+    )
+    expect(getPillLabel(undefined, 'input/answer')).toBe('ANSWER')
+    expect(
+      getPillLabel({ category: 'Validation' }, 'preprocessing/extract-number')
+    ).toBe('EXTRACT NUMBER')
+    expect(getPillLabel({ category: 'AI' })).toBe('AI')
+    expect(getPillLabel(undefined)).toBeUndefined()
+    for (const Node of getDefinedNodeConstructors()) {
+      expect(getPillLabel(Node.definition, Node.getPath())).toBe(
+        Node.definition.title.toUpperCase()
+      )
     }
   })
 })

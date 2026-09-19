@@ -73,7 +73,8 @@ export {
   CANVAS_THEME,
   CATEGORY_COLORS,
   LINK_TYPE_COLORS,
-  LINK_TYPE_SHAPES
+  LINK_TYPE_SHAPES,
+  getPillLabel
 } from './litegraph-extensions/LGraphNode'
 export {
   applyCanvasTheme,
