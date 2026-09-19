@@ -6,6 +6,7 @@ import {
 } from '@haski/ta-lib'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -22,7 +23,7 @@ import {
 } from '@mui/material'
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
 import { styled } from '@mui/material/styles'
-import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, memo, useImperativeHandle, useRef, useState } from 'react'
 
 import {
   DEFAULT_PREVIEW_LOCALE,
@@ -249,6 +250,12 @@ const TaskView = forwardRef<
     runId?: string
     runState?: RunState
     trace?: ServerEventPayload['nodeExecutionChanged'][]
+    /** Terminal failure/cancel message for the in-flight attempt, shown on Test tab. */
+    runError?: string
+    /** False while the socket is down: submitting is disabled with a hint. */
+    connected?: boolean
+    /** 0-100 run progress for the inline Test-tab indicator. */
+    progress?: number
     onCancel?: () => void
     onSelectTraceNode?: SelectGraphNode
     /**
@@ -270,6 +277,9 @@ const TaskView = forwardRef<
       runId,
       runState,
       trace = [],
+      runError,
+      connected = true,
+      progress = 0,
       onCancel = () => undefined,
       onSelectTraceNode = () => undefined,
       onSelectOutputNode
@@ -281,12 +291,8 @@ const TaskView = forwardRef<
     const [answer, setAnswer] = useState('')
     const [error, setError] = useState<string | null>(null)
     const answerRef = useRef<HTMLInputElement>(null)
-
-    // A started run has something to show on the Trace tab; the Test tab has nothing new
-    // until it finishes.
-    useEffect(() => {
-      if (runState === 'queued' || runState === 'running') setTab('trace')
-    }, [runState])
+    const running = runState === 'queued' || runState === 'running'
+    const submitDisabled = disabled || !connected
 
     const handleSetAnswer = (event: React.ChangeEvent<HTMLInputElement>): void => {
       const nextAnswer = event.target.value
@@ -302,7 +308,7 @@ const TaskView = forwardRef<
     }
 
     const submit = (): boolean => {
-      if (disabled) return false
+      if (submitDisabled) return false
       const message = lengthError(answer, constraints, messages)
       setError(message)
       if (message) return false
@@ -322,7 +328,11 @@ const TaskView = forwardRef<
 
     return (
       <Stack spacing={2} padding={2}>
-        <Tabs value={tab} onChange={(_, value: 'test' | 'trace') => setTab(value)}>
+        <Tabs
+          value={tab}
+          onChange={(_, value: 'test' | 'trace') => setTab(value)}
+          aria-label="Preview"
+        >
           <Tab value="test" label={messages.testTab} />
           <Tab value="trace" label={messages.traceTab} />
         </Tabs>
@@ -336,7 +346,6 @@ const TaskView = forwardRef<
           />
         )}
         <Box hidden={tab !== 'test'}>
-          <span id="rewardId" />
           <Typography variant="h5">{messages.questionHeading}</Typography>
           {questionImage && (
             <img
@@ -363,7 +372,7 @@ const TaskView = forwardRef<
             <FormControl fullWidth error={!!error}>
               <Stack spacing={2}>
                 <TextField
-                  id="outlined-multiline-static"
+                  id="preview-answer"
                   label={messages.answerLabel}
                   multiline
                   error={!!error}
@@ -374,13 +383,57 @@ const TaskView = forwardRef<
                   inputRef={answerRef}
                   onChange={handleSetAnswer}
                   onKeyDown={keyDownHandler}
-                  disabled={disabled}
+                  disabled={submitDisabled}
+                  aria-describedby="preview-run-status"
                 />
-                <Stack direction="row" spacing={2}>
-                  <Button variant="contained" type="submit" disabled={disabled}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Button
+                    variant="contained"
+                    type="submit"
+                    disabled={submitDisabled}
+                    title={connected ? undefined : messages.runDisconnected}
+                  >
                     {disabled ? messages.submitting : messages.submit}
                   </Button>
+                  {running && (
+                    <Button color="warning" onClick={onCancel}>
+                      Cancel
+                    </Button>
+                  )}
                   <Typography variant="caption">{messages.runHint}</Typography>
+                </Stack>
+                <Stack id="preview-run-status" spacing={1} aria-live="polite">
+                  {!connected && (
+                    <Alert severity="warning">{messages.runDisconnected}</Alert>
+                  )}
+                  {running && (
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {runState === 'queued'
+                          ? messages.waitingToStart
+                          : messages.assessingProgress(progress)}
+                      </Typography>
+                      <LinearProgress
+                        variant={progress > 0 ? 'determinate' : 'indeterminate'}
+                        value={progress}
+                      />
+                      <Button size="small" onClick={() => setTab('trace')}>
+                        {messages.viewTrace}
+                      </Button>
+                    </>
+                  )}
+                  {runError && !running && (
+                    <Alert
+                      severity={runState === 'cancelled' ? 'warning' : 'error'}
+                      action={
+                        <Button size="small" color="inherit" onClick={() => submit()}>
+                          {messages.retry}
+                        </Button>
+                      }
+                    >
+                      {runError}
+                    </Alert>
+                  )}
                 </Stack>
                 <Results
                   outputs={outputs}

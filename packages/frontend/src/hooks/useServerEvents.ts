@@ -38,6 +38,15 @@ export interface UseServerEventsResult {
   beginGraphLoad: () => void
   beginAttempt: (requestId?: string) => void
   failAttempt: (message: string) => void
+  /**
+   * Locally abandon the in-flight attempt (queued or running). Late server events
+   * for the abandoned request are ignored; when the server belatedly assigns a
+   * run id to an abandoned queued request it is exposed as cancelledRunId so the
+   * caller can still send cancelRun and free the workspace slot.
+   */
+  cancelAttempt: (message: string) => void
+  cancelledRunId: string | undefined
+  acknowledgeCancelledRun: () => void
   handleSnackbarClose: (event: React.SyntheticEvent | Event, reason?: string) => void
 }
 
@@ -61,6 +70,8 @@ export function useServerEvents({
   const [trace, setTrace] = useState<ServerEventPayload['nodeExecutionChanged'][]>([])
   const requestIdRef = useRef<string | undefined>(undefined)
   const runIdRef = useRef<string | undefined>(undefined)
+  const cancelledRequestRef = useRef<string | undefined>(undefined)
+  const [cancelledRunId, setCancelledRunId] = useState<string | undefined>(undefined)
   const [snackbar, setSnackbar] = useState<{
     message: string
     severity: AlertColor
@@ -91,6 +102,8 @@ export function useServerEvents({
   const beginAttempt = useCallback((requestId?: string) => {
     requestIdRef.current = requestId
     runIdRef.current = undefined
+    cancelledRequestRef.current = undefined
+    setCancelledRunId(undefined)
     setRunId(undefined)
     setRunState('queued')
     setTrace([])
@@ -105,6 +118,23 @@ export function useServerEvents({
     setFailureMessage(message)
     setProcessingPercentage(0)
     setSnackbar({ message, severity: 'error', open: true })
+  }, [])
+
+  const cancelAttempt = useCallback((message: string) => {
+    cancelledRequestRef.current = requestIdRef.current
+    requestIdRef.current = undefined
+    runIdRef.current = undefined
+    setRunId(undefined)
+    setRunState('cancelled')
+    setAttemptState('failed')
+    setFailureMessage(message)
+    setProcessingPercentage(0)
+    setSnackbar({ message, severity: 'info', open: true })
+  }, [])
+
+  const acknowledgeCancelledRun = useCallback(() => {
+    cancelledRequestRef.current = undefined
+    setCancelledRunId(undefined)
   }, [])
 
   const colorNode = (nodeId: number, state: string) => {
@@ -131,6 +161,16 @@ export function useServerEvents({
         setQuestion(payload)
       },
       runStateChanged(payload) {
+        // A locally cancelled attempt ignores further UI updates, but a queued
+        // request the server accepts late still occupies a workspace run slot:
+        // capture its run id so the caller can send cancelRun for it.
+        if (
+          payload.requestId !== undefined &&
+          payload.requestId === cancelledRequestRef.current
+        ) {
+          if (payload.runId !== undefined) setCancelledRunId(payload.runId)
+          return
+        }
         // Correlate on the request id whenever it is still the attempt in flight: a run
         // the server refuses outright reports a terminal state without ever queueing.
         if (payload.requestId === requestIdRef.current) {
@@ -224,6 +264,9 @@ export function useServerEvents({
     beginGraphLoad,
     beginAttempt,
     failAttempt,
+    cancelAttempt,
+    cancelledRunId,
+    acknowledgeCancelledRun,
     handleSnackbarClose
   }
 }

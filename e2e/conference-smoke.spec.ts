@@ -89,6 +89,8 @@ test('a participant joins the WAIE workshop, edits the rubric, runs it and reloa
   await page.evaluate(() =>
     window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished', 60_000)
   )
+  // Runs stay on the Test tab with inline progress; the trace is one click away.
+  await page.getByRole('tab', { name: 'Trace' }).click()
   await expect(page.getByText('Run: completed')).toBeVisible()
 
   await page.getByRole('tab', { name: 'Test' }).click()

@@ -139,6 +139,64 @@ describe('useServerEvents', () => {
     expect(result.current.trace[0].runId).toBe('run-current')
   })
 
+  it('abandons a queued attempt on cancel but captures a late run id', () => {
+    const { socket, emit } = createSocket()
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph: new LGraph() }))
+
+    act(() => result.current.beginAttempt('request-1'))
+    act(() => result.current.cancelAttempt('The run was cancelled.'))
+
+    expect(result.current.attemptState).toBe('failed')
+    expect(result.current.failureMessage).toBe('The run was cancelled.')
+    expect(result.current.runState).toBe('cancelled')
+    expect(result.current.snackbar.open).toBe(true)
+
+    // The server accepts the queued request late: no UI resurrection, but the
+    // run id is captured so the caller can free the workspace slot.
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-1',
+        runId: 'run-late',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:01.000Z'
+      })
+    )
+    expect(result.current.runId).toBeUndefined()
+    expect(result.current.cancelledRunId).toBe('run-late')
+    expect(result.current.failureMessage).toBe('The run was cancelled.')
+
+    act(() =>
+      emit('outputSet', {
+        runId: 'run-late',
+        workflowId: 'workflow-1',
+        timestamp: '2026-09-16T00:00:02.000Z',
+        uniqueId: 'result',
+        type: 'text',
+        label: 'Result',
+        value: 'Late'
+      })
+    )
+    expect(result.current.outputs).toBeUndefined()
+
+    act(() => result.current.acknowledgeCancelledRun())
+    expect(result.current.cancelledRunId).toBeUndefined()
+
+    // A fresh attempt clears the cancelled state and works normally.
+    act(() => result.current.beginAttempt('request-2'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-2',
+        runId: 'run-2',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:03.000Z'
+      })
+    )
+    expect(result.current.runId).toBe('run-2')
+    expect(result.current.runState).toBe('queued')
+  })
+
   it('removes the exact socket listeners on unmount', () => {
     const { socket } = createSocket()
     const { unmount } = renderHook(() =>
