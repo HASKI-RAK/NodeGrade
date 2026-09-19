@@ -328,6 +328,10 @@ describe('TaskView', () => {
       />
     )
 
+    // A started run stays on the Test tab with inline progress; the trace is
+    // one click away instead of a forced switch.
+    expect(screen.getByLabelText('Your answer')).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: 'Trace' }))
     expect(screen.getByText('Run: running')).toBeVisible()
     // Steps are collapsed by default: the duration chip shows in the header.
     expect(screen.getByText('12 ms')).toBeVisible()
@@ -342,5 +346,74 @@ describe('TaskView', () => {
 
     expect(onCancel).toHaveBeenCalledOnce()
     expect(onSelectTraceNode).toHaveBeenCalledWith(7)
+  })
+
+  it('stays on the Test tab when a run starts, with progress, cancel and a trace link', async () => {
+    const onCancel = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <TaskView
+        question="Question"
+        onSubmit={vi.fn()}
+        runState="running"
+        progress={42}
+        onCancel={onCancel}
+      />
+    )
+
+    // No forced switch: the answer field stays visible with inline progress.
+    expect(screen.getByLabelText('Your answer')).toBeVisible()
+    expect(screen.getByText('Assessing… 42%')).toBeVisible()
+    expect(screen.queryByText('Run: running')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'View trace' }))
+    expect(screen.getByText('Run: running')).toBeVisible()
+  })
+
+  it('shows a queued run as waiting with a working cancel', async () => {
+    const onCancel = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <TaskView
+        question="Question"
+        onSubmit={vi.fn()}
+        runState="queued"
+        onCancel={onCancel}
+      />
+    )
+
+    expect(screen.getByText('Waiting to start…')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('shows a failed run error on the Test tab with a retry action', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <TaskView
+        question="Question"
+        onSubmit={onSubmit}
+        runState="failed"
+        runError="The run failed."
+      />
+    )
+
+    expect(screen.getByText('The run failed.')).toBeVisible()
+    await user.type(screen.getByLabelText('Your answer'), 'a valid answer here')
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(onSubmit).toHaveBeenCalledWith('a valid answer here')
+  })
+
+  it('disables submit and warns while disconnected', () => {
+    render(<TaskView question="Question" onSubmit={vi.fn()} connected={false} />)
+
+    expect(screen.getByRole('button', { name: 'Run assessment' })).toBeDisabled()
+    expect(
+      screen.getByText(
+        'Connection to the server is unavailable. Check your connection and retry.'
+      )
+    ).toBeVisible()
   })
 })

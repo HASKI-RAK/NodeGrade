@@ -39,7 +39,6 @@ const TraceValue = ({ value }: { value: unknown }) => {
 }
 
 export const TraceView = ({
-  runId,
   runState,
   trace,
   onCancel,
@@ -160,8 +159,8 @@ export const TraceView = ({
       <Stack direction="row" justifyContent="space-between" alignItems="center">
         <Typography variant="h6">Run: {runState ?? 'idle'}</Typography>
         {(runState === 'queued' || runState === 'running') && (
-          <Button color="warning" onClick={onCancel} disabled={!runId}>
-            Cancel
+          <Button color="warning" onClick={onCancel}>
+            {runState === 'queued' ? 'Cancel (waiting to start…)' : 'Cancel'}
           </Button>
         )}
       </Stack>

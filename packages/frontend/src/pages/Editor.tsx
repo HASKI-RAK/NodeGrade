@@ -36,6 +36,7 @@ import { useGraphHistory } from '@/hooks/useGraphHistory'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
 import { useWorkflowForm } from '@/hooks/useWorkflowForm'
+import { DEFAULT_PREVIEW_LOCALE, previewMessages } from '@/i18n/preview'
 import { workspaceStore } from '@/store/workspaceStore'
 import { getConfig } from '@/utils/config'
 import { configureDebugSession } from '@/utils/debugBridge'
@@ -159,7 +160,7 @@ export const Editor = () => {
     enabled: workflow !== null && !student
   })
   const { history, canUndo, canRedo } = useGraphHistory(lgraph, canvas)
-  const { socket, connectionStatus, runGraph, cancelRun } = useSocket({
+  const { socket, connectionStatus, connected, runGraph, cancelRun } = useSocket({
     workflowId,
     workspaceToken: token,
     lgraph
@@ -174,8 +175,16 @@ export const Editor = () => {
     runId,
     runState,
     trace,
-    beginAttempt
+    failureMessage,
+    snackbar,
+    beginAttempt,
+    failAttempt,
+    cancelAttempt,
+    cancelledRunId,
+    acknowledgeCancelledRun,
+    handleSnackbarClose
   } = useServerEvents({ socket, lgraph })
+  const runMessages = previewMessages[DEFAULT_PREVIEW_LOCALE]
 
   // The preview poses the question the graph currently holds, so an inspector edit shows
   // up in the Test tab without a run in between (SPEC-0007/FR-003).
@@ -285,6 +294,33 @@ export const Editor = () => {
       if (!taskView.current?.submit()) taskView.current?.focusAnswer()
     })
   }, [showPreview])
+
+  // A submit with a dead socket throws synchronously: report it as a failed
+  // attempt so the Test tab shows the error instead of dropping it.
+  const handleSubmit = useCallback(
+    (answer: string) => {
+      try {
+        beginAttempt(runGraph({ answer }))
+      } catch {
+        failAttempt(runMessages.runDisconnected)
+      }
+    },
+    [beginAttempt, failAttempt, runGraph, runMessages]
+  )
+
+  // Cancelling a queued attempt has no run id yet; the attempt is abandoned
+  // locally and a belatedly assigned run id is cancelled through the effect below.
+  const handleCancel = useCallback(() => {
+    cancelAttempt(runMessages.runCancelled)
+    if (runId) cancelRun(runId)
+  }, [cancelAttempt, cancelRun, runId])
+
+  useEffect(() => {
+    if (cancelledRunId) {
+      cancelRun(cancelledRunId)
+      acknowledgeCancelledRun()
+    }
+  }, [acknowledgeCancelledRun, cancelRun, cancelledRunId])
 
   const selectTraceNode = useCallback(
     (
@@ -574,14 +610,17 @@ export const Editor = () => {
               ref={taskView}
               question={workflowForm.question || question}
               questionImage={image}
-              onSubmit={(answer) => beginAttempt(runGraph({ answer }))}
+              onSubmit={handleSubmit}
               outputs={outputs}
               constraints={answerConstraints}
               disabled={attemptState === 'running' || runState === 'queued'}
               runId={runId}
               runState={runState}
               trace={trace}
-              onCancel={() => runId && cancelRun(runId)}
+              runError={failureMessage}
+              connected={connected}
+              progress={processingPercentage}
+              onCancel={handleCancel}
               onSelectTraceNode={selectTraceNode}
               onSelectOutputNode={student ? undefined : selectTraceNode}
             />
@@ -601,6 +640,15 @@ export const Editor = () => {
         onClose={() => setNotice(null)}
         message={notice}
       />
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={handleSnackbarClose}
+      >
+        <Alert severity={snackbar.severity} onClose={handleSnackbarClose}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
       <Box sx={{ display: 'none' }} data-can-undo={canUndo} data-can-redo={canRedo} />
     </Box>
   )

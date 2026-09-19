@@ -306,4 +306,23 @@ describe('TraceView', () => {
     await user.click(screen.getByLabelText('Toggle A / B'))
     expect(screen.getByText('seen')).toBeVisible()
   })
+
+  it('offers a working cancel while queued without a run id', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const user = userEvent.setup()
+    const onCancel = vi.fn()
+    render(
+      <TraceView
+        runState="queued"
+        trace={[]}
+        onCancel={onCancel}
+        onSelectNode={vi.fn()}
+      />
+    )
+
+    const cancel = screen.getByRole('button', { name: 'Cancel (waiting to start…)' })
+    expect(cancel).toBeEnabled()
+    await user.click(cancel)
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
 })

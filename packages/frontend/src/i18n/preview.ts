@@ -17,6 +17,13 @@ export type PreviewMessages = {
   submit: string
   submitting: string
   runHint: string
+  runFailed: string
+  runCancelled: string
+  runDisconnected: string
+  retry: string
+  viewTrace: string
+  waitingToStart: string
+  assessingProgress: (pct: number) => string
   resultsHeading: string
   resultsEmpty: string
   passed: string
@@ -39,6 +46,14 @@ const en: PreviewMessages = {
   submit: 'Run assessment',
   submitting: 'Assessing…',
   runHint: 'An assessment can take up to two minutes. Do not reload the page.',
+  runFailed: 'The run failed.',
+  runCancelled: 'The run was cancelled.',
+  runDisconnected:
+    'Connection to the server is unavailable. Check your connection and retry.',
+  retry: 'Retry',
+  viewTrace: 'View trace',
+  waitingToStart: 'Waiting to start…',
+  assessingProgress: (pct) => `Assessing… ${pct}%`,
   resultsHeading: 'Results',
   resultsEmpty: 'Run the workflow to see the score, classification and feedback.',
   passed: 'Passed',
@@ -62,6 +77,14 @@ const de: PreviewMessages = {
   submitting: 'Wird ausgewertet…',
   runHint:
     'Die Auswertung kann bis zu zwei Minuten dauern. Bitte die Seite nicht neu laden.',
+  runFailed: 'Die Auswertung ist fehlgeschlagen.',
+  runCancelled: 'Die Auswertung wurde abgebrochen.',
+  runDisconnected:
+    'Keine Verbindung zum Server. Bitte Verbindung prüfen und erneut versuchen.',
+  retry: 'Erneut versuchen',
+  viewTrace: 'Verlauf ansehen',
+  waitingToStart: 'Warte auf Start…',
+  assessingProgress: (pct) => `Wird ausgewertet… ${pct}%`,
   resultsHeading: 'Ergebnisse',
   resultsEmpty: 'Starte den Workflow, um Punktzahl, Einordnung und Feedback zu sehen.',
   passed: 'Bestanden',
