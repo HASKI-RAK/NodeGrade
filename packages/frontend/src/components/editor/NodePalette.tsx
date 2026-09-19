@@ -1,9 +1,4 @@
-import {
-  compactNodeWidgets,
-  getNodeDefinitions,
-  LiteGraph,
-  type NodeCategory
-} from '@haski/ta-lib'
+import { compactNodeWidgets, getNodeDefinitions, LiteGraph } from '@haski/ta-lib'
 import SearchIcon from '@mui/icons-material/Search'
 import {
   Box,
@@ -21,7 +16,8 @@ import { useMemo, useState } from 'react'
 
 import type { WorkflowTemplate } from '@/api/http'
 
-const categories: NodeCategory[] = ['Essential', 'AI', 'Assessment', 'Validation']
+import { CATEGORY_ORDER } from './categoryInfo'
+import { CategoryPill } from './CategoryPill'
 
 export const NodePalette = ({
   graph,
@@ -113,14 +109,14 @@ export const NodePalette = ({
           )
         }}
       />
-      {categories.map((category) => {
+      {CATEGORY_ORDER.map((category) => {
         const matches = definitions.filter(
           (definition) => definition.category === category
         )
         if (!matches.length) return null
         return (
           <Box key={category} mt={2}>
-            <Typography variant="overline">{category}</Typography>
+            <CategoryPill category={category} />
             <List dense disablePadding>
               {matches.map((definition) => (
                 <ListItem key={definition.type} disablePadding>

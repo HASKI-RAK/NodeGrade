@@ -48,12 +48,32 @@ export const LINK_TYPE_SHAPES: Record<InOut, number> = {
   '*': LiteGraph.BOX_SHAPE
 }
 
-/** Title-bar tint per node category (design A header stripe). */
+/** Pill fill per node category. The pill text names the node type; the fill keeps the category signal. */
 export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   AI: '#A78BFA',
   Essential: '#2DD4BF',
   Validation: '#60A5FA',
   Assessment: '#FBBF24'
+}
+
+/**
+ * Pill label for a node title bar: the canonical node type name, not the
+ * category. Falls back to the short type path (`input/answer` -> `ANSWER`)
+ * and finally to the category so untyped nodes keep a label.
+ */
+export function getPillLabel(
+  definition: { title?: string; category?: NodeCategory } | undefined,
+  fallbackType?: string | null
+): string | undefined {
+  const title = definition?.title?.trim()
+  if (title) return title.toUpperCase()
+  if (fallbackType) {
+    const short = fallbackType.split('/').pop()?.replace(/-/g, ' ').trim()
+    if (short) return short.toUpperCase()
+  }
+  const category = definition?.category?.trim()
+  if (category) return category.toUpperCase()
+  return undefined
 }
 
 /**
@@ -225,7 +245,7 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
   }
 
   /**
-   * Draws the category pill in the title bar (design B element). Implemented
+   * Draws the node-type pill in the title bar (design B element). Implemented
    * as `onDrawTitleBox` (not `onDrawForeground`): LiteGraph paints the title
    * string after the foreground pass, so a foreground pill always ends up
    * underneath the title text, and the default title text after
@@ -235,6 +255,8 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * at the pill gutter. Runs in node local coordinates, title bar y [-30, 0].
    * `compactNodeWidgets` wraps `onDrawForeground`, never this hook, so the
    * pill and the preview text compose instead of clobbering each other.
+   * The pill text names the node type (`definition.title`); the pill fill
+   * keeps the category color so the category signal survives the rename.
    */
   onDrawTitleBox(
     context: CanvasRenderingContext2D,
@@ -244,10 +266,10 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     titleFont: string
   ): void {
     const ctor = this.constructor as typeof LGraphNode & {
-      definition?: { category?: NodeCategory }
+      definition?: { category?: NodeCategory; title?: string }
       boxcolor?: string
     }
-    const label = ctor.definition?.category
+    const category = ctor.definition?.category
     // Always draw the status dot (LiteGraph default) so uncategorized nodes
     // keep their look; the pill only applies to categorized nodes.
     const boxSize = 10
@@ -262,10 +284,11 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
       Math.PI * 2
     )
     context.fill()
-    if (!label || this.flags?.collapsed) return
-    const fill = CATEGORY_COLORS[label]
+    if (!category || this.flags?.collapsed) return
+    const fill = CATEGORY_COLORS[category]
     if (!fill) return
-    const text = label.toUpperCase()
+    const text = getPillLabel(ctor.definition, this.type)
+    if (!text) return
     context.save()
     context.font = 'bold 10px Tahoma, sans-serif'
     const paddingX = 8

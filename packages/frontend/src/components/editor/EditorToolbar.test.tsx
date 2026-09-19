@@ -142,4 +142,47 @@ describe('EditorToolbar', () => {
     await user.click(screen.getByRole('menuitem', { name: /Dark/ }))
     expect(localStorage.getItem(COLOR_SCHEME_STORAGE_KEY)).toBe('dark')
   })
+
+  it('explains node colors and adding nodes in a help dialog', async () => {
+    const user = userEvent.setup()
+    const action = vi.fn()
+    render(
+      <EditorToolbar
+        workflowName="Demo"
+        status="saved"
+        student={false}
+        canSaveAs
+        canReset={false}
+        ltiInstructor={false}
+        developerTools={false}
+        connectionStatus="Connected"
+        onAdd={action}
+        onTemplates={action}
+        onRun={action}
+        onPreview={action}
+        onSaveAs={async () => undefined}
+        onImport={async () => undefined}
+        onExport={action}
+        onReset={async () => undefined}
+        onDeveloperTools={action}
+        onPublish={async () => undefined}
+        onRetry={action}
+        onReloadLatest={action}
+        connectionInfo={{
+          apiOrigin: 'http://api',
+          wsOrigin: 'ws://api',
+          workspaceType: 'BROWSER',
+          workflowId: 'wf-1'
+        }}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Editor help' }))
+    expect(
+      screen.getByRole('heading', { name: 'Node colors and adding nodes' })
+    ).toBeVisible()
+    for (const category of ['Essential', 'AI', 'Assessment', 'Validation'])
+      expect(screen.getByText(category, { exact: false })).toBeVisible()
+    expect(screen.getByText('Adding nodes')).toBeVisible()
+  })
 })
