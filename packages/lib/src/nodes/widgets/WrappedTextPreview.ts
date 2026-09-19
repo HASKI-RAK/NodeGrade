@@ -41,13 +41,15 @@ const EDIT_INPUT_ID = (node: LGraphNode): string => `wrappedText${node.id}`
  * Top edge of the text area, right below the port rows. LiteGraph centres
  * slot `i` at `(i + 0.7) * NODE_SLOT_HEIGHT` and draws its label with an
  * alphabetic baseline at `+5`, so the last row's glyphs end near
- * `rows * 20 + 2`; its own widgets start at `max_y + 2 = rows * 20 + 6`.
- * Using the same origin keeps the preview snug under the slots instead of
- * leaving a dead band.
+ * `rows * 20 + 2`. The preview starts exactly there instead of at LiteGraph's
+ * widget origin (`max_y + 2 = rows * 20 + 6`), reclaiming the dead band under
+ * the title bar / slots. Display (`drawWrappedText`), the inline editor
+ * (`startInlineEdit`) and the hit-test share this origin so edit mode aligns
+ * with display mode.
  */
 export const wrappedTextTop = (node: LGraphNode): number => {
   const portRows = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0)
-  return portRows * 20 + 6
+  return portRows * 20 + 2
 }
 
 /**
