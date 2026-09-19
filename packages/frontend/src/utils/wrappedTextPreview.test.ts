@@ -103,16 +103,16 @@ describe('wrapped text preview', () => {
   it('starts the text right below the port row', () => {
     const node = makeNode({ value: 'x' }, [180, 64])
     compactNodeWidgets(node)
-    // One output slot: LiteGraph's own widgets begin at rows*20 + 6 = 26.
-    expect(wrappedTextTop(node)).toBe(26)
+    // One output slot: glyphs end near rows*20 + 2 = 22.
+    expect(wrappedTextTop(node)).toBe(22)
   })
 
   it('never compacts a text node below two lines of body text', () => {
     const node = makeNode({ value: 'x' }, [180, 40])
     compactNodeWidgets(node)
-    // top 26 + two 17px lines + 8px bottom padding.
-    expect(wrappedTextMinHeight(node)).toBe(68)
-    expect(node.size[1]).toBe(68)
+    // top 22 + two 17px lines + 8px bottom padding.
+    expect(wrappedTextMinHeight(node)).toBe(64)
+    expect(node.size[1]).toBe(64)
     // Larger saved sizes are left alone.
     const tall = makeNode({ value: 'x' }, [180, 130])
     compactNodeWidgets(tall)
@@ -127,7 +127,7 @@ describe('wrapped text preview', () => {
     compactNodeWidgets(node)
     const stub = stubContext()
     stub.draw(node)
-    // Minimum node (68px): (68 - 26 - 8) / 17 -> two visible lines, last elided.
+    // Minimum node (64px): (64 - 22 - 8) / 17 -> two visible lines, last elided.
     expect(stub.calls.length).toBe(2)
     expect(stub.calls[1]).toMatch(/…$/)
     expect(stub.calls.join(' ')).not.toContain('twelve')
