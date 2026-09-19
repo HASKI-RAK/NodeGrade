@@ -24,6 +24,7 @@ import {
 } from '@mui/material'
 import { useRef, useState } from 'react'
 
+import { ColorSchemeMenuItems } from '@/components/ColorSchemeMenuItems'
 import type { SaveStatus } from '@/hooks/useAutosave'
 
 const labels: Record<SaveStatus, string> = {
@@ -199,6 +200,8 @@ export const EditorToolbar = ({
         >
           Connection information
         </MenuItem>
+        <Divider />
+        <ColorSchemeMenuItems onSelect={() => setAnchor(null)} />
         {!student && (
           <MenuItem>
             <FormControlLabel

@@ -1,4 +1,5 @@
 import { applyCanvasTheme, LGraph } from '@haski/ta-lib'
+import { useTheme } from '@mui/material'
 import { LGraphCanvas, type LGraphNode } from 'litegraph.js'
 import { useEffect, useRef } from 'react'
 
@@ -16,6 +17,7 @@ type CanvasProps = {
 const Canvas = (props: CanvasProps) => {
   const lcanvas = useRef<LGraphCanvas | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const theme = useTheme()
 
   useEffect(() => {
     console.log('Canvas mounted or lgraph updated')
@@ -105,7 +107,7 @@ const Canvas = (props: CanvasProps) => {
           display: 'block',
           width: '100%',
           height: '100%',
-          border: '1px solid #d8dce6'
+          border: `1px solid ${theme.palette.divider}`
         }}
       />
     </div>
