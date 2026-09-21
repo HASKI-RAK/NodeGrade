@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { apiRequest } from '@/api/http'
 
@@ -31,13 +31,24 @@ describe('TemplateAdmin', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
-  it('supports create, revise, publish and delete lifecycle actions', async () => {
-    const user = userEvent.setup()
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('creates a template from the form', async () => {
+    const user = userEvent.setup({ delay: null })
     render(<TemplateAdmin />)
     await screen.findByRole('heading', { name: 'Draft workflow' })
 
-    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'New workflow')
-    await user.type(screen.getByRole('textbox', { name: 'Slug' }), 'new-workflow')
+    // fireEvent sets the whole value in one React update; typing the slug
+    // character by character re-renders the MUI form on every keystroke and
+    // pushes this test over the default 5s timeout under full-suite load.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+      target: { value: 'New workflow' }
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Slug' }), {
+      target: { value: 'new-workflow' }
+    })
     await user.click(screen.getByRole('button', { name: 'Create template' }))
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith(
@@ -48,6 +59,14 @@ describe('TemplateAdmin', () => {
         })
       )
     )
+    // This form renders the heaviest MUI tree in the file and runs slowest
+    // under full-suite load, so it gets headroom above the default 5s timeout.
+  }, 10_000)
+
+  it('publishes an unpublished template', async () => {
+    const user = userEvent.setup({ delay: null })
+    render(<TemplateAdmin />)
+    await screen.findByRole('heading', { name: 'Draft workflow' })
 
     await user.click(screen.getByRole('button', { name: 'Publish Draft workflow' }))
     await waitFor(() =>
@@ -56,6 +75,12 @@ describe('TemplateAdmin', () => {
         expect.objectContaining({ body: { published: true } })
       )
     )
+  })
+
+  it('creates a revision for a template', async () => {
+    const user = userEvent.setup({ delay: null })
+    render(<TemplateAdmin />)
+    await screen.findByRole('heading', { name: 'Draft workflow' })
 
     await user.click(
       screen.getByRole('button', { name: 'Add revision to Draft workflow' })
@@ -67,6 +92,12 @@ describe('TemplateAdmin', () => {
         expect.objectContaining({ method: 'POST' })
       )
     )
+  })
+
+  it('deletes a template after confirmation', async () => {
+    const user = userEvent.setup({ delay: null })
+    render(<TemplateAdmin />)
+    await screen.findByRole('heading', { name: 'Draft workflow' })
 
     await user.click(screen.getByRole('button', { name: 'Delete Draft workflow' }))
     await waitFor(() =>
