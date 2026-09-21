@@ -44,8 +44,9 @@ services:
       NODE_ENV: production
       PORT: '5000'
       DATABASE_URL: postgresql://nodegrade:nodegrade@db:5432/nodegrade?schema=public
-      FRONTEND_URL: http://localhost:5173
-      CORS_ORIGIN: http://localhost:5173,http://localhost:8080
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      COOKIE_INSECURE: ${COOKIE_INSECURE:-true}
       MODEL_WORKER_URL: http://models:8000
       SIMILARITY_WORKER_URL: http://models:8002
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

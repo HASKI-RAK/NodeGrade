@@ -180,10 +180,12 @@ development Vite proxies `/api` to `http://localhost:5000`.
 
 ## Deployment topology
 
-`docker-compose.yml` runs three services: Postgres, the backend image
-(`node dist/src/main.js` after `prisma migrate deploy`), and an nginx image serving the
-built PWA as static files with SPA fallback. The nginx layer does not proxy the API — the
-browser reaches the backend at the URL in the runtime config file.
+`docker-compose.yml` runs four services: Postgres, the sentence-transformer worker, the
+backend image (`node dist/src/main.js` after `prisma migrate deploy`), and an nginx image
+serving the built PWA as static files with SPA fallback. The nginx layer proxies `/api`,
+`/socket.io`, `/lti`, and `/health` to the backend service, keeping browser traffic on the
+frontend's public origin. The production runtime config therefore uses the relative
+`/api` URL.
 
 `docker-compose.debug.yml` plus `tools/debug/stack.mjs` reproduce the whole stack
 deterministically on the 15xxx/18000 port range with a fake model worker, a seeded demo
