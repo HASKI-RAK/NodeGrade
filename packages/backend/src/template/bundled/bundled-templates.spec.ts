@@ -121,6 +121,59 @@ describe('bundled templates', () => {
     }
   });
 
+  /**
+   * A link table and the slot lists on the nodes are two records of the same wire,
+   * and litegraph trusts both: it draws the wire from the target's `link`, but moves
+   * the data along the origin's `links`. Drop the id from one side and the canvas
+   * shows a connection that silently carries nothing — invisible to a node count.
+   */
+  it.each(
+    BUNDLED_TEMPLATES.map((template) => [template.slug, template] as const),
+  )('%s agrees with its own nodes about every link', (_slug, template) => {
+    type Link = [number, number, number, number, number, string];
+    type Slot = { link?: number | null; links?: number[] | null };
+
+    const links = (template.content.links ?? []) as Link[];
+    const linkById = new Map(links.map((link) => [link[0], link]));
+    const nodeById = new Map(template.content.nodes.map((n) => [n.id, n]));
+    const problems: string[] = [];
+
+    expect(new Set(links.map(([id]) => id)).size).toBe(links.length);
+
+    for (const node of template.content.nodes) {
+      ((node.inputs ?? []) as Slot[]).forEach((slot, index) => {
+        if (slot.link === null || slot.link === undefined) return;
+        const link = linkById.get(slot.link);
+        if (!link || link[3] !== node.id || link[4] !== index)
+          problems.push(
+            `node ${node.id} input ${index} claims link ${slot.link}`,
+          );
+      });
+      ((node.outputs ?? []) as Slot[]).forEach((slot, index) => {
+        for (const id of slot.links ?? []) {
+          const link = linkById.get(id);
+          if (!link || link[1] !== node.id || link[2] !== index)
+            problems.push(`node ${node.id} output ${index} claims link ${id}`);
+        }
+      });
+    }
+
+    for (const [id, origin, originSlot, target, targetSlot] of links) {
+      const from = (nodeById.get(origin)?.outputs ?? [])[originSlot] as Slot;
+      const to = (nodeById.get(target)?.inputs ?? [])[targetSlot] as Slot;
+      if (!from || !(from.links ?? []).includes(id))
+        problems.push(
+          `link ${id} is missing from node ${origin} output ${originSlot}`,
+        );
+      if (!to || to.link !== id)
+        problems.push(
+          `link ${id} is missing from node ${target} input ${targetSlot}`,
+        );
+    }
+
+    expect(problems).toEqual([]);
+  });
+
   it.each(
     BUNDLED_TEMPLATES.filter((template) => template.kind === 'BLOCK').map(
       (template) => [template.slug, template] as const,
@@ -130,7 +183,9 @@ describe('bundled templates', () => {
     (_slug, template) => {
       expect(isBlockInterfaces(template.interfaces)).toBe(true);
 
-      const byId = new Map(template.content.nodes.map((node) => [node.id, node]));
+      const byId = new Map(
+        template.content.nodes.map((node) => [node.id, node]),
+      );
       const ports = template.interfaces?.boundary ?? [];
 
       expect(ports.length).toBeGreaterThan(0);
@@ -140,8 +195,7 @@ describe('bundled templates', () => {
         keys.add(port.key);
         const node = byId.get(port.internalNodeId);
         expect(node).toBeDefined();
-        const slots =
-          port.direction === 'input' ? node?.inputs : node?.outputs;
+        const slots = port.direction === 'input' ? node?.inputs : node?.outputs;
         expect(slots?.[port.internalSlot]).toBeDefined();
       }
     },

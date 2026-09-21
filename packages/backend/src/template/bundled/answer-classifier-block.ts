@@ -26,9 +26,10 @@ const build = () => {
 
   // Boundary inputs stay unwired: the editor's boundary adapter connects into
   // these input slots, so no internal link may occupy them.
-  // Node ids in creation order: 1 assessment port, 2 guidance port,
-  // 3 guidance text, 4 classification system prompt, 5 assessment user prompt,
-  // 6 concat-object, 7 LLM, 8 strings-to-array, 9 output.
+  //
+  // The node ids the boundary needs are returned rather than written down: they
+  // shift whenever a node is added or removed, and a stale comment is exactly
+  // how a boundary port ends up pointing at the wrong slot.
   const assessmentPort = g.concat('Assessment (block input)', [40, 80]);
   const guidancePort = g.concat('Guidance (block input)', [40, 220]);
   const guidance = g.textfield(
@@ -46,31 +47,32 @@ const build = () => {
   const promptText = g.concat('Assessment text', [380, 140]);
   g.link(assessmentPort, 0, promptText, 0);
   g.link(guidancePort, 0, promptText, 1);
-  const assessmentMessage = g.promptMessage(
-    'Assessment to classify',
-    [700, 140],
-    promptText,
-  );
-  const messages = g.concatObject(
-    'Classification messages',
-    [1020, 220],
-    guidanceMessage,
-    assessmentMessage,
-  );
-  const model = g.llmForMessages(
+  // The assessment text reaches the model as text; only the label guidance
+  // still needs a `prompt-message`, because it carries the `system` role.
+  const model = g.llmWithSystem(
     'Classification model',
-    [1340, 180],
-    messages,
+    [700, 180],
+    guidanceMessage,
+    promptText,
     { maxTokens: 64, temperature: 0.1 },
   );
   // Single input wired; the second strings-to-array slot stays empty so the
   // node emits a one-element list.
-  const list = g.stringsToArray('Classification list', [1740, 180], model);
-  g.output('Classification', [2020, 180], list, 0, 'classifications');
-  g.group('Classification', [20, 20, 2280, 560], '#405775');
+  const list = g.stringsToArray('Classification list', [1100, 180], model);
+  g.output('Classification', [1380, 180], list, 0, 'classifications');
+  g.group('Classification', [20, 20, 1640, 560], '#405775');
 
-  return g.build();
+  return {
+    content: g.build(),
+    ports: {
+      assessment: assessmentPort.id,
+      guidance: guidanceMessage.id,
+      labels: list.id,
+    },
+  };
 };
+
+const { content, ports } = build();
 
 export const answerClassifierBlock: BundledTemplate = {
   slug: 'answer-classifier',
@@ -80,7 +82,7 @@ export const answerClassifierBlock: BundledTemplate = {
     'Classifies an assessment text into one of a fixed label set with the language model. Uses the deployment default model — no per-node setup.',
   category: 'Assessment',
   tags: ['classification', 'llm', 'labels'],
-  content: build(),
+  content,
   interfaces: {
     boundary: [
       {
@@ -88,7 +90,7 @@ export const answerClassifierBlock: BundledTemplate = {
         label: 'Assessment to classify',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 1,
+        internalNodeId: ports.assessment,
         internalSlot: 0,
         required: true,
         description:
@@ -99,7 +101,7 @@ export const answerClassifierBlock: BundledTemplate = {
         label: 'Label guidance',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 4,
+        internalNodeId: ports.guidance,
         internalSlot: 0,
         required: true,
         description: `Label set instruction. Defaults to: ${DEFAULT_LABELS}.`,
@@ -109,7 +111,7 @@ export const answerClassifierBlock: BundledTemplate = {
         label: 'Classification',
         dataType: '[string]',
         direction: 'output',
-        internalNodeId: 8,
+        internalNodeId: ports.labels,
         internalSlot: 0,
         description: 'Single-element classification list.',
       },

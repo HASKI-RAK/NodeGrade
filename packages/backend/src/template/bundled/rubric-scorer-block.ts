@@ -5,9 +5,8 @@ import { GraphBuilder } from './graph-builder.js';
  * Rubric scorer block (SPEC-0003/FR-021).
  *
  * The WAIE assessment stage in miniature: question + answer join, a system prompt
- * carrying the rubric, a user prompt carrying the joined text, `concat-object`
- * into `models/llm` (singular `message` vs plural `messages` plumbing included),
- * and `extract-number` pulling the `Score: <n>` line out of free text. Beginners
+ * carrying the rubric, the joined text straight into `models/llm`, and
+ * `extract-number` pulling the `Score: <n>` line out of free text. Beginners
  * rebuilding this by hand hit every one of those traps; here they only supply the
  * three strings and read the number.
  *
@@ -34,9 +33,10 @@ const build = () => {
   // these input slots, so no internal link may occupy them. The scored strings
   // travel through the boundary ports at run time: the compiler rewires outer
   // links through the boundary onto the internal nodes below.
-  // Node ids in creation order: 1 question port, 2 answer port, 3 rubric,
-  // 4 answer prompt, 5 rubric system prompt, 6 concat-object, 7 LLM,
-  // 8 extract-number, 9 output.
+  //
+  // The node ids the boundary needs are returned rather than written down: they
+  // shift whenever a node is added or removed, and a stale comment is exactly
+  // how a boundary port ends up pointing at the wrong slot.
   const questionPort = g.concat('Question (block input)', [40, 80]);
   const answerPort = g.concat('Answer (block input)', [40, 220]);
   const rubric = g.textfield(
@@ -50,20 +50,30 @@ const build = () => {
   const joined = g.concat('Question and answer', [700, 140]);
   g.link(questionPort, 0, joined, 0);
   g.link(answerPort, 0, joined, 1);
-  const answerPrompt = g.promptMessage('Answer prompt', [1020, 140], joined);
-  const messages = g.concatObject(
-    'Assessment messages',
-    [1340, 220],
+  // The joined question and answer reach the model as text; only the rubric
+  // still needs a `prompt-message`, because it carries the `system` role.
+  const model = g.llmWithSystem(
+    'Assessment model',
+    [1020, 180],
     rubricMessage,
-    answerPrompt,
+    joined,
   );
-  const model = g.llmForMessages('Assessment model', [1660, 180], messages);
-  const score = g.extractNumber('Score', [2040, 180], model);
-  g.output('Score', [2320, 180], score, 0, 'score');
-  g.group('Rubric scoring', [20, 20, 2580, 560], '#405775');
+  const score = g.extractNumber('Score', [1400, 180], model);
+  g.output('Score', [1680, 180], score, 0, 'score');
+  g.group('Rubric scoring', [20, 20, 1940, 560], '#405775');
 
-  return g.build();
+  return {
+    content: g.build(),
+    ports: {
+      question: questionPort.id,
+      answer: answerPort.id,
+      rubric: rubricMessage.id,
+      score: score.id,
+    },
+  };
 };
+
+const { content, ports } = build();
 
 export const rubricScorerBlock: BundledTemplate = {
   slug: 'rubric-scorer',
@@ -73,7 +83,7 @@ export const rubricScorerBlock: BundledTemplate = {
     'Grades a learner answer against a rubric with the language model and returns the numeric score. Uses the deployment default model — no per-node setup.',
   category: 'Assessment',
   tags: ['rubric', 'scoring', 'llm', 'score'],
-  content: build(),
+  content,
   interfaces: {
     boundary: [
       {
@@ -81,7 +91,7 @@ export const rubricScorerBlock: BundledTemplate = {
         label: 'Question',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 1,
+        internalNodeId: ports.question,
         internalSlot: 0,
         required: true,
         description: 'The task or question the learner answered.',
@@ -91,7 +101,7 @@ export const rubricScorerBlock: BundledTemplate = {
         label: 'Learner answer',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 2,
+        internalNodeId: ports.answer,
         internalSlot: 0,
         required: true,
         description: 'The learner response to grade.',
@@ -101,7 +111,7 @@ export const rubricScorerBlock: BundledTemplate = {
         label: 'Rubric',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 5,
+        internalNodeId: ports.rubric,
         internalSlot: 0,
         required: true,
         description:
@@ -112,7 +122,7 @@ export const rubricScorerBlock: BundledTemplate = {
         label: 'Score',
         dataType: 'number',
         direction: 'output',
-        internalNodeId: 8,
+        internalNodeId: ports.score,
         internalSlot: 0,
         description: 'Extracted numeric score.',
       },

@@ -93,6 +93,10 @@ const concat = (
  *   float precision into the feedback text.
  * - `Padding` is a `utils/concat-string` adding a trailing space; `Empty Space` is a
  *   `basic/textfield` holding a single space.
+ * - The assembled prompt text goes straight into the model's `messages` slot
+ *   (SPEC-0019/FR-002); only the system instruction still passes through a
+ *   `prompt-message`, so the screenshot's user-role message node and the
+ *   `concat-object` behind it are gone.
  *
  * German expert-solution texts are transcribed best-effort from the screenshot and the
  * system instruction is new (the screenshot does not show it). A facilitator should
@@ -133,7 +137,7 @@ export const simpleLlmFeedbackTemplate: BundledTemplate = {
         outputs: [output('string', 'string', [3])],
       },
       {
-        ...concat(4, [40, 330], 'Padding', [3, 4]),
+        ...concat(4, [40, 330], 'Padding', [3, null]),
         outputs: [output('string', 'string', [5])],
       },
       {
@@ -220,32 +224,14 @@ export const simpleLlmFeedbackTemplate: BundledTemplate = {
         size: [240, 80],
       },
       node({
-        id: 14,
-        type: 'basic/prompt-message',
-        pos: [770, 390],
-        title: 'Prompt Message',
-        inputs: [input('string', 'string', 14)],
-        outputs: [output('message', 'message', [15])],
-        properties: { value: { role: 'user', content: '' } },
-        widgetsValues: ['user'],
-        size: [300, 100],
-      }),
-      node({
-        id: 15,
-        type: 'utils/concat-object',
-        pos: [770, 260],
-        title: 'Concat Object',
-        inputs: [input('*', '*', 13), input('*', '*', 15)],
-        outputs: [output('*', '*', [16])],
-        properties: { value: [] },
-        size: [220, 60],
-      }),
-      node({
         id: 16,
         type: 'models/llm',
-        pos: [1040, 220],
+        pos: [820, 220],
         title: 'LLM',
-        inputs: [input('message', 'message', null), input('messages', '*', 16)],
+        inputs: [
+          input('message', 'message,string,[message]', 13),
+          input('messages', 'message,[message],[string],string', 14),
+        ],
         outputs: [output('string', 'string', [17])],
         properties: {
           value: KATALYST_MODEL_QWEN_FLASH,
@@ -394,7 +380,6 @@ export const simpleLlmFeedbackTemplate: BundledTemplate = {
       [1, 1, 0, 3, 1, 'string'],
       [2, 2, 0, 3, 0, 'string'],
       [3, 3, 0, 4, 0, 'string'],
-      [4, 1, 0, 4, 1, 'string'],
       [5, 4, 0, 5, 0, 'string'],
       [6, 5, 0, 13, 0, 'string'],
       [7, 7, 0, 9, 0, 'string'],
@@ -403,10 +388,8 @@ export const simpleLlmFeedbackTemplate: BundledTemplate = {
       [10, 6, 0, 10, 0, 'string'],
       [11, 10, 0, 13, 1, 'string'],
       [12, 11, 0, 12, 0, 'string'],
-      [13, 12, 0, 15, 0, 'message'],
-      [14, 13, 0, 14, 0, 'string'],
-      [15, 14, 0, 15, 1, 'message'],
-      [16, 15, 0, 16, 1, '*'],
+      [13, 12, 0, 16, 0, 'message'],
+      [14, 13, 0, 16, 1, 'string'],
       [17, 16, 0, 28, 1, 'string'],
       [18, 17, 0, 25, 0, 'string'],
       [19, 1, 0, 18, 0, 'string'],

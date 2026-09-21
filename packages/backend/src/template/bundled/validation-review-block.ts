@@ -34,9 +34,10 @@ const build = () => {
 
   // Boundary inputs stay unwired: the editor's boundary adapter connects into
   // these input slots, so no internal link may occupy them.
-  // Node ids in creation order: 1 answer port, 2 assessment port,
-  // 3 review instructions, 4 evidence concat, 5 instructions system prompt,
-  // 6 evidence user prompt, 7 concat-object, 8 LLM, 9 output.
+  //
+  // The node ids the boundary needs are returned rather than written down: they
+  // shift whenever a node is added or removed, and a stale comment is exactly
+  // how a boundary port ends up pointing at the wrong slot.
   const answerPort = g.concat('Learner answer (block input)', [40, 80]);
   const assessmentPort = g.concat('First assessment (block input)', [40, 220]);
   const instructions = g.textfield(
@@ -54,19 +55,29 @@ const build = () => {
     [380, 420],
     instructions,
   );
-  const evidenceMessage = g.promptMessage('Review input', [700, 150], evidence);
-  const messages = g.concatObject(
-    'Review messages',
-    [1020, 230],
+  // The gathered evidence reaches the model as text; only the review policy
+  // still needs a `prompt-message`, because it carries the `system` role.
+  const model = g.llmWithSystem(
+    'Review model',
+    [700, 230],
     instructionsMessage,
-    evidenceMessage,
+    evidence,
   );
-  const model = g.llmForMessages('Review model', [1340, 230], messages);
-  g.output('Review recommendation', [1720, 230], model);
-  g.group('Validation review', [20, 20, 1980, 600], '#7a3b3b');
+  g.output('Review recommendation', [1080, 230], model);
+  g.group('Validation review', [20, 20, 1340, 600], '#7a3b3b');
 
-  return g.build();
+  return {
+    content: g.build(),
+    ports: {
+      answer: answerPort.id,
+      assessment: assessmentPort.id,
+      instructions: instructionsMessage.id,
+      recommendation: model.id,
+    },
+  };
 };
+
+const { content, ports } = build();
 
 export const validationReviewBlock: BundledTemplate = {
   slug: 'validation-review',
@@ -76,7 +87,7 @@ export const validationReviewBlock: BundledTemplate = {
     'Second-checks an earlier assessment against the original answer and recommends educator review or keep-as-draft. Uses the deployment default model — no per-node setup.',
   category: 'Validation',
   tags: ['review', 'validation', 'second-check', 'llm'],
-  content: build(),
+  content,
   interfaces: {
     boundary: [
       {
@@ -84,7 +95,7 @@ export const validationReviewBlock: BundledTemplate = {
         label: 'Learner answer',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 1,
+        internalNodeId: ports.answer,
         internalSlot: 0,
         required: true,
         description: 'The original learner response.',
@@ -94,7 +105,7 @@ export const validationReviewBlock: BundledTemplate = {
         label: 'First assessment',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 2,
+        internalNodeId: ports.assessment,
         internalSlot: 0,
         required: true,
         description: 'The earlier assessment or feedback draft to review.',
@@ -104,7 +115,7 @@ export const validationReviewBlock: BundledTemplate = {
         label: 'Review instructions',
         dataType: 'string',
         direction: 'input',
-        internalNodeId: 5,
+        internalNodeId: ports.instructions,
         internalSlot: 0,
         required: true,
         description: 'Review policy: what the reviewer checks for.',
@@ -114,7 +125,7 @@ export const validationReviewBlock: BundledTemplate = {
         label: 'Review recommendation',
         dataType: 'string',
         direction: 'output',
-        internalNodeId: 8,
+        internalNodeId: ports.recommendation,
         internalSlot: 0,
         description: 'EDUCATOR_REVIEW or KEEP_AS_DRAFT with a reason.',
       },

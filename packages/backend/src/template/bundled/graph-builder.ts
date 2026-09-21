@@ -50,11 +50,15 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     inputs: [slot('string')],
     outputs: [slot('message')],
   },
-  // The message ports accept more types than these (SPEC-0019/FR-001). The
-  // narrow types stay here on purpose: `LGraphNode.onConfigure` restores the
-  // widened acceptance on load, so bundled content needs no reissue to gain it.
+  // Both message ports take text, a message, or a list of either (SPEC-0019/FR-001),
+  // which is why the prompt text below reaches them without a `prompt-message` node
+  // in between. `LGraphNode.onConfigure` restores these types on load, so older
+  // stored content gains the same acceptance without a reissue.
   'models/llm': {
-    inputs: [slot('message'), slot('messages', '*')],
+    inputs: [
+      slot('message', 'message,string,[message]'),
+      slot('messages', 'message,[message],[string],string'),
+    ],
     outputs: [slot('string')],
   },
   'preprocessing/extract-number': {
@@ -295,34 +299,20 @@ export class GraphBuilder {
     return assembled;
   }
 
-  promptMessage(
-    title: string,
-    pos: [number, number],
-    source?: NodeRef,
-  ): NodeRef {
-    const node = this.add({
-      type: 'basic/prompt-message',
-      title,
-      pos,
-      size: [380, 80],
-      properties: { value: { role: 'user', content: '' } },
-      widgetsValues: ['user'],
-    });
-    if (source) this.link(source, 0, node, 0);
-    return node;
-  }
-
   /**
-   * Singular `message` input wired to a plural `messages` list instead. Block
-   * interiors assemble system + user prompts with `concat-object` and feed the
-   * list into slot 1; slot 0 stays empty by design, matching every workshop
-   * graph. Leaves `model_ref` unset so execution substitutes the facilitator's
+   * A system message on the singular `message` port and prompt text on the
+   * aggregate `messages` port. The node sends slot 0 before slot 1, so the
+   * conversation reads system-then-user without a `prompt-message` node or a
+   * `concat-object` to assemble it (SPEC-0019/FR-009).
+   *
+   * Leaves `model_ref` unset so execution substitutes the facilitator's
    * deployment default at run time (SPEC-0016); stored content stays untouched.
    */
-  llmForMessages(
+  llmWithSystem(
     title: string,
     pos: [number, number],
-    messages: NodeRef,
+    systemMessage: NodeRef,
+    prompt: NodeRef,
     settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
     const node = this.add({
@@ -343,14 +333,16 @@ export class GraphBuilder {
       },
       widgetsValues: [settings.maxTokens, settings.temperature, 0.9, 40, 0, ''],
     });
-    this.link(messages, 0, node, 1);
+    this.link(systemMessage, 0, node, 0);
+    this.link(prompt, 0, node, 1);
     return node;
   }
 
+  /** Prompt text straight into the singular `message` port (SPEC-0019/FR-002). */
   llm(
     title: string,
     pos: [number, number],
-    message: NodeRef,
+    prompt: NodeRef,
     settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
     const node = this.add({
@@ -361,24 +353,22 @@ export class GraphBuilder {
       properties: katalystLlmProperties(settings),
       widgetsValues: katalystLlmWidgets(settings),
     });
-    this.link(message, 0, node, 0);
+    this.link(prompt, 0, node, 0);
     return node;
   }
 
-  /** Prompt text → message (380 wide) → model in one call, with an 80px gap between message and model. Returns the LLM node. */
+  /**
+   * Prompt text → model. The model keeps the position it had when a
+   * `prompt-message` node stood between the two, so the surrounding groups and
+   * columns of a workshop graph still line up.
+   */
   llmStage(
     title: string,
     pos: [number, number],
     prompt: NodeRef,
     settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
-    const message = this.promptMessage(`${title} message`, pos, prompt);
-    return this.llm(
-      `${title} model`,
-      [pos[0] + 460, pos[1]],
-      message,
-      settings,
-    );
+    return this.llm(`${title} model`, [pos[0] + 460, pos[1]], prompt, settings);
   }
 
   extractNumber(
