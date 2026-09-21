@@ -6,16 +6,17 @@ import { type LGraphCanvas, type LGraphNode, LiteGraph, type Vector2 } from 'lit
  *
  * This is the third design for free-text `keyValue` properties (Question,
  * Sample solution, Textfield): it keeps the compact look — no opaque canvas
- * widget, `11px sans-serif` in `#d4d7dd` — but word-wraps over every line the
+ * widget, `13px sans-serif` in `#E6E9EF` — but word-wraps over every line the
  * node height allows instead of truncating to one line. The only truncation
  * is an `…` on the last visible line when text would overflow the node, so
  * resizing the node reveals more text.
  *
  * Editing opens a DOM `<textarea>` overlay styled to the same font metrics,
- * so the swap from canvas text to editable text has no visible jump: the
- * cursor simply appears where the user clicked. It commits on Enter/blur,
- * cancels on Escape, and follows zoom/pan/resize/move via rAF like the old
- * `Textfield.onMouseDown` editor did.
+ * so the swap from canvas text to editable text has no visible jump: it
+ * opens scrolled to the top with the caret before the first character, and
+ * text the preview elides is reachable through the overlay's scrollbar. It
+ * commits on Enter/blur, cancels on Escape, and follows zoom/pan/resize/move
+ * via rAF like the old `Textfield.onMouseDown` editor did.
  */
 
 /**
@@ -29,6 +30,8 @@ import { type LGraphCanvas, type LGraphNode, LiteGraph, type Vector2 } from 'lit
 export const WRAPPED_TEXT_FONT_SIZE = 13
 export const WRAPPED_TEXT_FONT = `${WRAPPED_TEXT_FONT_SIZE}px sans-serif`
 export const WRAPPED_TEXT_COLOR = '#E6E9EF'
+/** Inline editor scrollbar thumb: the body text color at ~35% alpha. */
+export const WRAPPED_TEXT_SCROLLBAR_COLOR = `${WRAPPED_TEXT_COLOR}59`
 export const WRAPPED_TEXT_LINE_HEIGHT = 17
 export const WRAPPED_TEXT_PAD_X = 10
 export const WRAPPED_TEXT_PAD_BOTTOM = 8
@@ -361,7 +364,17 @@ export const startInlineEdit = (
   input.style.backgroundColor = nodeBodyColor(node)
   input.style.borderRadius = '2px'
   input.style.resize = 'none'
-  input.style.overflow = 'hidden'
+  // The preview elides overflowing text; the editor scrolls it instead so
+  // the whole value stays reachable without leaving the node. A thin thumb
+  // in the body text color keeps the overlay looking like part of the node.
+  // `scrollbar-gutter: stable` reserves the lane whether or not the text
+  // overflows, so the content box has one width and never re-wraps when the
+  // scrollbar appears; `updateInputBounds` widens the box by that lane.
+  input.style.overflowX = 'hidden'
+  input.style.overflowY = 'auto'
+  input.style.scrollbarGutter = 'stable'
+  input.style.scrollbarWidth = 'thin'
+  input.style.scrollbarColor = `${WRAPPED_TEXT_SCROLLBAR_COLOR} transparent`
   input.style.whiteSpace = 'pre-wrap'
   input.style.overflowWrap = 'break-word'
 
@@ -387,9 +400,17 @@ export const startInlineEdit = (
     // when zoomed out.
     const scaleX = canvas.ds.scale * cssPerUnitX
     const scaleY = canvas.ds.scale * cssPerUnitY
+    // The scrollbar lane lives inside the border box and would narrow the
+    // content box below the preview's wrap width, breaking lines in different
+    // places. Measure the lane (no border, no padding: border box minus
+    // client box) and add it back, so the text keeps the canvas wrap width
+    // and the scrollbar sits in the node's right padding. Zero on overlay
+    // scrollbar platforms and in jsdom.
+    const scrollbarLane = Math.max(0, input.offsetWidth - input.clientWidth)
+    const wrapWidth = Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2)
     input.style.left = `${rect.left + canvasX * cssPerUnitX}px`
     input.style.top = `${rect.top + canvasY * cssPerUnitY}px`
-    input.style.width = `${Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2) * scaleX}px`
+    input.style.width = `${wrapWidth * scaleX + scrollbarLane}px`
     input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * scaleY}px`
     input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scaleY}px`
     input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scaleY}px`
@@ -429,8 +450,13 @@ export const startInlineEdit = (
 
   document.body.appendChild(input)
   updateInputBounds()
+  // Open the way the preview looks: first line at the top, caret before the
+  // first character. Assigning `.value` parks the caret at the end and
+  // focusing scrolls the caret into view, which would open a long text
+  // scrolled to its last line; reset both after focus.
   input.focus()
-  input.setSelectionRange(input.value.length, input.value.length)
+  input.setSelectionRange(0, 0)
+  input.scrollTop = 0
   canvas.setDirty(true, true)
   return true
 }
