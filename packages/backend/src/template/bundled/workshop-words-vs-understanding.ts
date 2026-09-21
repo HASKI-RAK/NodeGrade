@@ -68,10 +68,11 @@ const ASSESSMENT_INSTRUCTIONS = [
 const build = () => {
   const g = new GraphBuilder();
 
-  // Layout: 80px horizontal gaps between columns, 60px vertical gaps between
-  // stacked nodes, 40px group padding (80px top for the title bar) and 40px
-  // gaps between groups. Join chains use a 150px row pitch (80px node + 70px
-  // gap) so the concat nodes never touch each other.
+  // Layout: node widths fit the rendered title plus the node-type pill (see
+  // LGraphNode.onDrawTitleBox), 80px horizontal gaps between columns, 60px
+  // vertical gaps between stacked nodes, 40px group padding (80px top for
+  // the title bar) and 80px gaps between groups so wires stay visible.
+  // Join chains use a 150px row pitch (80px node + 70px gap).
   const JOIN_ROW_HEIGHT = 150;
 
   // Task context ---------------------------------------------------------------------
@@ -104,64 +105,64 @@ const build = () => {
   // Branch C: assess the explanation (criterion-based LLM judgment) ------------------
   const context = g.join(
     'Task context',
-    [500, 80],
+    [540, 80],
     [question, referenceLabel, reference, answerLabel, answer],
     JOIN_ROW_HEIGHT,
   );
   const instructions = g.textfield(
     'Assessment instructions',
-    [820, 80],
+    [930, 80],
     ASSESSMENT_INSTRUCTIONS,
     [360, 300],
   );
   const prompt = g.concat(
     'Assessment prompt',
-    [820, 440],
+    [930, 440],
     instructions,
     context,
   );
-  const assessment = g.llmStage('Assessment', [1140, 440], prompt);
-  g.output('Conceptual assessment', [1840, 440], assessment);
-  g.group('Branch C: assess the explanation', [460, 0, 1680, 700], '#405775');
+  const assessment = g.llmStage('Assessment', [1320, 440], prompt);
+  g.output('Conceptual assessment', [2180, 440], assessment);
+  g.group('Branch C: assess the explanation', [500, 0, 2130, 700], '#405775');
 
   // Branch A: look for vocabulary ------------------------------------------------------
   const keywordCheck = g.keywordCheck(
     'Keyword check',
-    [500, 820],
+    [540, 860],
     keywords,
     answer,
   );
-  g.output('Expected words found', [880, 800], keywordCheck, 0);
-  g.output('Expected words not found', [880, 940], keywordCheck, 1);
-  g.group('Branch A: look for vocabulary', [460, 740, 720, 320], '#6f621f');
+  g.output('Expected words found', [920, 840], keywordCheck, 0);
+  g.output('Expected words not found', [920, 980], keywordCheck, 1);
+  g.group('Branch A: look for vocabulary', [500, 780, 870, 320], '#6f621f');
 
   // Branch B: compare similarity to the reference --------------------------------------
   const embedAnswer = g.sentenceTransformer(
     'Sentence Transformer — Answer',
-    [500, 1180],
+    [540, 1260],
     answer,
   );
   const embedReference = g.sentenceTransformer(
     'Sentence Transformer — Reference',
-    [500, 1300],
+    [540, 1380],
     reference,
   );
   const similarity = g.cosineSimilarity(
     'Cosine similarity',
-    [840, 1230],
+    [1080, 1310],
     embedAnswer,
     embedReference,
   );
   const displayed = g.precision(
     'Display precision',
-    [1180, 1230],
+    [1460, 1310],
     similarity,
     3,
   );
-  g.output('Similarity to reference — not a grade', [1480, 1230], displayed);
+  g.output('Similarity to reference — not a grade', [1800, 1310], displayed);
   g.group(
     'Branch B: compare similarity to the reference',
-    [460, 1100, 1320, 300],
+    [500, 1180, 1750, 300],
     '#6f621f',
   );
 

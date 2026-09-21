@@ -300,7 +300,12 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     // "Cosine Similarity" readable instead of truncated to "Conc…". Measure
     // the title in the real title font so the gutter accounts for the actual
     // rendered width, not the 10px pill font.
-    context.font = titleFont
+    //
+    // NOTE: the shipped LiteGraph calls this hook with four arguments only
+    // (ctx, titleHeight, size, scale), so titleFont arrives as undefined and
+    // assigning undefined to context.font is silently ignored. The fallback
+    // below uses the same default the canvas itself uses for title text.
+    context.font = titleFont || `${Reflect.get(LiteGraph, 'NODE_TEXT_SIZE') ?? 14}px Arial`
     const titleWidth = context.measureText(String(this.getTitle() ?? '')).width
     const gap = 10
     const minWidth = Math.ceil(
@@ -321,6 +326,10 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     else context.rect(x, y, width, height)
     context.fill()
     context.fillStyle = '#14161C'
+    // Back to the pill font: the title measurement above leaves the
+    // context on the much wider title font, which would spill the pill
+    // label past its rect and into the slot labels.
+    context.font = 'bold 10px Tahoma, sans-serif'
     context.textAlign = 'left'
     context.textBaseline = 'middle'
     context.fillText(text, x + paddingX, y + height / 2 + 0.5)
