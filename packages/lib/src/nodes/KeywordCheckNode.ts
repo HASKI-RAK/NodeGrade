@@ -78,7 +78,14 @@ export class KeywordCheckNode extends LGraphNode {
           body: JSON.stringify({ sentence })
         })
         if (!response.ok) throw new Error('Failed to fetch embedding')
-        return await response.json()
+        const embedding: unknown = await response.json()
+        if (
+          !Array.isArray(embedding) ||
+          !embedding.every((value) => typeof value === 'number')
+        ) {
+          throw new Error('Model worker returned an invalid embedding')
+        }
+        return embedding
       }
       // Helper to compute cosine similarity
       function cosineSimilarity(a: number[], b: number[]): number {
