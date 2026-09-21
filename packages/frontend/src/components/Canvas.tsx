@@ -32,26 +32,30 @@ const Canvas = (props: CanvasProps) => {
     if (canvasRef.current) {
       if (!lcanvas.current) {
         // Initialize canvas if it doesn't exist
-        lcanvas.current = new LGraphCanvas(canvasRef.current, props.lgraph)
-        lcanvas.current.allow_interaction = !props.readOnly
-        lcanvas.current.allow_dragnodes = !props.readOnly
-        lcanvas.current.allow_reconnect_links = !props.readOnly
+        const canvas = new LGraphCanvas(canvasRef.current, props.lgraph)
+        lcanvas.current = canvas
+        canvas.allow_interaction = !props.readOnly
+        canvas.allow_dragnodes = !props.readOnly
+        canvas.allow_reconnect_links = !props.readOnly
         // Flat matte wires: no glow or shadow on connections.
-        lcanvas.current.render_connections_shadows = false
-        lcanvas.current.render_shadows = false
-        lcanvas.current.connections_width = 3
+        canvas.render_connections_shadows = false
+        canvas.render_shadows = false
+        canvas.connections_width = 3
         // Bitmap at device resolution; LiteGraph alone sizes it in CSS pixels
-        // and everything it draws comes out soft on scaled displays.
-        installCanvasPixelRatio(lcanvas.current)
-        installNodeConnectionHighlight(lcanvas.current)
+        // and everything it draws comes out soft on scaled displays. The grid
+        // is a raster tile, so it is rebuilt whenever the ratio changes.
+        installCanvasPixelRatio(canvas, {
+          onRatioChange: (pixelRatio) => applyCanvasTheme(canvas, { pixelRatio })
+        })
+        installNodeConnectionHighlight(canvas)
         // The breadcrumb above the canvas owns block navigation; LiteGraph's
         // own banner and Graph Inputs/Outputs panels would duplicate it.
-        hideStockSubgraphChrome(lcanvas.current)
+        hideStockSubgraphChrome(canvas)
         // Dark blue-gray canvas + grid tile that the node fills are tuned
         // against (see CANVAS_THEME); LiteGraph's stock #222 barely separates
         // from the node bodies.
-        applyCanvasTheme(lcanvas.current)
-        installDebugBridge(props.lgraph, lcanvas.current)
+        applyCanvasTheme(canvas)
+        installDebugBridge(props.lgraph, canvas)
       } else {
         // Update the graph reference if canvas already exists
         lcanvas.current.setGraph(props.lgraph)

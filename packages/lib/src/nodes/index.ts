@@ -78,6 +78,8 @@ export {
 } from './litegraph-extensions/LGraphNode'
 export {
   applyCanvasTheme,
+  type CanvasThemeOptions,
+  createGridPattern,
   createGridTile,
   GRID_CELL_SIZE,
   GRID_TILE_SIZE

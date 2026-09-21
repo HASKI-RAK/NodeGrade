@@ -27,6 +27,7 @@ import type { LGraphCanvas, LGraphNode, Vector2, Vector4 } from 'litegraph.js'
 
 type PixelRatioState = {
   pixelRatio: () => number
+  onRatioChange?: (ratio: number) => void
   ratio: number
   cssWidth: number
   cssHeight: number
@@ -36,6 +37,16 @@ type PixelRatioCanvas = LGraphCanvas & {
   __canvasPixelRatio?: PixelRatioState
 }
 
+export type CanvasPixelRatioOptions = {
+  /** Ratio source, re-read on every resize. Default `window.devicePixelRatio`. */
+  pixelRatio?: () => number
+  /**
+   * Called after a resize applied a different ratio than before, for raster
+   * assets that have to be rebuilt at the new density (the grid tile).
+   */
+  onRatioChange?: (ratio: number) => void
+}
+
 const readDevicePixelRatio = (): number =>
   typeof window === 'undefined' ? 1 : window.devicePixelRatio
 
@@ -43,13 +54,13 @@ const normalizeRatio = (ratio: number): number =>
   Number.isFinite(ratio) && ratio > 0 ? ratio : 1
 
 /**
- * Install DPR-aware sizing on a canvas. Idempotent. `pixelRatio` defaults to
- * `window.devicePixelRatio` and is re-read on every `resize`, so a ratio
- * change only needs `refreshCanvasPixelRatio` (see `watchDevicePixelRatio`).
+ * Install DPR-aware sizing on a canvas. Idempotent. The ratio is re-read on
+ * every `resize`, so a ratio change only needs `refreshCanvasPixelRatio` (see
+ * `watchDevicePixelRatio`).
  */
 export const installCanvasPixelRatio = (
   canvas: LGraphCanvas,
-  pixelRatio: () => number = readDevicePixelRatio
+  { pixelRatio = readDevicePixelRatio, onRatioChange }: CanvasPixelRatioOptions = {}
 ): void => {
   const runtime = canvas as PixelRatioCanvas
   if (runtime.__canvasPixelRatio) return
@@ -57,6 +68,7 @@ export const installCanvasPixelRatio = (
   // ratio 1 so drawing and hit-testing stay consistent with each other.
   const state: PixelRatioState = {
     pixelRatio,
+    onRatioChange,
     ratio: 1,
     cssWidth: canvas.canvas.width,
     cssHeight: canvas.canvas.height
@@ -79,6 +91,7 @@ export const installCanvasPixelRatio = (
       canvas.bgcanvas.width = backingWidth
       canvas.bgcanvas.height = backingHeight
     }
+    if (ratioChanged) state.onRatioChange?.(ratio)
     if (sizeChanged || ratioChanged) canvas.setDirty(true, true)
   }
 
