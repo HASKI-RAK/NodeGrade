@@ -14,6 +14,13 @@ paths:
   `nodes/NodeDefinitionRegistry.ts`. That array drives LiteGraph registration
   (`LGraphRegisterCustomNodes`), the palette and the inspector; there is no second
   registration site.
+- A port accepts one type or several: `addIn('string')` or `addIn(['message', 'string'])`.
+  The first member is the primary type and decides the port's colour and shape. Declared
+  port types are restored by `LGraphNode.onConfigure`, so a node that overrides
+  `onConfigure` must call `super.onConfigure(info)` or stored graphs load with the slot
+  types they were saved with.
+- A node that wants trace detail beyond its output slots sets `executionDetails` during
+  `onExecute`. It is transient, cleared by the runner, and sanitized like an output.
 - Property metadata belongs in the registry entry (`NodePropertyDefinition` controls), not
   in ad-hoc inspector code. Widget-backed legacy properties must be listed in
   `legacyWidgetKeys` so old saved graphs still load.

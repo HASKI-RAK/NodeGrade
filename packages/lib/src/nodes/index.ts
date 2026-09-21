@@ -74,8 +74,15 @@ export {
   CATEGORY_COLORS,
   LINK_TYPE_COLORS,
   LINK_TYPE_SHAPES,
-  getPillLabel
+  getPillLabel,
+  getPortStyle
 } from './litegraph-extensions/LGraphNode'
+export {
+  assertPromptContent,
+  DEFAULT_PROMPT_ROLE,
+  normalizePromptMessages,
+  PromptMessageError
+} from './promptMessages'
 export {
   applyCanvasTheme,
   type CanvasThemeOptions,

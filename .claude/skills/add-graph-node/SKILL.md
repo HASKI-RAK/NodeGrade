@@ -21,6 +21,10 @@ fails on execution.
      persisted node type and must not change once graphs are saved with it.
    - Wire ports in the constructor with `addIn`/`addOut` (the inherited `addInput`/
      `addOutput` throw), widgets with `addWidget`.
+   - A port may accept several types: pass an array, `addIn(['message', 'string'], 'message')`.
+     The first member is the primary type and decides the port's colour and shape.
+   - Overriding `onConfigure`? Call `super.onConfigure(info)` first, or the node loses the
+     shared port styling and the declared port types on load.
    - Implement `onExecute` (async) reading `getInputData(slot)` and writing
      `setOutputData(slot, value)`.
    - Need an HTTP worker? Implement `init(env)` and read `env.MODEL_WORKER_URL` or

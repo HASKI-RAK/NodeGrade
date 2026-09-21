@@ -4,6 +4,8 @@ import {
   getNodeDefinition,
   getNodeDefinitions,
   getPillLabel,
+  getPortStyle,
+  LGraph,
   LINK_TYPE_COLORS,
   LINK_TYPE_SHAPES,
   LiteGraph,
@@ -75,14 +77,53 @@ describe('node definition registry', () => {
     for (const Node of getDefinedNodeConstructors()) {
       const node = new Node()
       for (const slot of [...(node.inputs ?? []), ...(node.outputs ?? [])]) {
-        const color = LINK_TYPE_COLORS[slot.type as keyof typeof LINK_TYPE_COLORS]
+        const { color, shape } = getPortStyle(String(slot.type))
         expect(slot.color_on).toBe(color)
         expect(slot.color_off).toBe(color)
-        expect(slot.shape).toBe(
-          LINK_TYPE_SHAPES[slot.type as keyof typeof LINK_TYPE_SHAPES]
-        )
+        expect(slot.shape).toBe(shape)
       }
     }
+  })
+
+  it('draws a port accepting several types as its primary type', () => {
+    const node = LiteGraph.createNode('models/llm')
+    for (const slot of node.inputs ?? []) {
+      expect(String(slot.type).split(',').length).toBeGreaterThan(1)
+      expect(slot.color_on).toBe(LINK_TYPE_COLORS.message)
+      expect(slot.shape).toBe(LINK_TYPE_SHAPES.message)
+    }
+  })
+
+  it('links a text output straight into either message port', () => {
+    const graph = new LGraph()
+    const text = LiteGraph.createNode('basic/textfield')
+    const strings = LiteGraph.createNode('utils/strings-to-array')
+    const number = LiteGraph.createNode('basic/number')
+    const llm = LiteGraph.createNode('models/llm')
+    ;[text, strings, number, llm].forEach((node) => graph.add(node))
+
+    expect(text.connect(0, llm, 0)).toBeTruthy()
+    expect(text.connect(0, llm, 1)).toBeTruthy()
+    // A string list is the aggregate port's own widening, not the singular one's.
+    expect(strings.connect(0, llm, 1)).toBeTruthy()
+    expect(strings.connect(0, llm, 0)).toBeFalsy()
+    // Widening message ports must not turn them into wildcards.
+    expect(number.connect(0, llm, 0)).toBeFalsy()
+  })
+
+  it('widens message ports back after loading a graph saved with narrow ones', () => {
+    const node = LiteGraph.createNode('models/llm')
+    const narrow = [
+      { name: 'message', type: 'message', link: null },
+      { name: 'messages', type: '*', link: 7 }
+    ]
+    node.configure({ ...node.serialize(), inputs: narrow })
+
+    expect(node.inputs?.[0].type).toContain('string')
+    expect(node.inputs?.[1].type).toContain('[string]')
+    // The wire the graph was saved with survives the retype.
+    expect(node.inputs?.[1].link).toBe(7)
+    expect(node.inputs?.[1].color_on).toBe(LINK_TYPE_COLORS.message)
   })
 
   it('restyles legacy ports on configure and keeps titles readable', () => {
