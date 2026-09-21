@@ -7,12 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/models-cache
 
-COPY ./requirements.docker.txt /app/requirements.txt
+COPY ./requirements.txt /app/requirements.txt
 
 EXPOSE 8002
 
-# The Docker-specific requirements use the CPU wheel so Docker Desktop does
-# not need GPU support.
+# requirements.txt is the single source of Python deps (no separate docker file).
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 COPY ./model_worker.py /app/model_worker.py
