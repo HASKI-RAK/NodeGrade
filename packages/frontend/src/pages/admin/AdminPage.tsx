@@ -113,10 +113,9 @@ export const AdminPage = () => {
     <Box
       component="main"
       boxSizing="border-box"
-      height="100%"
+      minHeight="100dvh"
       maxWidth={1000}
       mx="auto"
-      overflow="auto"
       p={4}
     >
       <Typography variant="h4">Administration</Typography>

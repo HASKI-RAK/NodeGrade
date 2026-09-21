@@ -58,15 +58,14 @@ describe('provider administration', () => {
     })
   })
 
-  it('provides a scroll container for settings beyond the viewport', async () => {
+  it('lets the document scroll for settings beyond the viewport', async () => {
     renderProviders()
 
     await screen.findByRole('heading', { name: 'LLM providers' })
 
     expect(screen.getByRole('main')).toHaveStyle({
       boxSizing: 'border-box',
-      height: '100%',
-      overflow: 'auto'
+      minHeight: '100dvh'
     })
   })
 

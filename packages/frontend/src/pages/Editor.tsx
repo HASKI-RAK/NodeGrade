@@ -491,7 +491,8 @@ export const Editor = () => {
         height: '100dvh',
         display: 'grid',
         gridTemplateRows: 'auto minmax(0, 1fr)',
-        bgcolor: 'background.default'
+        bgcolor: 'background.default',
+        overflow: 'hidden'
       }}
     >
       <EditorToolbar
