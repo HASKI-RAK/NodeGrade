@@ -81,7 +81,7 @@ const fakeContext = () => {
 describe('installCanvasPixelRatio', () => {
   it('sizes both bitmaps at the ratio while reporting the CSS size', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
 
     fixture.canvas.resize(800, 600)
 
@@ -93,7 +93,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('rounds fractional layout sizes to whole device pixels', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 1.25)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 1.25 })
 
     fixture.canvas.resize(1234.4, 777.7)
 
@@ -103,7 +103,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('leaves the bitmap alone when nothing changed', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.setDirty.mockClear()
 
@@ -118,7 +118,7 @@ describe('installCanvasPixelRatio', () => {
     Object.defineProperty(host, 'offsetWidth', { get: () => 640 })
     Object.defineProperty(host, 'offsetHeight', { get: () => 480 })
     host.appendChild(fixture.element)
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
 
     fixture.canvas.resize()
 
@@ -128,7 +128,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('applies the ratio before pan and zoom on both layers', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.ds.scale = 0.5
     fixture.ds.offset = [40, 30]
@@ -141,7 +141,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('computes the visible graph area from CSS pixels', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.ds.scale = 2
     fixture.ds.offset = [-100, -50]
@@ -155,7 +155,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('honours an explicit viewport rectangle', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.ds.scale = 1
     fixture.ds.offset = [0, 0]
@@ -167,7 +167,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('centers a node in the CSS viewport', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.ds.scale = 1
     const node = { pos: [100, 100], size: [200, 100] } as unknown as LGraphNode
@@ -181,7 +181,7 @@ describe('installCanvasPixelRatio', () => {
 
   it('draws the stats readout under the base scale at a CSS anchor', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     const { ctx, calls } = fakeContext()
 
@@ -194,7 +194,7 @@ describe('installCanvasPixelRatio', () => {
   it('re-applies a changed ratio to the last CSS size', () => {
     let ratio = 1
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => ratio)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => ratio })
     fixture.canvas.resize(800, 600)
     expect([fixture.element.width, fixture.element.height]).toEqual([800, 600])
     fixture.setDirty.mockClear()
@@ -209,18 +209,38 @@ describe('installCanvasPixelRatio', () => {
 
   it('installs once', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     const resize = fixture.canvas.resize
-    installCanvasPixelRatio(fixture.canvas, () => 3)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 3 })
 
     expect(fixture.canvas.resize).toBe(resize)
     fixture.canvas.resize(100, 100)
     expect(fixture.element.width).toBe(200)
   })
 
+  it('reports ratio changes once each, before the redraw is requested', () => {
+    let ratio = 2
+    const order: string[] = []
+    const fixture = makeCanvas()
+    fixture.setDirty.mockImplementation(() => order.push('dirty'))
+    installCanvasPixelRatio(fixture.canvas, {
+      pixelRatio: () => ratio,
+      onRatioChange: (next) => order.push(`ratio ${next}`)
+    })
+
+    fixture.canvas.resize(800, 600)
+    fixture.canvas.resize(640, 480)
+    ratio = 1
+    refreshCanvasPixelRatio(fixture.canvas)
+
+    // First resize switches 1 -> 2, the second keeps 2, the refresh goes back
+    // to 1; the raster asset is rebuilt before the frame that will use it.
+    expect(order).toEqual(['ratio 2', 'dirty', 'dirty', 'ratio 1', 'dirty'])
+  })
+
   it('falls back to a sane ratio for bogus values', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => Number.NaN)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => Number.NaN })
 
     fixture.canvas.resize(800, 600)
 
@@ -238,7 +258,7 @@ describe('canvasCssSize / canvasViewportCenter', () => {
 
   it('map the middle of the CSS viewport into graph space', () => {
     const fixture = makeCanvas()
-    installCanvasPixelRatio(fixture.canvas, () => 2)
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 2 })
     fixture.canvas.resize(800, 600)
     fixture.ds.scale = 2
     fixture.ds.offset = [-50, -25]
