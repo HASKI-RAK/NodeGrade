@@ -63,7 +63,7 @@ const textarea = (
 ): NodePropertyDefinition => ({
   key,
   label,
-  control: { type: 'textarea', rows: 5 },
+  control: { type: 'textarea', rows: 8 },
   advanced: false,
   required: false,
   keyValue
@@ -184,7 +184,7 @@ const entries: readonly Entry[] = [
       {
         key: 'value',
         label: 'Prompt',
-        control: { type: 'textarea', rows: 7 },
+        control: { type: 'textarea', rows: 10 },
         advanced: false,
         required: true,
         keyValue: true

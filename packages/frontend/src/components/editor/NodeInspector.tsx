@@ -292,8 +292,13 @@ const PropertyEditor = ({
       helperText={error}
       disabled={unsupported}
       multiline={control.type === 'textarea'}
-      rows={control.type === 'textarea' ? (control.rows ?? 4) : undefined}
+      rows={control.type === 'textarea' ? (control.rows ?? 8) : undefined}
       type={control.type === 'number' ? 'number' : 'text'}
+      sx={
+        control.type === 'textarea'
+          ? { '& textarea': { resize: 'vertical', overflowY: 'auto', minHeight: 160 } }
+          : undefined
+      }
       onChange={(event) =>
         commit(
           control.type === 'number' ? Number(event.target.value) : event.target.value

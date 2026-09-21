@@ -40,7 +40,11 @@ export class Textfield extends LGraphNode {
     super()
     this.addOut('string')
     this.properties = { precision: 1, value: 'Enter your text' }
-    this.size = [200, 100]
+    // Room for ~7 wrapped lines out of the box; the bottom-right corner
+    // stays draggable (LiteGraph resizes unless `resizable === false`) and
+    // the wrapped preview re-flows into whatever size the user picks.
+    this.size = [300, 160]
+    this.resizable = true
     this.title = 'Textfield'
   }
 
