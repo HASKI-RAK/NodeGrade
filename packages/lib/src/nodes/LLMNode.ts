@@ -1,13 +1,37 @@
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
+import {
+  assertPromptContent,
+  normalizePromptMessages,
+  PromptMessageError
+} from './promptMessages'
 import type {
   ModelCatalogEntry,
   ModelCompletionRuntime,
   ModelParameter
 } from './types/ModelRef'
 import { isModelRef } from './types/ModelRef'
-import type { PromptMessageType } from './types/NodeLinkMessage'
+import type { InOut, PromptMessageType } from './types/NodeLinkMessage'
+
+/**
+ * What the singular `message` port accepts. `message` leads, so the port keeps
+ * the message color and arrow shape it has always had (SPEC-0019/FR-008).
+ */
+const MESSAGE_PORT: readonly InOut[] = ['message', 'string', '[message]']
+
+/**
+ * What the aggregate `messages` port accepts: the same, plus a list of plain
+ * strings (SPEC-0019/FR-001). Outputs typed `*` — `utils/concat-object`, above
+ * all — stay connectable, because LiteGraph treats a wildcard output as
+ * compatible with every input.
+ */
+const MESSAGES_PORT: readonly InOut[] = [
+  'message',
+  '[message]',
+  '[string]',
+  'string'
+]
 
 /** Language-model node. Provider credentials remain behind ModelCompletionRuntime. */
 export class LLMNode extends LGraphNode {
@@ -19,8 +43,8 @@ export class LLMNode extends LGraphNode {
 
   constructor() {
     super()
-    this.addIn('message')
-    this.addIn('*', 'messages')
+    this.addIn(MESSAGE_PORT, 'message')
+    this.addIn(MESSAGES_PORT, 'messages')
     this.addWidget(
       'number',
       'max_tokens',
@@ -104,11 +128,37 @@ export class LLMNode extends LGraphNode {
     this.runtime = runtime
   }
 
+  /**
+   * The message list this run sends, built from whatever the two ports
+   * delivered (SPEC-0019/FR-002, FR-003). Both ports contribute, in slot order,
+   * so a role-carrying system message on one port and a bare prompt string on
+   * the other compose into one conversation; an unwired port contributes
+   * nothing, which leaves every single-port graph sending exactly what it sent
+   * before (FR-005).
+   *
+   * Normalisation is per run and never written back into the graph.
+   */
   private messages(): PromptMessageType[] {
-    const message = this.getInputData<PromptMessageType | undefined>(0)
-    const messages = this.getInputData<PromptMessageType[] | undefined>(1)
-    if (message) return [message]
-    return messages ?? []
+    return [0, 1]
+      .filter((slot) => this.isInputConnected(slot))
+      .flatMap((slot) => {
+        try {
+          return normalizePromptMessages(this.getInputData<unknown>(slot))
+        } catch (cause) {
+          throw this.promptError(cause, this.inputs?.[slot]?.name ?? `input ${slot}`)
+        }
+      })
+  }
+
+  /**
+   * Re-raises a normalisation failure naming this node, and the port when the
+   * failure belongs to one, so the run error identifies where to look
+   * (SPEC-0019/FR-006).
+   */
+  private promptError(cause: unknown, port?: string): Error {
+    if (!(cause instanceof PromptMessageError)) return cause as Error
+    const where = port ? ` input "${port}"` : ''
+    return new Error(`Node "${this.title}"${where} ${cause.message}.`)
   }
 
   private parameters(): Partial<Record<ModelParameter, number>> {
@@ -133,9 +183,27 @@ export class LLMNode extends LGraphNode {
       throw new Error('Select an available provider and model before execution.')
     if (!this.runtime) throw new Error('Language-model runtime is unavailable.')
 
+    const messages = this.messages()
+    try {
+      assertPromptContent(messages)
+    } catch (cause) {
+      throw this.promptError(cause)
+    }
+    // The prompt is the one piece of a model call no output slot shows, so the
+    // trace carries it as node detail (SPEC-0019/FR-007).
+    this.executionDetails = [
+      {
+        slot: 0,
+        name: 'Prompt sent',
+        type: '[message]',
+        value: messages,
+        truncated: false
+      }
+    ]
+
     const result = await this.runtime.complete({
       modelRef,
-      messages: this.messages(),
+      messages,
       parameters: this.parameters(),
       signal: this.executionSignal
     })
@@ -145,7 +213,11 @@ export class LLMNode extends LGraphNode {
     this.setOutputData(0, result.text)
   }
 
-  onConfigure(_serialized: unknown): void {
+  onConfigure(serialized: unknown): void {
+    // Restores the widened message ports and the shared port styling; without
+    // this call a stored graph keeps the narrow slot types it was saved with
+    // (SPEC-0019/FR-008).
+    super.onConfigure(serialized)
     const modelRef = this.properties.model_ref
     if (isModelRef(modelRef)) {
       this.properties.model = modelRef.modelId

@@ -1,6 +1,7 @@
 import {
   INodeInputSlot,
   INodeOutputSlot,
+  INodeSlot,
   LGraphNode as LGN,
   LGraph,
   LiteGraph
@@ -8,8 +9,8 @@ import {
 import { WebSocket } from 'ws'
 
 import WebSocketNode from '../behavior/WebSocketNode'
-import { InOut } from '../types/NodeLinkMessage'
-import { ServerEventPayload } from '../../events'
+import { InOut, PortType, primaryLinkType, toSlotType } from '../types/NodeLinkMessage'
+import { ServerEventPayload, TraceOutput } from '../../events'
 import type { ModelExecutionWarning } from '../types/ModelRef'
 import type { NodeCategory } from '../NodeDefinition'
 
@@ -25,6 +26,7 @@ export const LINK_TYPE_COLORS: Record<InOut, string> = {
   message: '#FACC15',
   '[number]': '#22D3EE',
   '[string]': '#F472B6',
+  '[message]': '#FCD34D',
   image: '#FB923C',
   '*': '#E2E8F0'
 }
@@ -45,7 +47,21 @@ export const LINK_TYPE_SHAPES: Record<InOut, number> = {
   message: LiteGraph.ARROW_SHAPE,
   '[number]': GRID_SHAPE,
   '[string]': GRID_SHAPE,
+  '[message]': GRID_SHAPE,
   '*': LiteGraph.BOX_SHAPE
+}
+
+/**
+ * Color and shape a port is drawn with. A port that accepts several types
+ * (`message,string,[message]`) resolves to its primary type, so widening what
+ * a port accepts never gives it a second look (SPEC-0019/FR-008).
+ */
+export function getPortStyle(type: PortType | string): {
+  color: string | undefined
+  shape: number | undefined
+} {
+  const primary = primaryLinkType(type)
+  return { color: LINK_TYPE_COLORS[primary], shape: LINK_TYPE_SHAPES[primary] }
 }
 
 /** Pill fill per node category. The pill text names the node type; the fill keeps the category signal. */
@@ -103,12 +119,12 @@ interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
   init?(env: Record<string, unknown>): void
   env?: Record<string, unknown>
-  addOut<T extends InOut>(
+  addOut<T extends PortType>(
     type: T,
     name?: string,
     extra_info?: Partial<INodeOutputSlot>
   ): INodeOutputSlot
-  addIn(type: InOut, name?: string, extra_info?: Partial<INodeInputSlot>): INodeInputSlot
+  addIn(type: PortType, name?: string, extra_info?: Partial<INodeInputSlot>): INodeInputSlot
 }
 
 // extend the LGraphNode class by adding a new method
@@ -120,6 +136,23 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
 
   /** Transient warnings produced by the current execution. */
   executionWarnings?: ModelExecutionWarning[]
+
+  /**
+   * Transient trace rows a node wants shown next to its outputs, for detail
+   * that is not an output slot — the prompt a model node actually sent, for
+   * instance (SPEC-0019/FR-007). The runner renumbers their slots and
+   * sanitizes them exactly like real outputs.
+   */
+  executionDetails?: TraceOutput[]
+
+  /**
+   * Slot types as the constructor declared them, indexed by slot. `configure()`
+   * overwrites `inputs`/`outputs` with the types a graph was serialized with,
+   * so a port widened after that graph was saved would otherwise come back
+   * narrow; `onConfigure` restores these (SPEC-0019/FR-008). Never serialized.
+   */
+  private declaredInputTypes: string[] = []
+  private declaredOutputTypes: string[] = []
 
   emitEventCallback?(event: {
     eventName: keyof ServerEventPayload
@@ -182,14 +215,17 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @returns The added input slot.
    */
   addIn(
-    type: InOut,
+    type: PortType,
     name?: string | undefined,
     extra_info?: Partial<INodeInputSlot> | undefined
   ): INodeInputSlot {
-    const _name = name ?? type
-    return super.addInput(_name, type, {
-      ...LGraphNode.mapLinkTypeToColor(type),
-      shape: LINK_TYPE_SHAPES[type],
+    const slotType = toSlotType(type)
+    const _name = name ?? slotType
+    const { color, shape } = getPortStyle(type)
+    this.declaredInputTypes[this.inputs?.length ?? 0] = slotType
+    return super.addInput(_name, slotType, {
+      ...(color ? { color_off: color, color_on: color } : {}),
+      shape,
       ...extra_info
     })
   }
@@ -202,15 +238,18 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @param extra_info - Additional information for the output slot (optional).
    * @returns The added output slot.
    */
-  addOut<T extends InOut>(
+  addOut<T extends PortType>(
     type: T,
     name?: string,
     extra_info?: Partial<INodeOutputSlot>
   ): INodeOutputSlot {
-    const _name = name ?? type
-    return super.addOutput(_name, type, {
-      ...LGraphNode.mapLinkTypeToColor(type),
-      shape: LINK_TYPE_SHAPES[type],
+    const slotType = toSlotType(type)
+    const _name = name ?? slotType
+    const { color, shape } = getPortStyle(type)
+    this.declaredOutputTypes[this.outputs?.length ?? 0] = slotType
+    return super.addOutput(_name, slotType, {
+      ...(color ? { color_off: color, color_on: color } : {}),
+      shape,
       ...extra_info
     })
   }
@@ -226,22 +265,30 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
   }
 
   /**
-   * Reapplies the shared port style after `configure()` overwrites slots with
-   * serialized values. Old graphs carry translucent colors and no shape, so
-   * without this they keep the bleak look forever. Takes the serialized info
-   * so subclasses (LLMNode) can extend the signature without a type clash.
+   * Restores the port contract after `configure()` overwrites slots with
+   * serialized values. Two things drift: a graph saved before a port was
+   * widened carries the narrower slot type, and old graphs carry translucent
+   * colors and no shape, so without this they keep the bleak look forever.
+   * Declared types win over serialized ones (SPEC-0019/FR-008); link ids on
+   * the slot are left alone, so existing wires survive untouched. Takes the
+   * serialized info so subclasses (LLMNode) can extend the signature without
+   * a type clash.
    */
   onConfigure(_info?: unknown): void {
-    for (const slot of [...(this.inputs ?? []), ...(this.outputs ?? [])]) {
-      const type = slot.type as InOut
-      const color = LINK_TYPE_COLORS[type]
-      if (color) {
-        slot.color_off = color
-        slot.color_on = color
-      }
-      const shape = LINK_TYPE_SHAPES[type]
-      if (shape !== undefined) slot.shape = shape
+    const restyle = (slots: INodeSlot[], declared: string[]) => {
+      slots.forEach((slot, index) => {
+        const declaredType = declared[index]
+        if (declaredType) slot.type = declaredType
+        const { color, shape } = getPortStyle(String(slot.type))
+        if (color) {
+          slot.color_off = color
+          slot.color_on = color
+        }
+        if (shape !== undefined) slot.shape = shape
+      })
     }
+    restyle(this.inputs ?? [], this.declaredInputTypes)
+    restyle(this.outputs ?? [], this.declaredOutputTypes)
   }
 
   /**
@@ -385,9 +432,9 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @returns The color object corresponding to the link type.
    */
   static mapLinkTypeToColor(
-    type: InOut
+    type: PortType | string
   ): { color_off: string; color_on: string } | undefined {
-    const color = LINK_TYPE_COLORS[type]
+    const { color } = getPortStyle(type)
     if (!color) return undefined
     return { color_off: color, color_on: color }
   }

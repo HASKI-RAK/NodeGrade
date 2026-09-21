@@ -50,6 +50,9 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     inputs: [slot('string')],
     outputs: [slot('message')],
   },
+  // The message ports accept more types than these (SPEC-0019/FR-001). The
+  // narrow types stay here on purpose: `LGraphNode.onConfigure` restores the
+  // widened acceptance on load, so bundled content needs no reissue to gain it.
   'models/llm': {
     inputs: [slot('message'), slot('messages', '*')],
     outputs: [slot('string')],

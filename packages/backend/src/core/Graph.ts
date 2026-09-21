@@ -40,14 +40,26 @@ const makeTraceError = (
   message,
 });
 
-const captureOutputs = (node: LGraphNode): TraceOutput[] =>
-  (node.outputs ?? []).map((output, slot) => ({
+/**
+ * Trace rows for one finished node: its output slots, followed by whatever
+ * detail the node itself recorded (the prompt a model node sent, for instance
+ * — SPEC-0019/FR-007). Detail rows are renumbered past the real slots so every
+ * row keeps a distinct slot index for the trace view to key on.
+ */
+const captureOutputs = (node: LGraphNode): TraceOutput[] => {
+  const outputs: TraceOutput[] = (node.outputs ?? []).map((output, slot) => ({
     slot,
     name: output.name ?? `Output ${slot + 1}`,
     type: String(output.type ?? '*'),
     value: node.getOutputData(slot),
     truncated: false,
   }));
+  const details = (node.executionDetails ?? []).map((detail, index) => ({
+    ...detail,
+    slot: outputs.length + index,
+  }));
+  return [...outputs, ...details];
+};
 
 const abortPromise = (signal: AbortSignal): Promise<never> =>
   new Promise((_, reject) => {
@@ -174,6 +186,7 @@ export async function executeLgraph(
       options.signal?.removeEventListener('abort', forwardAbort);
       node.executionSignal = undefined;
       node.executionWarnings = undefined;
+      node.executionDetails = undefined;
     }
   }
   return lgraph;
