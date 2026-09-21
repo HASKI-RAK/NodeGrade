@@ -229,6 +229,48 @@ describe('wrapped text preview', () => {
     expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
   })
 
+  it('opens the editor scrolled to the top like the preview, with a scrollbar', () => {
+    const long = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join('\n')
+    const node = makeNode({ value: long }, [320, 120])
+    compactNodeWidgets(node)
+    node.onMouseDown?.(stubEvent(), [50, 60], stubCanvas() as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    // Overflowing text scrolls instead of being clipped, so the whole value
+    // is editable inline; horizontal overflow stays impossible.
+    expect(editor.style.overflowY).toBe('auto')
+    expect(editor.style.overflowX).toBe('hidden')
+    expect(editor.style.scrollbarGutter).toBe('stable')
+    // Mimic display mode: first line visible, caret before the first
+    // character rather than parked at the end (which would scroll down).
+    expect(editor.scrollTop).toBe(0)
+    expect(editor.selectionStart).toBe(0)
+    expect(editor.selectionEnd).toBe(0)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('widens the editor by the scrollbar lane so lines wrap like the preview', async () => {
+    const node = makeNode({ value: 'hello world, this is long enough' }, [320, 200])
+    compactNodeWidgets(node)
+    node.onMouseDown?.(stubEvent(), [50, 60], stubCanvas() as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const px = (value: string) => Number.parseFloat(value)
+    // jsdom lays nothing out (lane = 0), so the box is exactly the wrap width.
+    expect(px(editor.style.width)).toBeCloseTo(320 - 20)
+    // Pretend the browser reserved an 11px vertical scrollbar gutter inside
+    // the border box: the next frame adds it back to the outer width so the
+    // content box keeps the 300px wrap width.
+    Object.defineProperty(editor, 'offsetWidth', { configurable: true, get: () => 300 })
+    Object.defineProperty(editor, 'clientWidth', { configurable: true, get: () => 289 })
+    const nextFrame = () =>
+      new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+    await nextFrame()
+    await nextFrame()
+    expect(px(editor.style.width)).toBeCloseTo(320 - 20 + 11)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
   it('keeps explicit line breaks instead of collapsing whitespace', () => {
     const node = makeNode({ value: 'first line\nsecond line here' }, [320, 200])
     compactNodeWidgets(node)
