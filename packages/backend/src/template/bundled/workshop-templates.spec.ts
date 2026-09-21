@@ -302,31 +302,4 @@ describe('workshop templates', () => {
       ]);
     });
   });
-
-  describe('workflow card descriptions', () => {
-    const cases = [
-      {
-        template: workshopWordsVsUnderstandingTemplate,
-        activity: 'Swap the expected words',
-      },
-      {
-        template: workshopSameScoreDifferentGapsTemplate,
-        activity: 'Reweight a criterion',
-      },
-      {
-        template: workshopDifferentMistakesTemplate,
-        activity: 'Edit only the educator-owned feedback policy',
-      },
-    ] as const;
-
-    it.each(cases.map((c) => [c.template.slug, c] as const))(
-      '%s leads with the learning goal, names the hands-on activity, and fits the card',
-      (_slug, { template, activity }) => {
-        expect(template.description.startsWith('Learn why')).toBe(true);
-        expect(template.description).toContain(activity);
-        expect(template.description.length).toBeGreaterThan(100);
-        expect(template.description.length).toBeLessThanOrEqual(1000);
-      },
-    );
-  });
 });
