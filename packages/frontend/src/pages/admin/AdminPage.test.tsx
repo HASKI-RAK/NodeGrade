@@ -158,6 +158,93 @@ describe('provider administration', () => {
   })
 })
 
+describe('deployment default model', () => {
+  const settings = {
+    defaultModel: null as { providerKey: string; modelId: string } | null
+  }
+
+  beforeEach(() => {
+    settings.defaultModel = null
+    vi.mocked(apiRequest).mockReset()
+    vi.mocked(apiRequest).mockImplementation(async (path, options) => {
+      if (path === '/admin/auth/session')
+        return {
+          data: { enabled: true, authenticated: true },
+          response: new Response()
+        }
+      if (path === '/admin/providers' && options?.method !== 'POST')
+        return { data: { providers: [provider] }, response: new Response() }
+      if (path === '/admin/providers/provider-id/models')
+        return {
+          data: {
+            status: 'AVAILABLE',
+            models: [{ modelId: 'gpt-5', label: 'GPT-5', allowed: true }]
+          },
+          response: new Response()
+        }
+      if (path === '/admin/deployment-settings' && options?.method !== 'PUT')
+        return { data: { defaultModel: settings.defaultModel }, response: new Response() }
+      if (path === '/admin/deployment-settings') {
+        const body = options?.body as {
+          providerKey: string | null
+          modelId: string | null
+        }
+        settings.defaultModel =
+          body.providerKey && body.modelId
+            ? { providerKey: body.providerKey, modelId: body.modelId }
+            : null
+        return { data: { defaultModel: settings.defaultModel }, response: new Response() }
+      }
+      if (path === '/admin/execution-limits' && options?.method !== 'PUT')
+        return {
+          data: { limits: { workspaceConcurrentRuns: 2, providerConcurrentRequests: 8 } },
+          response: new Response()
+        }
+      return { data: { provider }, response: new Response() }
+    })
+  })
+
+  it('saves a deployment default model from an allowed catalog entry', async () => {
+    renderProviders()
+    await screen.findByRole('heading', { name: 'Default model' })
+    expect(screen.getByText(/Current default: none/i)).toBeVisible()
+
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Model' }))
+    await userEvent.click(screen.getByRole('option', { name: 'GPT-5' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save default' }))
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/admin/deployment-settings',
+        expect.objectContaining({
+          method: 'PUT',
+          body: { providerKey: 'openai', modelId: 'gpt-5' }
+        })
+      )
+    )
+    expect(await screen.findByText(/Current default: OpenAI \/ gpt-5/i)).toBeVisible()
+  })
+
+  it('clears a stored deployment default', async () => {
+    settings.defaultModel = { providerKey: 'openai', modelId: 'gpt-5' }
+    renderProviders()
+    expect(await screen.findByText(/Current default: OpenAI \/ gpt-5/i)).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        '/admin/deployment-settings',
+        expect.objectContaining({
+          method: 'PUT',
+          body: { providerKey: null, modelId: null }
+        })
+      )
+    )
+    expect(await screen.findByText(/Current default: none/i)).toBeVisible()
+  })
+})
+
 describe('workshop readiness view', () => {
   const readiness = {
     status: 'FAIL',

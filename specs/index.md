@@ -46,3 +46,4 @@ the required provider-management capabilities from SPEC-0009 are available.
 | SPEC-0013 | Feature | Facilitator authentication and administrative access | null      | Implemented |
 | SPEC-0014 | Feature | Workshop entity and join flow                        | SPEC-0001 | Implemented |
 | SPEC-0015 | Feature | Automated specification linting                      | SPEC-0008 | Implemented |
+| SPEC-0016 | Feature | Deployment default model                             | SPEC-0009 | Implemented |

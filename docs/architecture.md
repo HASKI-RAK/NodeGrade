@@ -96,6 +96,13 @@ runtime resolves a `ModelRef` (`providerKey` + model id) to a provider and its d
 key (ADR-0005). Trace outputs pass through `core/trace-sanitizer.ts` before leaving the
 process. A socket disconnect aborts that client's runs.
 
+Model selection falls back to the facilitator's deployment default: after the graph is
+configured, `GraphHandlerService` substitutes the effective default into every LLM node
+without an explicit `model_ref`, leaving stored workflow content untouched. The
+participant catalog (`GET /api/models`) carries that default as `defaultModel` whenever
+it is runnable, and in production the local model worker is filtered from the
+participant catalog and refused at execution — facilitator views stay unfiltered.
+
 Two server-side gates sit on that path. Each provider carries a model policy, and
 `ProviderRuntimeService` applies it twice: the catalog `GET /api/models` returns only
 permitted models, and `complete()` refuses a `ModelRef` the policy excludes before any

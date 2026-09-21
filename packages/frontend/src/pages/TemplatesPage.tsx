@@ -34,6 +34,71 @@ import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
 
 type PreviewNode = { id: number; type: string; title?: string }
 
+/**
+ * Method phrases highlighted inside workflow descriptions on the card.
+ * Longest first so "embedding similarity to a reference" wins over
+ * "embedding similarity". Matching is case-insensitive; the original
+ * casing is preserved in the output.
+ */
+const METHOD_TERMS = [
+  'embedding similarity to a reference',
+  'deterministic point aggregation',
+  'expected-words check',
+  'conceptual assessment',
+  'rubric-based scoring',
+  'deterministic aggregation',
+  'drafts feedback',
+  'review stage',
+  'criterion-based',
+  'criterion reports',
+  'cosine similarity',
+  'sentence-transformer',
+  'expected words',
+  'embedding similarity',
+  'keyword search',
+  'feedback policy',
+  'classification',
+  'classifies',
+  'extract-number',
+  'math nodes',
+  'LLM judgment',
+  'LLM grader',
+  'LLM classification',
+  'LLM feedback',
+  'LLM review',
+  'formative feedback',
+  'rubric criteria',
+  'rubric'
+]
+
+const METHOD_PATTERN = new RegExp(
+  `(${METHOD_TERMS.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+  'gi'
+)
+
+const TemplateDescription = ({ text }: { text: string | null }) => {
+  if (!text) return null
+  const parts = text.split(METHOD_PATTERN)
+  return (
+    <Typography sx={{ whiteSpace: 'pre-line' }}>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? <strong key={index}>{part}</strong> : part
+      )}
+    </Typography>
+  )
+}
+
+const TemplateTags = ({ tags }: { tags: string[] }) => {
+  if (tags.length === 0) return null
+  return (
+    <Stack direction="row" gap={0.5} mt={1} flexWrap="wrap" aria-label="Template methods">
+      {tags.map((tag) => (
+        <Chip key={tag} label={tag} size="small" variant="outlined" />
+      ))}
+    </Stack>
+  )
+}
+
 const graphStructure = (revision: TemplateRevision) => {
   const parsed = JSON.parse(revision.content) as {
     nodes?: PreviewNode[]
@@ -111,7 +176,8 @@ export const TemplatesPage = () => {
                   <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
                 </Stack>
                 <Typography variant="h6">{template.name}</Typography>
-                <Typography>{template.description}</Typography>
+                <TemplateDescription text={template.description} />
+                <TemplateTags tags={template.tags} />
               </CardContent>
               <CardActions>
                 <Button
@@ -149,7 +215,11 @@ export const TemplatesPage = () => {
         <DialogContent sx={{ minWidth: { sm: 480 } }}>
           {previewLoading && <CircularProgress />}
           {preview && !previewLoading && (
-            <TemplateStructure revision={preview.revision} />
+            <Stack spacing={2}>
+              <TemplateDescription text={preview.template.description} />
+              <TemplateTags tags={preview.template.tags} />
+              <TemplateStructure revision={preview.revision} />
+            </Stack>
           )}
         </DialogContent>
         <DialogActions>

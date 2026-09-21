@@ -124,7 +124,15 @@ Responsibilities:
 
 Primary entry points: `provider.service.ts`, `provider-runtime.service.ts`,
 `provider.controller.ts`, `model.controller.ts`, `provider-credential-cipher.ts`,
-`model-policy.ts`, `execution-limits.service.ts`, `execution-limits.controller.ts`
+`model-policy.ts`, `execution-limits.service.ts`, `execution-limits.controller.ts`,
+`deployment-settings.service.ts`, `deployment-settings.controller.ts`
+
+The facilitator's deployment default model lives in the `DeploymentSettings`
+singleton: model nodes without an explicit `model_ref` execute against it
+(substituted at run time, never persisted), and the participant catalog carries
+it as `defaultModel` only when it is runnable. In production the local model
+worker is filtered from the participant catalog and refused at execution, while
+the facilitator's per-provider views stay unfiltered.
 
 Related: shared types in `packages/lib/src/nodes/types/ModelRef.ts`; admin UI in
 `packages/frontend/src/pages/admin/AdminPage.tsx`

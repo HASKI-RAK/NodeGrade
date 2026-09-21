@@ -2,7 +2,8 @@ import {
   compactNodeWidgets,
   LiteGraph,
   loadLegacyWidgetProperties,
-  type ModelCatalogEntry
+  type ModelCatalogEntry,
+  type ModelRef
 } from '@haski/ta-lib'
 import {
   Alert,
@@ -101,6 +102,7 @@ export const Editor = () => {
   const [developerTools, setDeveloperTools] = useState(false)
   const [blocks, setBlocks] = useState<WorkflowTemplate[]>([])
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([])
+  const [defaultModel, setDefaultModel] = useState<ModelRef | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [connectionSuggestions, setConnectionSuggestions] = useState<
     ConnectionSuggestion[]
@@ -140,8 +142,14 @@ export const Editor = () => {
   useEffect(() => {
     void api
       .models()
-      .then((catalog) => setModelCatalog(catalog.models))
-      .catch(() => setModelCatalog([]))
+      .then((catalog) => {
+        setModelCatalog(catalog.models)
+        setDefaultModel(catalog.defaultModel)
+      })
+      .catch(() => {
+        setModelCatalog([])
+        setDefaultModel(null)
+      })
   }, [])
 
   useEffect(() => {
@@ -630,6 +638,7 @@ export const Editor = () => {
               selection={selection}
               history={history}
               modelCatalog={modelCatalog}
+              defaultModel={defaultModel}
               onOpenBlock={openBlock}
             />
           )}

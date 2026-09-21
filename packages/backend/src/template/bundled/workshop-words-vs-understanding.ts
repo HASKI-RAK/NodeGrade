@@ -166,7 +166,7 @@ export const workshopWordsVsUnderstandingTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 1 · Day and night: words are not the same as understanding',
   description:
-    'Compares three kinds of evidence about one answer to "Why do we have day and night?": expected words, embedding similarity to a reference, and a criterion-based conceptual assessment. Produces no grade on purpose.',
+    'Day and night — words are not the same as understanding. One student answer is examined three ways at once, with no grade on purpose.\n\nMethods: (1) Expected-words check — lexical keyword search for “rotation, axis, sunlight”; (2) Embedding similarity to a reference — sentence-transformer embeddings compared with cosine similarity, shown to 3 decimals; (3) Criterion-based conceptual assessment — LLM judgment (CORRECT / INCOMPLETE / MISCONCEPTION / UNCLEAR) with evidence, reason and next step.\n\nThe three branches stay separate — the model never sees the keyword or similarity results — so you can compare lexical match vs. semantic closeness vs. conceptual judgment. Try swapping the expected words or paraphrasing the answer and watch similarity move while the judgment may not.',
   category: 'Workshop',
   tags: [
     'tutorial',
