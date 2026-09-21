@@ -137,11 +137,12 @@ const FEEDBACK_INSTRUCTIONS = [
 const build = () => {
   const g = new GraphBuilder();
 
-  // Layout: 80px horizontal gaps between columns, 60px vertical gaps between
-  // stacked nodes, 40px group padding (80px top for the title bar) and 40px
-  // gaps between groups. Join chains use a 150px row pitch; criterion rows
-  // use a 360px pitch (260px rubric + 100px gap) so tall rubric and model
-  // nodes never touch the next row.
+  // Layout: node widths fit the rendered title plus the node-type pill (see
+  // LGraphNode.onDrawTitleBox), 80px horizontal gaps between columns, 60px
+  // vertical gaps between stacked nodes, 40px group padding (80px top for
+  // the title bar) and 80px gaps between groups so wires stay visible.
+  // Join chains use a 150px row pitch; criterion rows use a 360px pitch
+  // (260px rubric + 100px gap) so tall rubric and model nodes never touch.
   const JOIN_ROW_HEIGHT = 150;
 
   // Task context ---------------------------------------------------------------------
@@ -174,7 +175,7 @@ const build = () => {
   // Shared context -----------------------------------------------------------------------
   const context = g.join(
     'Task context',
-    [500, 80],
+    [540, 80],
     [question, referenceLabel, reference, answerLabel, answer],
     JOIN_ROW_HEIGHT,
   );
@@ -187,29 +188,29 @@ const build = () => {
     const y = rowTop(index);
     const rubric = g.textfield(
       `${criterion.title} rubric`,
-      [500, y],
+      [540, y],
       criterionInstructions(criterion),
       [340, 260],
     );
     const prompt = g.concat(
       `${criterion.title} prompt`,
-      [920, y],
+      [960, y],
       rubric,
       context,
     );
-    const grader = g.llmStage(`${criterion.title} grader`, [1240, y], prompt);
+    const grader = g.llmStage(`${criterion.title} grader`, [1350, y], prompt);
     const awarded = g.extractNumber(
       `${criterion.title} points`,
-      [1940, y],
+      [2210, y],
       grader,
     );
-    g.output(`Criterion report: ${criterion.title}`, [1940, y + 120], grader);
+    g.output(`Criterion report: ${criterion.title}`, [2210, y + 120], grader);
     reports.push(grader);
     points.push(awarded);
   });
   g.group(
     'Criterion scoring (one prompt per rubric criterion)',
-    [460, 0, 1780, 2070],
+    [500, 0, 2160, 2070],
     '#405775',
   );
 
@@ -222,51 +223,51 @@ const build = () => {
   ];
   const sum1 = g.math(
     'Sum 1 (Evaporation + Condensation)',
-    [2320, 900],
+    [2780, 900],
     '+',
     evaporation,
     condensation,
   );
   const sum2 = g.math(
     'Sum 2 (Rain + Collection)',
-    [2320, 1620],
+    [2780, 1620],
     '+',
     rain,
     collection,
   );
-  const total = g.math('Total points', [2620, 1260], '+', sum1, sum2);
-  g.output('Proposed points / 8', [2920, 1260], total);
+  const total = g.math('Total points', [3280, 1260], '+', sum1, sum2);
+  g.output('Proposed points / 8', [3780, 1260], total);
   g.group(
     'Add the scores without another model',
-    [2280, 820, 940, 930],
+    [2740, 820, 1530, 930],
     '#6f621f',
   );
 
   // Formative feedback from the criterion reports ---------------------------------------
-  const feedbackTop = 2190;
+  const feedbackTop = 2230;
   const feedbackInstructions = g.textfield(
     'Feedback instructions',
-    [500, feedbackTop],
+    [540, feedbackTop],
     FEEDBACK_INSTRUCTIONS,
     [340, 300],
   );
   const joinedReports = g.join(
     'Criterion reports',
-    [920, feedbackTop],
+    [960, feedbackTop],
     reports,
     JOIN_ROW_HEIGHT,
   );
   const feedbackPrompt = g.join(
     'Feedback prompt',
-    [1240, feedbackTop],
+    [1350, feedbackTop],
     [feedbackInstructions, context, reportsLabel, joinedReports],
     JOIN_ROW_HEIGHT,
   );
-  const feedback = g.llmStage('Feedback', [1560, feedbackTop], feedbackPrompt);
-  g.output('What to improve next', [2260, feedbackTop], feedback);
+  const feedback = g.llmStage('Feedback', [1740, feedbackTop], feedbackPrompt);
+  g.output('What to improve next', [2600, feedbackTop], feedback);
   g.group(
     'Feedback from the missing criterion',
-    [460, 2110, 2100, 500],
+    [500, 2150, 2550, 500],
     '#5b3d6e',
   );
 

@@ -241,7 +241,7 @@ export class GraphBuilder {
       type: 'utils/concat-string',
       title,
       pos,
-      size: [240, 80],
+      size: [310, 80],
       properties: { value: '', space: true },
       widgetsValues: [true],
     });
@@ -284,7 +284,7 @@ export class GraphBuilder {
       type: 'basic/prompt-message',
       title,
       pos,
-      size: [260, 80],
+      size: [380, 80],
       properties: { value: { role: 'user', content: '' } },
       widgetsValues: ['user'],
     });
@@ -310,7 +310,7 @@ export class GraphBuilder {
     return node;
   }
 
-  /** Prompt text → message → model in one call. Returns the LLM node. */
+  /** Prompt text → message (380 wide) → model in one call, with an 80px gap between message and model. Returns the LLM node. */
   llmStage(
     title: string,
     pos: [number, number],
@@ -320,7 +320,7 @@ export class GraphBuilder {
     const message = this.promptMessage(`${title} message`, pos, prompt);
     return this.llm(
       `${title} model`,
-      [pos[0] + 300, pos[1]],
+      [pos[0] + 460, pos[1]],
       message,
       settings,
     );
@@ -335,7 +335,7 @@ export class GraphBuilder {
       type: 'preprocessing/extract-number',
       title,
       pos,
-      size: [220, 60],
+      size: [320, 60],
       properties: { value: '' },
     });
     this.link(source, 0, node, 0);
@@ -353,7 +353,7 @@ export class GraphBuilder {
       type: 'math/math-operation',
       title,
       pos,
-      size: [220, 90],
+      size: [420, 90],
       properties: { operation, valueOne: 0, valueTwo: 0 },
       widgetsValues: [operation],
     });
@@ -372,7 +372,7 @@ export class GraphBuilder {
       type: 'math/precision',
       title,
       pos,
-      size: [220, 80],
+      size: [260, 80],
       properties: { value: -1, precision: digits },
       widgetsValues: [digits],
     });
@@ -412,7 +412,7 @@ export class GraphBuilder {
       type: 'models/sentence-transformer',
       title,
       pos,
-      size: [260, 60],
+      size: [460, 60],
       properties: { value: -1 },
     });
     this.link(source, 0, node, 0);
@@ -429,7 +429,7 @@ export class GraphBuilder {
       type: 'models/cosine-similarity',
       title,
       pos,
-      size: [260, 80],
+      size: [300, 80],
       properties: { value: -1 },
     });
     this.link(left, 0, node, 0);
@@ -448,7 +448,7 @@ export class GraphBuilder {
       type: 'output/output',
       title: `${label} output`,
       pos,
-      size: [260, 80],
+      size: [410, 80],
       properties: { uniqueId: '', type, label, value: '' },
       widgetsValues: [label, type],
     });
