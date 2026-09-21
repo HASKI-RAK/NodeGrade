@@ -98,4 +98,44 @@ describe('TemplatesPage', () => {
     expect(structure).toHaveTextContent('Assessment model')
     expect(structure).toHaveTextContent('models/llm · node 8')
   })
+
+  it('highlights workflow methods and shows method tags on the card', async () => {
+    vi.mocked(api.templates).mockResolvedValue([
+      {
+        id: 'workflow-1',
+        slug: 'workshop-words-vs-understanding',
+        kind: 'WORKFLOW' as const,
+        name: 'Workshop 1 · Day and night',
+        description:
+          'Methods: (1) Expected-words check; (2) Embedding similarity to a reference with cosine similarity; (3) Criterion-based conceptual assessment. Rubric-based scoring with deterministic point aggregation. Classifies answers, drafts feedback, and adds a review stage.',
+        category: 'Workshop',
+        tags: ['keyword', 'similarity', 'katalyst'],
+        currentRevision: 1
+      }
+    ])
+
+    render(
+      <MemoryRouter>
+        <TemplatesPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('Workshop 1 · Day and night')).toBeVisible()
+    // Method phrases render bold on the card.
+    expect(screen.getByText('Expected-words check', { selector: 'strong' })).toBeVisible()
+    expect(
+      screen.getByText('Embedding similarity to a reference', { selector: 'strong' })
+    ).toBeVisible()
+    expect(screen.getByText('cosine similarity', { selector: 'strong' })).toBeVisible()
+    expect(screen.getByText('Rubric-based scoring', { selector: 'strong' })).toBeVisible()
+    expect(
+      screen.getByText('deterministic point aggregation', { selector: 'strong' })
+    ).toBeVisible()
+    expect(screen.getByText('Classifies', { selector: 'strong' })).toBeVisible()
+    expect(screen.getByText('drafts feedback', { selector: 'strong' })).toBeVisible()
+    expect(screen.getByText('review stage', { selector: 'strong' })).toBeVisible()
+    // Tags surface as method chips.
+    expect(screen.getByText('keyword')).toBeVisible()
+    expect(screen.getByText('similarity')).toBeVisible()
+  })
 })
