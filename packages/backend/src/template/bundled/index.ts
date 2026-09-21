@@ -1,8 +1,14 @@
 import type { BundledTemplate } from './bundled-template.js';
+import { answerClassifierBlock } from './answer-classifier-block.js';
 import { demoWorkflowTemplate } from './demo-workflow.js';
 import { extendedAssessmentLabTemplate } from './extended-assessment-lab.js';
 import { feedbackGeneratorBlock } from './feedback-generator-block.js';
+import { keywordCoverageBlock } from './keyword-coverage-block.js';
+import { rubricScorerBlock } from './rubric-scorer-block.js';
+import { scoreBlenderBlock } from './score-blender-block.js';
+import { similarityScorerBlock } from './similarity-scorer-block.js';
 import { simpleLlmFeedbackTemplate } from './simple-llm-feedback.js';
+import { validationReviewBlock } from './validation-review-block.js';
 import { waieAssessmentTemplate } from './waie-assessment.js';
 import { workshopDifferentMistakesTemplate } from './workshop-different-mistakes.js';
 import { workshopSameScoreDifferentGapsTemplate } from './workshop-same-score-different-gaps.js';
@@ -20,6 +26,12 @@ export const BUNDLED_TEMPLATES: BundledTemplate[] = [
   extendedAssessmentLabTemplate,
   simpleLlmFeedbackTemplate,
   feedbackGeneratorBlock,
+  rubricScorerBlock,
+  answerClassifierBlock,
+  similarityScorerBlock,
+  keywordCoverageBlock,
+  scoreBlenderBlock,
+  validationReviewBlock,
 ];
 
 export const WORKSHOP_TEMPLATES: BundledTemplate[] = [
