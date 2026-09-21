@@ -62,10 +62,12 @@ const makeNode = (properties: Record<string, unknown>, size: [number, number]) =
   return node
 }
 
-const stubCanvas = () => ({
+const stubCanvas = (scale = 1, offset: [number, number] = [0, 0]) => ({
   allow_interaction: true,
-  ds: { scale: 1 },
-  convertOffsetToCanvas: (pos: [number, number]) => pos,
+  ds: { scale },
+  // Mirror LiteGraph's DragAndScale.convertOffsetToCanvas: (pos + offset) * scale.
+  convertOffsetToCanvas: (pos: [number, number]) =>
+    [(pos[0] + offset[0]) * scale, (pos[1] + offset[1]) * scale] as [number, number],
   setDirty: vi.fn(),
   canvas: {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
@@ -196,6 +198,34 @@ describe('wrapped text preview', () => {
     node.properties.value = 'unsaved draft'
     editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(node.properties.value).toBe('original text here')
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('keeps the inline editor inside the node body when zoomed out', () => {
+    const node = makeNode({ value: 'hello world, this is long enough' }, [300, 160])
+    compactNodeWidgets(node)
+    node.pos = [100, 50]
+    const scale = 0.5
+    const offset: [number, number] = [20, 10]
+    const canvas = stubCanvas(scale, offset)
+    node.onMouseDown?.(stubEvent(), [50, 60], canvas as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const top = wrappedTextTop(node)
+    const px = (value: string) => Number.parseFloat(value)
+    // Origin: (node x + PAD_X, node y + top) through pan + zoom.
+    expect(px(editor.style.left)).toBeCloseTo((100 + 10 + offset[0]) * scale)
+    expect(px(editor.style.top)).toBeCloseTo((50 + top + offset[1]) * scale)
+    // Extents shrink with zoom exactly like the canvas-drawn preview does.
+    expect(px(editor.style.width)).toBeCloseTo((300 - 20) * scale)
+    expect(px(editor.style.height)).toBeCloseTo((160 - top - 8 + 4) * scale)
+    expect(px(editor.style.fontSize)).toBeCloseTo(13 * scale)
+    expect(px(editor.style.lineHeight)).toBeCloseTo(17 * scale)
+    // The overlay's far edges never spill past the node body on screen.
+    const nodeRight = (100 + 300 + offset[0]) * scale
+    const nodeBottom = (50 + 160 + offset[1]) * scale
+    expect(px(editor.style.left) + px(editor.style.width)).toBeLessThanOrEqual(nodeRight)
+    expect(px(editor.style.top) + px(editor.style.height)).toBeLessThanOrEqual(nodeBottom)
+    editor.blur()
     expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
   })
 

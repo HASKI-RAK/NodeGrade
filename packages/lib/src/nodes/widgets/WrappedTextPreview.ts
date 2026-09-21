@@ -370,19 +370,27 @@ export const startInlineEdit = (
     if (!input.isConnected) return
     const rect = host.getBoundingClientRect()
     const top = wrappedTextTop(node)
+    // Text origin in graph units (node origin + horizontal padding + port
+    // rows), converted once: convertOffsetToCanvas applies pan and zoom.
     const [canvasX, canvasY] = canvas.convertOffsetToCanvas([
-      node.pos[0],
+      node.pos[0] + WRAPPED_TEXT_PAD_X,
       node.pos[1] + top
     ])
+    // Canvas backing pixels → CSS pixels (identity unless the element is
+    // styled to a different size than its backing store).
     const cssPerUnitX = rect.width / host.width
     const cssPerUnitY = rect.height / host.height
+    // Graph units → CSS pixels for *extents* (width, height, font metrics).
+    // Unlike positions these are not routed through convertOffsetToCanvas,
+    // so the zoom factor has to be applied here; without it the overlay keeps
+    // its 1:1 footprint at every zoom level and spills out of the node body
+    // when zoomed out.
+    const scaleX = canvas.ds.scale * cssPerUnitX
     const scaleY = canvas.ds.scale * cssPerUnitY
-    input.style.left = `${rect.left + (canvasX + WRAPPED_TEXT_PAD_X) * cssPerUnitX}px`
-    // Text starts `top` graph units below the node origin, including the
-    // title offset; convertOffsetToCanvas already accounts for pan/zoom.
+    input.style.left = `${rect.left + canvasX * cssPerUnitX}px`
     input.style.top = `${rect.top + canvasY * cssPerUnitY}px`
-    input.style.width = `${Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2) * cssPerUnitX}px`
-    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * cssPerUnitY}px`
+    input.style.width = `${Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2) * scaleX}px`
+    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * scaleY}px`
     input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scaleY}px`
     input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scaleY}px`
     animationFrameId = window.requestAnimationFrame(updateInputBounds)
