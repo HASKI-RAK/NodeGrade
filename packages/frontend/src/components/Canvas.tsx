@@ -4,6 +4,7 @@ import { LGraphCanvas, type LGraphNode } from 'litegraph.js'
 import { useEffect, useRef } from 'react'
 
 import { installDebugBridge } from '@/utils/debugBridge'
+import { installNodeConnectionHighlight } from '@/utils/nodeConnectionHighlight'
 
 type CanvasProps = {
   lgraph: LGraph
@@ -33,6 +34,7 @@ const Canvas = (props: CanvasProps) => {
         lcanvas.current.render_connections_shadows = false
         lcanvas.current.render_shadows = false
         lcanvas.current.connections_width = 3
+        installNodeConnectionHighlight(lcanvas.current)
         // Dark blue-gray canvas + grid tile that the node fills are tuned
         // against (see CANVAS_THEME); LiteGraph's stock #222 barely separates
         // from the node bodies.
