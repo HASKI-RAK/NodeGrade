@@ -62,7 +62,11 @@ const makeNode = (properties: Record<string, unknown>, size: [number, number]) =
   return node
 }
 
-const stubCanvas = (scale = 1, offset: [number, number] = [0, 0]) => ({
+const stubCanvas = (
+  scale = 1,
+  offset: [number, number] = [0, 0],
+  backing: [number, number] = [800, 600]
+) => ({
   allow_interaction: true,
   ds: { scale },
   // Mirror LiteGraph's DragAndScale.convertOffsetToCanvas: (pos + offset) * scale.
@@ -71,8 +75,8 @@ const stubCanvas = (scale = 1, offset: [number, number] = [0, 0]) => ({
   setDirty: vi.fn(),
   canvas: {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
-    width: 800,
-    height: 600
+    width: backing[0],
+    height: backing[1]
   }
 })
 
@@ -225,6 +229,28 @@ describe('wrapped text preview', () => {
     const nodeBottom = (50 + 160 + offset[1]) * scale
     expect(px(editor.style.left) + px(editor.style.width)).toBeLessThanOrEqual(nodeRight)
     expect(px(editor.style.top) + px(editor.style.height)).toBeLessThanOrEqual(nodeBottom)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('places the editor in CSS pixels even when the bitmap is denser', () => {
+    // Device-pixel-ratio rendering keeps a 1600x1200 bitmap behind an 800x600
+    // element; LiteGraph's screen space stays in CSS pixels, so the overlay
+    // must not shrink or shift with the bitmap.
+    const node = makeNode({ value: 'hello world, this is long enough' }, [300, 160])
+    compactNodeWidgets(node)
+    node.pos = [100, 50]
+    const scale = 0.5
+    const offset: [number, number] = [20, 10]
+    const canvas = stubCanvas(scale, offset, [1600, 1200])
+    node.onMouseDown?.(stubEvent(), [50, 60], canvas as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const top = wrappedTextTop(node)
+    const px = (value: string) => Number.parseFloat(value)
+    expect(px(editor.style.left)).toBeCloseTo((100 + 10 + offset[0]) * scale)
+    expect(px(editor.style.top)).toBeCloseTo((50 + top + offset[1]) * scale)
+    expect(px(editor.style.width)).toBeCloseTo((300 - 20) * scale)
+    expect(px(editor.style.fontSize)).toBeCloseTo(13 * scale)
     editor.blur()
     expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
   })

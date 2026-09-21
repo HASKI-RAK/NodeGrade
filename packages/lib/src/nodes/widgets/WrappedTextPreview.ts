@@ -384,22 +384,21 @@ export const startInlineEdit = (
     const rect = host.getBoundingClientRect()
     const top = wrappedTextTop(node)
     // Text origin in graph units (node origin + horizontal padding + port
-    // rows), converted once: convertOffsetToCanvas applies pan and zoom.
+    // rows), converted once: convertOffsetToCanvas applies pan and zoom and
+    // yields CSS pixels relative to the canvas element - LiteGraph's screen
+    // space, the same one its mouse handling uses. The bitmap may be denser
+    // than that (device-pixel-ratio rendering), so never derive a scale from
+    // `host.width`.
     const [canvasX, canvasY] = canvas.convertOffsetToCanvas([
       node.pos[0] + WRAPPED_TEXT_PAD_X,
       node.pos[1] + top
     ])
-    // Canvas backing pixels → CSS pixels (identity unless the element is
-    // styled to a different size than its backing store).
-    const cssPerUnitX = rect.width / host.width
-    const cssPerUnitY = rect.height / host.height
     // Graph units → CSS pixels for *extents* (width, height, font metrics).
     // Unlike positions these are not routed through convertOffsetToCanvas,
     // so the zoom factor has to be applied here; without it the overlay keeps
     // its 1:1 footprint at every zoom level and spills out of the node body
     // when zoomed out.
-    const scaleX = canvas.ds.scale * cssPerUnitX
-    const scaleY = canvas.ds.scale * cssPerUnitY
+    const scale = canvas.ds.scale
     // The scrollbar lane lives inside the border box and would narrow the
     // content box below the preview's wrap width, breaking lines in different
     // places. Measure the lane (no border, no padding: border box minus
@@ -408,12 +407,12 @@ export const startInlineEdit = (
     // scrollbar platforms and in jsdom.
     const scrollbarLane = Math.max(0, input.offsetWidth - input.clientWidth)
     const wrapWidth = Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2)
-    input.style.left = `${rect.left + canvasX * cssPerUnitX}px`
-    input.style.top = `${rect.top + canvasY * cssPerUnitY}px`
-    input.style.width = `${wrapWidth * scaleX + scrollbarLane}px`
-    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * scaleY}px`
-    input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scaleY}px`
-    input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scaleY}px`
+    input.style.left = `${rect.left + canvasX}px`
+    input.style.top = `${rect.top + canvasY}px`
+    input.style.width = `${wrapWidth * scale + scrollbarLane}px`
+    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * scale}px`
+    input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scale}px`
+    input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scale}px`
     animationFrameId = window.requestAnimationFrame(updateInputBounds)
   }
 

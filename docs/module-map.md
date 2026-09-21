@@ -183,6 +183,12 @@ Primary entry points: `components/Canvas.tsx`, `components/editor/EditorToolbar.
 `hooks/useSocket.ts`, `hooks/useServerEvents.ts`, `hooks/useWorkflowForm.ts`,
 `i18n/preview.ts`, `utils/graphBlocks.ts`
 
+LiteGraph canvas installers live in `utils/`: `canvasPixelRatio.ts` (device-pixel-ratio
+bitmap behind a CSS-pixel coordinate system; `canvasCssSize`/`canvasViewportCenter` for
+viewport maths), `nodeConnectionHighlight.ts` (hover/selection wire accent),
+`subgraphChrome.ts` (hides LiteGraph's own subgraph banner and panels; the breadcrumb in
+`Editor.tsx` owns block navigation) and `debugBridge.ts` (`window.__NODEGRADE_DEBUG__`).
+
 The preview's question and answer-length bounds come from the open graph through
 `hooks/useWorkflowForm.ts`; its participant-facing strings live in `i18n/preview.ts`.
 

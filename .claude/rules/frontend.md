@@ -21,6 +21,10 @@ paths:
 - Editor state flows through the existing hooks — `useSocket`, `useServerEvents`,
   `useAutosave`, `useGraphHistory`, `useGraphOperations`, `useWorkspaceSession` — rather
   than new ad-hoc effects around the LiteGraph instance.
+- The LiteGraph canvas renders at device pixel ratio (`@/utils/canvasPixelRatio`), so
+  `canvas.canvas.width/height` are backing pixels while LiteGraph's screen space
+  (`convertOffsetToCanvas`, mouse events) stays in CSS pixels. Viewport maths goes through
+  `canvasCssSize`/`canvasViewportCenter`; never derive a scale from the bitmap size.
 - Participant-facing preview strings belong in `@/i18n/preview` (EN and DE), never inline
   in a component; the preview's question and answer-length bounds come from the open graph
   through `useWorkflowForm`, not from run events or component defaults.
