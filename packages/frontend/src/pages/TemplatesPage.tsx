@@ -104,16 +104,32 @@ export const TemplatesPage = () => {
       <Grid container spacing={2}>
         {visibleTemplates?.map((template) => (
           <Grid key={template.id} size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
+            <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <CardContent sx={{ flexGrow: 1 }}>
                 <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
                   <Chip label={template.kind === 'WORKFLOW' ? 'Workflow' : 'Block'} />
                   <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
                 </Stack>
-                <Typography variant="h6">{template.name}</Typography>
-                <Typography>{template.description}</Typography>
+                <Typography variant="h6" gutterBottom>
+                  {template.name}
+                </Typography>
+                {template.description && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      textWrap: 'balance',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 5,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {template.description}
+                  </Typography>
+                )}
               </CardContent>
-              <CardActions>
+              <CardActions sx={{ mt: 'auto', pt: 0 }}>
                 <Button
                   onClick={async () => {
                     setPreviewLoading(true)
