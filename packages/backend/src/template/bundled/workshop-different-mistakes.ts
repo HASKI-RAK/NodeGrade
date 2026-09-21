@@ -280,7 +280,7 @@ export const workshopDifferentMistakesTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 3 · Sharing a pizza: different mistakes need different help',
   description:
-    'Classifies an explanation of why one half is larger than one quarter into one of five answer types, drafts feedback from an educator-owned policy, and adds a review stage that recommends educator inspection.',
+    'Learn why different mistakes need different teaching moves. Edit only the educator-owned feedback policy and watch the diagnosis stay fixed while the feedback draft and review change. Classifies a halves-vs-quarters explanation into five answer types, drafts policy-driven feedback, and recommends when an educator should look.',
   category: 'Workshop',
   tags: [
     'tutorial',
