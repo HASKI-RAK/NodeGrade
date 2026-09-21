@@ -126,19 +126,62 @@ describe('bundled templates', () => {
       (template) => [template.slug, template] as const,
     ),
   )(
-    '%s declares interfaces that resolve to real nodes (FR-019)',
+    '%s declares interfaces that resolve to real slots (FR-019)',
     (_slug, template) => {
       expect(isBlockInterfaces(template.interfaces)).toBe(true);
 
-      const nodeIds = new Set(template.content.nodes.map((node) => node.id));
+      const byId = new Map(template.content.nodes.map((node) => [node.id, node]));
       const ports = template.interfaces?.boundary ?? [];
 
       expect(ports.length).toBeGreaterThan(0);
+      const keys = new Set<string>();
       for (const port of ports) {
-        expect(nodeIds.has(port.internalNodeId)).toBe(true);
+        expect(keys.has(port.key)).toBe(false);
+        keys.add(port.key);
+        const node = byId.get(port.internalNodeId);
+        expect(node).toBeDefined();
+        const slots =
+          port.direction === 'input' ? node?.inputs : node?.outputs;
+        expect(slots?.[port.internalSlot]).toBeDefined();
       }
     },
   );
+
+  it.each(
+    BUNDLED_TEMPLATES.filter(
+      (template) =>
+        template.kind === 'BLOCK' &&
+        template.content.nodes.some((node) => node.type === 'models/llm'),
+    ).map((template) => [template.slug, template] as const),
+  )(
+    '%s leaves its LLM nodes to the deployment default (SPEC-0016)',
+    (_slug, template) => {
+      for (const node of template.content.nodes) {
+        if (node.type !== 'models/llm') continue;
+        const properties = (node.properties ?? {}) as Record<string, unknown>;
+        expect(properties.model_ref).toBeNull();
+        expect(properties.needs_model_selection).toBe(true);
+      }
+    },
+  );
+
+  it('ships the canonical SPEC-0003/FR-021 block library', () => {
+    const blocks = new Set(
+      BUNDLED_TEMPLATES.filter((template) => template.kind === 'BLOCK').map(
+        (template) => template.slug,
+      ),
+    );
+    for (const slug of [
+      'feedback-generator',
+      'rubric-scorer',
+      'answer-classifier',
+      'similarity-scorer',
+      'keyword-coverage',
+      'score-blender',
+      'validation-review',
+    ])
+      expect(blocks.has(slug)).toBe(true);
+  });
 
   it('gives workflow templates no interfaces', () => {
     for (const template of BUNDLED_TEMPLATES) {
