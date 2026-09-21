@@ -1,16 +1,23 @@
 from sentence_transformers import SentenceTransformer
+from huggingface_hub import snapshot_download
 import flask
 import werkzeug
 import dotenv
+import os
 
 # import cors:
 from flask_cors import CORS
 
 dotenv.load_dotenv()
-# model = SentenceTransformer("all-MiniLM-L6-v2")
-model = SentenceTransformer(
-    "sentence-transformers/all-mpnet-base-v2"
-)  # 384 word pieces max
+# Download the PyTorch model and tokenizer while skipping alternate runtime
+# exports. sentence-transformers 2.2 otherwise fetches every ONNX variant in
+# this repository before the Flask service can start.
+model_path = snapshot_download(
+    repo_id="sentence-transformers/all-mpnet-base-v2",
+    cache_dir=os.environ.get("HF_HOME", "/models-cache"),
+    ignore_patterns=["*.onnx", "*.ot", "*.h5", "openvino/*"],
+)
+model = SentenceTransformer(model_path)  # 384 word pieces max
 # print(model.encode("This is a test sentence"))  # warm up
 print("Model loaded")
 

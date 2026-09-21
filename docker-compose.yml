@@ -15,6 +15,27 @@ services:
       timeout: 5s
       retries: 10
 
+  models:
+    build:
+      context: ./models
+      dockerfile: Dockerfile
+    ports:
+      - '8002:8002'
+    volumes:
+      - model_cache:/models-cache
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=5)"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+
   backend:
     build:
       context: .
@@ -40,6 +61,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      models:
+        condition: service_healthy
 
   frontend:
     build:
@@ -52,3 +75,4 @@ services:
 
 volumes:
   db_data:
+  model_cache:

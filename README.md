@@ -223,10 +223,10 @@ change applies without a restart.
 
 ## Deployment
 
-`docker-compose.yml` builds and runs the deployable stack: PostgreSQL, the backend on port
-5000, and the frontend on port 8080. It expects the model and similarity workers to be
-reachable at `MODEL_WORKER_URL` and `SIMILARITY_WORKER_URL`; `models/Dockerfile` builds the
-Python worker that serves them.
+`docker-compose.yml` builds and runs the deployable stack: PostgreSQL, the sentence-
+transformer worker on port 8002, the backend on port 5000, and the frontend on port 8080.
+The backend reaches the embedding worker through the Compose network at `models:8002`.
+`MODEL_WORKER_URL` remains the address of an OpenAI-compatible text-generation worker.
 
 ```bash
 PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
