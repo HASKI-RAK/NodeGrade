@@ -1,4 +1,4 @@
-import { LGraph } from '@haski/ta-lib';
+import { LGraph, LLMNode } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { XapiService } from '../xapi.service.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
@@ -34,7 +34,9 @@ const service = (
         .mockResolvedValue(JSON.stringify(new LGraph().serialize())),
     } as unknown as WorkflowService,
     {} as XapiService,
-    {} as ProviderRuntimeService,
+    {
+      defaultModel: jest.fn().mockResolvedValue(null),
+    } as unknown as ProviderRuntimeService,
     {
       get: jest.fn().mockResolvedValue({
         ...DEFAULT_EXECUTION_LIMITS,
@@ -42,6 +44,97 @@ const service = (
       }),
     } as unknown as ExecutionLimitsService,
   );
+
+describe('GraphHandlerService default model substitution', () => {
+  const fallback = { providerKey: 'openai', modelId: 'gpt-5' };
+  const handlerWith = (defaultModel: jest.Mock) =>
+    new GraphHandlerService(
+      {
+        getExecutionContent: jest.fn(),
+      } as unknown as WorkflowService,
+      {} as XapiService,
+      { defaultModel } as unknown as ProviderRuntimeService,
+      {
+        get: jest.fn().mockResolvedValue(DEFAULT_EXECUTION_LIMITS),
+      } as unknown as ExecutionLimitsService,
+    );
+  const llmGraph = (
+    properties: Record<string, unknown>,
+  ): InstanceType<typeof LGraph> => {
+    const graph = new LGraph();
+    graph.configure({
+      nodes: [
+        {
+          id: 1,
+          type: 'models/llm',
+          pos: [0, 0],
+          properties: {
+            value: '',
+            model: '',
+            model_ref: null,
+            needs_model_selection: true,
+            ...properties,
+          },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    });
+    return graph;
+  };
+  const applyDefault = (
+    handler: GraphHandlerService,
+    graph: InstanceType<typeof LGraph>,
+  ): Promise<void> =>
+    (
+      handler as unknown as {
+        applyDefaultModel: (
+          lgraph: InstanceType<typeof LGraph>,
+        ) => Promise<void>;
+      }
+    ).applyDefaultModel(graph);
+
+  it('fills model nodes without a selection from the deployment default', async () => {
+    const handler = handlerWith(jest.fn().mockResolvedValue(fallback));
+    const graph = llmGraph({});
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toEqual(fallback);
+    expect(node.properties.model).toBe('gpt-5');
+    expect(node.properties.needs_model_selection).toBe(false);
+  });
+
+  it('leaves explicitly configured nodes and stored content alone', async () => {
+    const configured = {
+      model_ref: { providerKey: 'openai', modelId: 'other' },
+      needs_model_selection: false,
+    };
+    const handler = handlerWith(jest.fn().mockResolvedValue(fallback));
+    const graph = llmGraph(configured);
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toEqual(configured.model_ref);
+    expect(node.properties.needs_model_selection).toBe(false);
+  });
+
+  it('leaves unconfigured nodes failing when no default is set', async () => {
+    const handler = handlerWith(jest.fn().mockResolvedValue(null));
+    const graph = llmGraph({});
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toBeNull();
+    expect(node.properties.needs_model_selection).toBe(true);
+  });
+});
 
 describe('GraphHandlerService run ownership', () => {
   it('creates unique run ids, correlates events, and cleans terminal runs', async () => {

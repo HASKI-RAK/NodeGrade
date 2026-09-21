@@ -299,6 +299,20 @@ model ExecutionLimits {
   updatedAt                  DateTime @updatedAt
 }
 
+/// Deployment-global defaults owned by the facilitator (SPEC-0016). Exactly one row,
+/// keyed by SINGLETON_ID. When set, every model node without an explicit `model_ref`
+/// executes against the default instead of failing with "select a model".
+model DeploymentSettings {
+  id String @id
+
+  /// Provider-qualified default model (ModelRef.providerKey). Null means no default:
+  /// every model node needs its own selection.
+  defaultProviderKey String?
+  defaultModelId     String?
+
+  updatedAt DateTime @updatedAt
+}
+
 // LTI Platform Registration
 model LtiPlatform {
   id                               Int                    @id @default(autoincrement())

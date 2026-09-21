@@ -60,6 +60,11 @@ export type ModelCatalogProviderStatus = {
 export type ModelCatalog = {
   models: ModelCatalogEntry[]
   providers: ModelCatalogProviderStatus[]
+  /**
+   * The facilitator's deployment-wide default. Nodes without an explicit `model_ref`
+   * execute against this model; `null` means every model node needs its own selection.
+   */
+  defaultModel: ModelRef | null
 }
 
 export type ModelExecutionWarning = {

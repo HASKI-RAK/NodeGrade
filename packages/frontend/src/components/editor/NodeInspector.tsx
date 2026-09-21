@@ -3,6 +3,7 @@ import {
   isModelRef,
   MODEL_PARAMETERS,
   type ModelCatalogEntry,
+  type ModelRef,
   type NodePropertyDefinition
 } from '@haski/ta-lib'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
@@ -79,12 +80,14 @@ const PropertyEditor = ({
   node,
   property,
   history,
-  modelCatalog
+  modelCatalog,
+  defaultModel
 }: {
   node: LGraphNode
   property: NodePropertyDefinition
   history: GraphHistory
   modelCatalog: ModelCatalogEntry[]
+  defaultModel?: ModelRef | null
 }) => {
   const [value, setValue] = useState(() => shownValue(node, property))
   const [error, setError] = useState<string | null>(null)
@@ -130,6 +133,18 @@ const PropertyEditor = ({
   if (control.type === 'model') {
     const selected = currentRef ? JSON.stringify(currentRef) : ''
     const unavailable = Boolean(currentRef && !selectedModel)
+    const needsSelection = node.properties.needs_model_selection === true
+    // Nodes without an explicit model run against the facilitator's deployment
+    // default, so they only demand a selection when no usable default exists.
+    const defaultEntry =
+      !currentRef && defaultModel
+        ? modelCatalog.find(
+            (entry) =>
+              entry.ref.providerKey === defaultModel.providerKey &&
+              entry.ref.modelId === defaultModel.modelId
+          )
+        : undefined
+    const showDefault = needsSelection && !currentRef && defaultEntry !== undefined
     return (
       <TextField
         {...common}
@@ -138,13 +153,15 @@ const PropertyEditor = ({
         size="small"
         label={property.label}
         value={selected}
-        error={unavailable || node.properties.needs_model_selection === true}
+        error={unavailable || (needsSelection && !showDefault)}
         helperText={
           unavailable
             ? 'Saved model is unavailable. Select another model.'
-            : node.properties.needs_model_selection === true
-              ? 'Select a provider and model.'
-              : undefined
+            : showDefault
+              ? `Using default model: ${defaultEntry.label} · ${defaultEntry.providerName}. Select another model to override it for this node.`
+              : needsSelection
+                ? 'Select a provider and model.'
+                : undefined
         }
         onChange={(event) => {
           const entry = modelCatalog.find(
@@ -312,11 +329,13 @@ export const NodeInspector = ({
   selection,
   history,
   modelCatalog = [],
+  defaultModel = null,
   onOpenBlock
 }: {
   selection: LGraphNode[]
   history: GraphHistory
   modelCatalog?: ModelCatalogEntry[]
+  defaultModel?: ModelRef | null
   onOpenBlock?: (node: LGraphNode) => void
 }) => {
   if (!selection.length)
@@ -421,6 +440,7 @@ export const NodeInspector = ({
             property={property}
             history={history}
             modelCatalog={modelCatalog}
+            defaultModel={defaultModel}
           />
         ))
       ) : (
@@ -440,6 +460,7 @@ export const NodeInspector = ({
                   property={property}
                   history={history}
                   modelCatalog={modelCatalog}
+                  defaultModel={defaultModel}
                 />
               ))}
             </Stack>

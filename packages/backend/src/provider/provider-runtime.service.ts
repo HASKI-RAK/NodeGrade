@@ -7,6 +7,7 @@ import {
 import { createOpenAI } from '@ai-sdk/openai';
 import {
   MODEL_PARAMETERS,
+  PROVIDER_KEY_LOCAL,
   type ModelCapabilities,
   type ModelCatalog,
   type ModelCatalogEntry,
@@ -14,6 +15,7 @@ import {
   type ModelCompletionResult,
   type ModelCompletionRuntime,
   type ModelParameter,
+  type ModelRef,
   type ProviderStatusCode,
 } from '@haski/ta-lib';
 import { generateText, type ModelMessage } from 'ai';
@@ -21,6 +23,8 @@ import {
   ConcurrencyGate,
   ConcurrencyLimitError,
 } from '../common/concurrency-gate.js';
+import { configuration } from '../config/configuration.js';
+import { DeploymentSettingsService } from './deployment-settings.service.js';
 import {
   DEFAULT_EXECUTION_LIMITS,
   ExecutionLimitsService,
@@ -103,6 +107,7 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
   constructor(
     private readonly providers: ProviderService,
     private readonly limits: ExecutionLimitsService,
+    private readonly settings: DeploymentSettingsService,
   ) {}
 
   invalidateCatalog(): void {
@@ -110,31 +115,78 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
   }
 
   /**
+   * The participant-effective default model: the facilitator's stored default, but
+   * only when it is actually runnable from here — enabled, permitted by its policy,
+   * and not filtered out of this deployment (the local worker is hidden in
+   * production). A stored default that fails any of those reads as no default, so
+   * callers never offer a fallback that execution would refuse.
+   */
+  async defaultModel(): Promise<ModelRef | null> {
+    const { defaultModel } = await this.settings.get();
+    if (!defaultModel) return null;
+    if (
+      configuration().nodeEnv === 'production' &&
+      defaultModel.providerKey === PROVIDER_KEY_LOCAL
+    )
+      return null;
+    try {
+      const provider = await this.providers.runtimeByKey(
+        defaultModel.providerKey,
+      );
+      if (!provider.enabled) return null;
+      if (!permitsModel(provider.policy, defaultModel.modelId)) return null;
+      return defaultModel;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * The user-visible catalog. Models a provider's policy does not permit are dropped
    * here, which is also what makes an allowlisted id that has vanished from the provider
    * simply stop appearing (SPEC-0012/FR-005, FR-006, FR-008).
+   *
+   * The local model worker is a deterministic debug stand-in, not a participant model:
+   * in production it is filtered from both the model and provider lists (SPEC-0016).
+   * The facilitator's per-provider view (`providerCatalog`) stays unfiltered, so the
+   * worker remains manageable.
    */
   async catalog(): Promise<ModelCatalog> {
     if (this.cached && this.cached.expiresAt > Date.now())
       return this.cached.value;
-    const providers = await this.providers.enabledRuntimeProviders();
+    const enabled = await this.providers.enabledRuntimeProviders();
+    const hideLocal = configuration().nodeEnv === 'production';
+    const providers = hideLocal
+      ? enabled.filter((provider) => provider.key !== PROVIDER_KEY_LOCAL)
+      : enabled;
     const results = await Promise.all(
       providers.map(async (provider) => ({
         provider,
         probe: await this.probe(provider),
       })),
     );
-    const value: ModelCatalog = {
-      models: results.flatMap(({ provider, probe }) =>
-        probe.models.filter((model) =>
-          permitsModel(provider.policy, model.ref.modelId),
-        ),
+    const models = results.flatMap(({ provider, probe }) =>
+      probe.models.filter((model) =>
+        permitsModel(provider.policy, model.ref.modelId),
       ),
+    );
+    const stored = await this.defaultModel();
+    const value: ModelCatalog = {
+      models,
       providers: results.map(({ provider, probe }) => ({
         providerKey: provider.key,
         providerName: provider.displayName,
         status: probe.status,
       })),
+      defaultModel:
+        stored &&
+        models.some(
+          (model) =>
+            model.ref.providerKey === stored.providerKey &&
+            model.ref.modelId === stored.modelId,
+        )
+          ? stored
+          : null,
     };
     this.cached = { expiresAt: Date.now() + CATALOG_TTL_MS, value };
     return value;
@@ -226,6 +278,17 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
       throw new BadRequestException({
         code: 'PROVIDER_DISABLED',
         message: 'Selected provider is disabled.',
+      });
+    // The local worker is hidden from the participant catalog in production; the
+    // execution gate matches, so a hand-crafted request cannot reach it either
+    // (SPEC-0016). Filtering in the editor is presentation, never enforcement.
+    if (
+      configuration().nodeEnv === 'production' &&
+      provider.type === 'MODEL_WORKER'
+    )
+      throw new BadRequestException({
+        code: 'MODEL_UNAVAILABLE',
+        message: 'Selected model is unavailable.',
       });
     // Checked before the catalog is touched, so a request for a model the policy
     // excludes never reaches the provider at all (SPEC-0012/FR-007).

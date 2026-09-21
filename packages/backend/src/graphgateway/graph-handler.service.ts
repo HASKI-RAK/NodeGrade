@@ -5,6 +5,7 @@ import {
   LGraph,
   SerializedGraph,
   AnswerInputNode,
+  isModelRef,
   LGraphNode,
   ImageNode,
   LLMNode,
@@ -302,6 +303,37 @@ export class GraphHandlerService {
     await Promise.all(hydrationPromises);
   };
 
+  /**
+   * Substitutes the facilitator's deployment default into every LLM node without an
+   * explicit model selection (SPEC-0016). Stored workflow content stays untouched —
+   * the substitution happens on the ephemeral execution graph only — so clearing the
+   * default later restores the "select a model" failure instead of leaving a stale
+   * copy behind. Nodes that keep no usable default fail in `LLMNode.onExecute` with
+   * the same message as before.
+   */
+  private readonly applyDefaultModel = async (
+    lgraph: LGraph,
+  ): Promise<void> => {
+    const unconfigured = lgraph
+      .findNodesByClass<LLMNode>(LLMNode)
+      .filter(
+        (node) =>
+          !isModelRef(node.properties.model_ref) ||
+          node.properties.needs_model_selection === true,
+      );
+    if (unconfigured.length === 0) return;
+    const fallback = await this.modelRuntime.defaultModel();
+    if (!fallback) return;
+    for (const node of unconfigured) {
+      node.properties.model_ref = { ...fallback };
+      node.properties.model = fallback.modelId;
+      node.properties.needs_model_selection = false;
+    }
+    this.logger.debug(
+      `Applied default model ${fallback.providerKey}/${fallback.modelId} to ${unconfigured.length} node(s)`,
+    );
+  };
+
   private readonly sendQuestion = (client: Socket, lgraph: LGraph): void => {
     for (const node of lgraph.findNodesByClass(QuestionNode)) {
       if (!node.properties.value) continue;
@@ -399,6 +431,7 @@ export class GraphHandlerService {
 
       // Hydrate all nodes that were added during configure
       await this.hydrateExistingNodes(lgraph);
+      await this.applyDefaultModel(lgraph);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
       const nodes = (lgraph as any)._nodes as LGraphNode[];

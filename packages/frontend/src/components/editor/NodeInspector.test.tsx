@@ -92,6 +92,39 @@ describe('NodeInspector', () => {
     expect(llm.properties.needs_model_selection).toBe(false)
   })
 
+  it('covers an unconfigured node with the deployment default instead of an error', () => {
+    const graph = new LiteGraph.LGraph()
+    const history = new GraphHistory(
+      graph,
+      () => [],
+      () => undefined
+    )
+    const llm = LiteGraph.createNode('models/llm')
+    llm.properties.needs_model_selection = true
+    const { rerender } = render(
+      <NodeInspector
+        selection={[llm]}
+        history={history}
+        modelCatalog={[
+          {
+            ref: { providerKey: 'openrouter', modelId: 'shared-model' },
+            label: 'Shared model',
+            providerName: 'OpenRouter',
+            capabilities: { supportedParameters: [] }
+          }
+        ]}
+        defaultModel={{ providerKey: 'openrouter', modelId: 'shared-model' }}
+      />
+    )
+    expect(
+      screen.getByText(/Using default model: Shared model · OpenRouter/i)
+    ).toBeVisible()
+    expect(screen.queryByText(/Select a provider and model/i)).toBeNull()
+
+    rerender(<NodeInspector selection={[llm]} history={history} modelCatalog={[]} />)
+    expect(screen.getByText(/Select a provider and model/i)).toBeVisible()
+  })
+
   it('shows unavailable references and disables unsupported parameters', async () => {
     const graph = new LiteGraph.LGraph()
     const history = new GraphHistory(

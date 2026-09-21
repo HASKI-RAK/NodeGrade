@@ -159,7 +159,9 @@ export class WorkshopReadinessService {
 
   /**
    * Passes only when a participant could actually run something: a reachable provider
-   * offering at least one model its policy permits (SPEC-0010, SPEC-0012).
+   * offering at least one model its policy permits (SPEC-0010, SPEC-0012). Model nodes
+   * without an explicit selection pass when the facilitator's deployment default is
+   * available, since execution substitutes it at run time (SPEC-0016).
    */
   private async modelCheck(
     content: string | undefined,
@@ -168,7 +170,9 @@ export class WorkshopReadinessService {
     if (content === undefined)
       return fail('models', label, 'There is no template content to check.');
 
+    const catalog = await this.runtime.catalog();
     let modelRefs: { providerKey: string; modelId: string }[];
+    let defaultedCount = 0;
     try {
       const modelNodes = graphModelNodes(parseGraphContent(content));
       const invalid = modelNodes.filter((node) => {
@@ -179,16 +183,28 @@ export class WorkshopReadinessService {
           Reflect.get(properties, 'needs_model_selection') === true
         );
       });
-      if (invalid.length > 0)
-        return fail(
-          'models',
-          label,
-          `${invalid.length} model node(s) need a configured provider and model.`,
-        );
-      modelRefs = modelNodes.map((node) => {
+      const configured = modelNodes.filter((node) => !invalid.includes(node));
+      modelRefs = configured.map((node) => {
         const properties = node.properties as Record<string, unknown>;
         return properties.model_ref as { providerKey: string; modelId: string };
       });
+      if (invalid.length > 0) {
+        const fallback = catalog.defaultModel;
+        const fallbackAvailable =
+          fallback !== null &&
+          catalog.models.some(
+            (model) =>
+              model.ref.providerKey === fallback.providerKey &&
+              model.ref.modelId === fallback.modelId,
+          );
+        if (!fallbackAvailable)
+          return fail(
+            'models',
+            label,
+            `${invalid.length} model node(s) need a configured provider and model.`,
+          );
+        defaultedCount = invalid.length;
+      }
     } catch (error) {
       return fail(
         'models',
@@ -199,7 +215,6 @@ export class WorkshopReadinessService {
       );
     }
 
-    const catalog = await this.runtime.catalog();
     const reachable = catalog.providers.filter(
       (provider) => provider.status === 'AVAILABLE',
     );
@@ -233,6 +248,14 @@ export class WorkshopReadinessService {
             unavailable.map((ref) => `${ref.providerKey}/${ref.modelId}`),
           ),
         ].join(', ')}.`,
+      );
+    const fallback = catalog.defaultModel;
+    if (defaultedCount > 0 && fallback !== null)
+      return pass(
+        'models',
+        label,
+        `${defaultedCount} model node(s) will use the default model ` +
+          `(${fallback.providerKey}/${fallback.modelId}).`,
       );
     if (modelRefs.length > 0)
       return pass(
