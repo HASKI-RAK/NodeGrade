@@ -1,3 +1,5 @@
+import '@haski/ta-lib'
+
 import { act, renderHook } from '@testing-library/react'
 import { LGraph } from 'litegraph.js'
 import { Socket } from 'socket.io-client'
@@ -209,5 +211,320 @@ describe('useServerEvents', () => {
     for (const [eventName, handler] of vi.mocked(socket.on).mock.calls) {
       expect(socket.off).toHaveBeenCalledWith(eventName, handler)
     }
+  })
+
+  it('highlights the editor node via sourceId, not the compiled execution id', () => {
+    const { socket, emit } = createSocket()
+    const lgraph = new LGraph()
+    lgraph.configure({
+      last_node_id: 14,
+      last_link_id: 0,
+      nodes: [
+        {
+          id: 10,
+          type: 'utils/concat-string',
+          pos: [0, 0],
+          size: [240, 80],
+          flags: {},
+          order: 0,
+          mode: 0,
+          inputs: [
+            { name: 'string', type: 'string', link: null },
+            { name: 'string', type: 'string', link: null }
+          ],
+          outputs: [{ name: 'string', type: 'string', links: [] }],
+          title: 'Task context 4/4',
+          properties: {}
+        },
+        {
+          id: 14,
+          type: 'models/llm',
+          pos: [300, 0],
+          size: [320, 220],
+          flags: {},
+          order: 1,
+          mode: 0,
+          inputs: [
+            { name: 'message', type: 'message', link: null },
+            { name: 'messages', type: '*', link: null }
+          ],
+          outputs: [{ name: 'string', type: 'string', links: [] }],
+          title: 'Assessment model',
+          properties: {}
+        }
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      version: 0.4
+    } as never)
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
+
+    act(() => result.current.beginAttempt('request-highlight'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-highlight',
+        runId: 'run-highlight',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:00.000Z'
+      })
+    )
+
+    const concat = lgraph.getNodeById(10)
+    const model = lgraph.getNodeById(14)
+    expect(concat).toBeDefined()
+    expect(model).toBeDefined()
+
+    // The compiler renumbers nodes from 1, so the concat runs as execution id
+    // 3 while its editor id stays 10. Painting nodeId 3 must not touch any
+    // editor node; only sourceId 10 may turn green.
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-highlight',
+        workflowId: 'workflow-1',
+        nodeId: 3,
+        nodeTitle: 'Task context 4/4',
+        nodeType: 'utils/concat-string',
+        state: 'running',
+        timestamp: '2026-09-16T00:00:01.000Z',
+        wrapperId: null,
+        sourceId: 10,
+        wrapperPath: []
+      })
+    )
+    expect(concat?.color).toBe('#88FF00')
+    expect(model?.color).not.toBe('#88FF00')
+
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-highlight',
+        workflowId: 'workflow-1',
+        nodeId: 3,
+        nodeTitle: 'Task context 4/4',
+        nodeType: 'utils/concat-string',
+        state: 'completed',
+        timestamp: '2026-09-16T00:00:02.000Z',
+        wrapperId: null,
+        sourceId: 10,
+        wrapperPath: []
+      })
+    )
+    expect(concat?.color).not.toBe('#88FF00')
+
+    // The model runs as execution id 4 while a stale mapping would still point
+    // at an unrelated editor node: only editor id 14 may turn green, and the
+    // finished concat must stay cleared.
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-highlight',
+        workflowId: 'workflow-1',
+        nodeId: 4,
+        nodeTitle: 'Assessment model',
+        nodeType: 'models/llm',
+        state: 'running',
+        timestamp: '2026-09-16T00:00:03.000Z',
+        wrapperId: null,
+        sourceId: 14,
+        wrapperPath: []
+      })
+    )
+    expect(model?.color).toBe('#88FF00')
+    expect(concat?.color).not.toBe('#88FF00')
+  })
+
+  it('keeps exactly one running highlight and clears it on completion', () => {
+    const { socket, emit } = createSocket()
+    const lgraph = new LGraph()
+    lgraph.configure({
+      last_node_id: 14,
+      last_link_id: 0,
+      nodes: [
+        {
+          id: 10,
+          type: 'utils/concat-string',
+          pos: [0, 0],
+          size: [240, 80],
+          flags: {},
+          order: 0,
+          mode: 0,
+          inputs: [
+            { name: 'string', type: 'string', link: null },
+            { name: 'string', type: 'string', link: null }
+          ],
+          outputs: [{ name: 'string', type: 'string', links: [] }],
+          title: 'Task context 4/4',
+          properties: {}
+        },
+        {
+          id: 14,
+          type: 'models/llm',
+          pos: [300, 0],
+          size: [320, 220],
+          flags: {},
+          order: 1,
+          mode: 0,
+          inputs: [
+            { name: 'message', type: 'message', link: null },
+            { name: 'messages', type: '*', link: null }
+          ],
+          outputs: [{ name: 'string', type: 'string', links: [] }],
+          title: 'Assessment model',
+          properties: {}
+        }
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      version: 0.4
+    } as never)
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
+
+    act(() => result.current.beginAttempt('request-single'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-single',
+        runId: 'run-single',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:00.000Z'
+      })
+    )
+    const concat = lgraph.getNodeById(10)
+    const model = lgraph.getNodeById(14)
+
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-single',
+        workflowId: 'workflow-1',
+        nodeId: 3,
+        nodeTitle: 'Task context 4/4',
+        nodeType: 'utils/concat-string',
+        state: 'running',
+        timestamp: '2026-09-16T00:00:01.000Z',
+        wrapperId: null,
+        sourceId: 10,
+        wrapperPath: []
+      })
+    )
+    // A second running event without an intermediate terminal event (e.g. a
+    // lost completed payload) must move the highlight, never duplicate it.
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-single',
+        workflowId: 'workflow-1',
+        nodeId: 4,
+        nodeTitle: 'Assessment model',
+        nodeType: 'models/llm',
+        state: 'running',
+        timestamp: '2026-09-16T00:00:02.000Z',
+        wrapperId: null,
+        sourceId: 14,
+        wrapperPath: []
+      })
+    )
+    expect(model?.color).toBe('#88FF00')
+    expect(concat?.color).not.toBe('#88FF00')
+
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-single',
+        workflowId: 'workflow-1',
+        nodeId: 4,
+        nodeTitle: 'Assessment model',
+        nodeType: 'models/llm',
+        state: 'completed',
+        timestamp: '2026-09-16T00:00:03.000Z',
+        wrapperId: null,
+        sourceId: 14,
+        wrapperPath: []
+      })
+    )
+    expect(model?.color).not.toBe('#88FF00')
+    expect(concat?.color).not.toBe('#88FF00')
+  })
+
+  it('highlights the wrapper for block-internal nodes and clears on a new attempt', () => {
+    const { socket, emit } = createSocket()
+    const lgraph = new LGraph()
+    lgraph.configure({
+      last_node_id: 9,
+      last_link_id: 0,
+      nodes: [
+        {
+          id: 9,
+          type: 'graph/subgraph',
+          pos: [0, 0],
+          size: [300, 100],
+          flags: {},
+          order: 0,
+          mode: 0,
+          inputs: [],
+          outputs: [],
+          title: 'Feedback Generator',
+          properties: {},
+          subgraph: {
+            last_node_id: 3,
+            last_link_id: 0,
+            nodes: [
+              {
+                id: 2,
+                type: 'models/llm',
+                pos: [0, 0],
+                size: [320, 220],
+                flags: {},
+                order: 0,
+                mode: 0,
+                inputs: [
+                  { name: 'message', type: 'message', link: null },
+                  { name: 'messages', type: '*', link: null }
+                ],
+                outputs: [{ name: 'string', type: 'string', links: [] }],
+                title: 'Feedback model',
+                properties: {}
+              }
+            ],
+            links: [],
+            groups: [],
+            config: {},
+            version: 0.4
+          }
+        }
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      version: 0.4
+    } as never)
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
+
+    act(() => result.current.beginAttempt('request-block'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-block',
+        runId: 'run-block',
+        workflowId: 'workflow-1',
+        state: 'queued',
+        timestamp: '2026-09-16T00:00:00.000Z'
+      })
+    )
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-block',
+        workflowId: 'workflow-1',
+        nodeId: 1,
+        nodeTitle: 'Feedback Generator / Feedback model',
+        nodeType: 'models/llm',
+        state: 'running',
+        timestamp: '2026-09-16T00:00:01.000Z',
+        wrapperId: 9,
+        sourceId: 2,
+        wrapperPath: ['Feedback Generator']
+      })
+    )
+    expect(lgraph.getNodeById(9)?.color).toBe('#88FF00')
+
+    act(() => result.current.beginAttempt('request-next'))
+    expect(lgraph.getNodeById(9)?.color).not.toBe('#88FF00')
   })
 })
