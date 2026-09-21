@@ -9,6 +9,7 @@ type CoordinateVector = {
 
 type PositionedGroup = LGraphGroup & {
   pos: CoordinateVector
+  size: CoordinateVector
   font_size?: number
 }
 
@@ -25,7 +26,10 @@ const isCoordinateVector = (value: unknown): value is CoordinateVector =>
   typeof value[1] === 'number'
 
 const isPositionedGroup = (group: LGraphGroup): group is PositionedGroup =>
-  'pos' in group && isCoordinateVector(group.pos)
+  'pos' in group &&
+  isCoordinateVector(group.pos) &&
+  'size' in group &&
+  isCoordinateVector(group.size)
 
 /**
  * Restrict LiteGraph group movement to pointer drags that start on the title.
@@ -36,23 +40,33 @@ export const installGroupTitleDrag = (canvas: LGraphCanvas): void => {
   if (runtime.__groupTitleDragInstalled) return
   runtime.__groupTitleDragInstalled = true
 
-  const processMouseDown = runtime.processMouseDown.bind(runtime)
-  runtime.processMouseDown = (event) => {
-    const result = processMouseDown(event)
-    const group = runtime.selected_group
+  // LiteGraph binds its DOM pointer-down listener in the constructor, before
+  // editor canvas installers run. `onMouse` is evaluated by that bound
+  // listener, so it remains a reliable interception point after construction.
+  const onMouse = runtime.onMouse?.bind(runtime)
+  runtime.onMouse = (event) => {
+    if (onMouse?.(event)) return true
+    if (event.which !== 1) return false
 
-    if (!group || runtime.selected_group_resizing || !isPositionedGroup(group))
-      return result
+    const [pointerX, pointerY] = runtime.canvas_mouse
+    const node = runtime.graph.getNodeOnPos(pointerX, pointerY, runtime.visible_nodes, 5)
+    if (node) return false
+
+    const group = runtime.graph.getGroupOnPos(pointerX, pointerY)
+    if (!group || !isPositionedGroup(group)) return false
+
+    const resizeDistance = Math.hypot(
+      pointerX - (group.pos[0] + group.size[0]),
+      pointerY - (group.pos[1] + group.size[1])
+    )
+    if (resizeDistance * runtime.ds.scale < 10) return false
 
     const titleHeight =
       typeof group.font_size === 'number' && group.font_size > 0
         ? group.font_size
         : DEFAULT_GROUP_TITLE_HEIGHT
-    const pointerY = runtime.canvas_mouse[1]
     const titleBottom = group.pos[1] + titleHeight
 
-    if (pointerY < group.pos[1] || pointerY > titleBottom) runtime.selected_group = null
-
-    return result
+    return pointerY < group.pos[1] || pointerY > titleBottom
   }
 }
