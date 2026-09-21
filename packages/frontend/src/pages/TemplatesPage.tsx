@@ -11,7 +11,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  Grid,
   InputLabel,
   List,
   ListItem,
@@ -166,47 +165,51 @@ export const TemplatesPage = () => {
           </Select>
         </FormControl>
       </Stack>
-      <Grid container spacing={2}>
+      <Box
+        sx={{
+          columns: { xs: 1, md: 2 },
+          columnGap: 2,
+          '& > *': { breakInside: 'avoid', mb: 2 }
+        }}
+      >
         {visibleTemplates?.map((template) => (
-          <Grid key={template.id} size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
-                  <Chip label={template.kind === 'WORKFLOW' ? 'Workflow' : 'Block'} />
-                  <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
-                </Stack>
-                <Typography variant="h6">{template.name}</Typography>
-                <TemplateDescription text={template.description} />
-                <TemplateTags tags={template.tags} />
-              </CardContent>
-              <CardActions>
-                <Button
-                  onClick={async () => {
-                    setPreviewLoading(true)
-                    try {
-                      setPreview(await api.template(template.slug))
-                    } finally {
-                      setPreviewLoading(false)
-                    }
-                  }}
-                >
-                  Preview structure
-                </Button>
-                <Button
-                  disabled={!session || template.kind !== 'WORKFLOW'}
-                  onClick={async () => {
-                    if (!session) return
-                    const workflow = await api.fromTemplate(session.token, template.slug)
-                    navigate(`/editor/${workflow.id}`)
-                  }}
-                >
-                  Use template
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
+          <Card key={template.id}>
+            <CardContent>
+              <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
+                <Chip label={template.kind === 'WORKFLOW' ? 'Workflow' : 'Block'} />
+                <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
+              </Stack>
+              <Typography variant="h6">{template.name}</Typography>
+              <TemplateDescription text={template.description} />
+              <TemplateTags tags={template.tags} />
+            </CardContent>
+            <CardActions>
+              <Button
+                onClick={async () => {
+                  setPreviewLoading(true)
+                  try {
+                    setPreview(await api.template(template.slug))
+                  } finally {
+                    setPreviewLoading(false)
+                  }
+                }}
+              >
+                Preview structure
+              </Button>
+              <Button
+                disabled={!session || template.kind !== 'WORKFLOW'}
+                onClick={async () => {
+                  if (!session) return
+                  const workflow = await api.fromTemplate(session.token, template.slug)
+                  navigate(`/editor/${workflow.id}`)
+                }}
+              >
+                Use template
+              </Button>
+            </CardActions>
+          </Card>
         ))}
-      </Grid>
+      </Box>
       {visibleTemplates?.length === 0 && (
         <Typography color="text.secondary">No templates match this type.</Typography>
       )}
