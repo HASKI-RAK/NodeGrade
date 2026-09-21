@@ -29,9 +29,22 @@ const NODE_SLOTS: Record<string, SlotTable> = {
   'input/answer': { inputs: [], outputs: [slot('string')] },
   'input/sample-solution': { inputs: [], outputs: [slot('string')] },
   'basic/textfield': { inputs: [], outputs: [slot('string')] },
+  'basic/number': { inputs: [], outputs: [slot('number')] },
+  'basic/sum': {
+    inputs: [slot('A', 'number'), slot('B', 'number')],
+    outputs: [slot('A+B', 'number')],
+  },
   'utils/concat-string': {
     inputs: [slot('string'), slot('string')],
     outputs: [slot('string')],
+  },
+  'utils/concat-object': {
+    inputs: [slot('*', '*'), slot('*', '*')],
+    outputs: [slot('*', '*')],
+  },
+  'utils/strings-to-array': {
+    inputs: [slot('string'), slot('string')],
+    outputs: [slot('[string]', '[string]')],
   },
   'basic/prompt-message': {
     inputs: [slot('string')],
@@ -50,6 +63,10 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [slot('number')],
   },
   'math/precision': { inputs: [slot('number')], outputs: [slot('number')] },
+  'preprocessing/clean': {
+    inputs: [slot('string')],
+    outputs: [slot('string')],
+  },
   'text/keyword-check': {
     inputs: [
       slot('keywords (comma-separated)', 'string'),
@@ -233,8 +250,8 @@ export class GraphBuilder {
   concat(
     title: string,
     pos: [number, number],
-    upper: NodeRef,
-    lower: NodeRef,
+    upper?: NodeRef,
+    lower?: NodeRef,
     slots: { upper?: number; lower?: number } = {},
   ): NodeRef {
     const node = this.add({
@@ -245,8 +262,8 @@ export class GraphBuilder {
       properties: { value: '', space: true },
       widgetsValues: [true],
     });
-    this.link(upper, slots.upper ?? 0, node, 0);
-    this.link(lower, slots.lower ?? 0, node, 1);
+    if (upper) this.link(upper, slots.upper ?? 0, node, 0);
+    if (lower) this.link(lower, slots.lower ?? 0, node, 1);
     return node;
   }
 
@@ -278,7 +295,7 @@ export class GraphBuilder {
   promptMessage(
     title: string,
     pos: [number, number],
-    source: NodeRef,
+    source?: NodeRef,
   ): NodeRef {
     const node = this.add({
       type: 'basic/prompt-message',
@@ -288,7 +305,42 @@ export class GraphBuilder {
       properties: { value: { role: 'user', content: '' } },
       widgetsValues: ['user'],
     });
-    this.link(source, 0, node, 0);
+    if (source) this.link(source, 0, node, 0);
+    return node;
+  }
+
+  /**
+   * Singular `message` input wired to a plural `messages` list instead. Block
+   * interiors assemble system + user prompts with `concat-object` and feed the
+   * list into slot 1; slot 0 stays empty by design, matching every workshop
+   * graph. Leaves `model_ref` unset so execution substitutes the facilitator's
+   * deployment default at run time (SPEC-0016); stored content stays untouched.
+   */
+  llmForMessages(
+    title: string,
+    pos: [number, number],
+    messages: NodeRef,
+    settings: LlmSettings = KATALYST_LLM,
+  ): NodeRef {
+    const node = this.add({
+      type: 'models/llm',
+      title,
+      pos,
+      size: [320, 220],
+      properties: {
+        value: '',
+        model: '',
+        model_ref: null,
+        needs_model_selection: true,
+        max_tokens: settings.maxTokens,
+        temperature: settings.temperature,
+        top_p: 0.9,
+        top_k: 40,
+        presence_penalty: 0,
+      },
+      widgetsValues: [settings.maxTokens, settings.temperature, 0.9, 40, 0, ''],
+    });
+    this.link(messages, 0, node, 1);
     return node;
   }
 
@@ -383,8 +435,8 @@ export class GraphBuilder {
   keywordCheck(
     title: string,
     pos: [number, number],
-    keywords: NodeRef,
-    text: NodeRef,
+    keywords?: NodeRef,
+    text?: NodeRef,
   ): NodeRef {
     const node = this.add({
       type: 'text/keyword-check',
@@ -398,15 +450,15 @@ export class GraphBuilder {
       },
       widgetsValues: [false],
     });
-    this.link(keywords, 0, node, 0);
-    this.link(text, 0, node, 1);
+    if (keywords) this.link(keywords, 0, node, 0);
+    if (text) this.link(text, 0, node, 1);
     return node;
   }
 
   sentenceTransformer(
     title: string,
     pos: [number, number],
-    source: NodeRef,
+    source?: NodeRef,
   ): NodeRef {
     const node = this.add({
       type: 'models/sentence-transformer',
@@ -415,7 +467,7 @@ export class GraphBuilder {
       size: [460, 60],
       properties: { value: -1 },
     });
-    this.link(source, 0, node, 0);
+    if (source) this.link(source, 0, node, 0);
     return node;
   }
 
@@ -434,6 +486,119 @@ export class GraphBuilder {
     });
     this.link(left, 0, node, 0);
     this.link(right, 0, node, 1);
+    return node;
+  }
+
+  number(title: string, pos: [number, number], value: number): NodeRef {
+    return this.add({
+      type: 'basic/number',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value },
+      widgetsValues: [value],
+    });
+  }
+
+  sum(
+    title: string,
+    pos: [number, number],
+    left?: NodeRef,
+    right?: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'basic/sum',
+      title,
+      pos,
+      size: [220, 80],
+      properties: { precision: 1, path: 'basic/sum' },
+    });
+    if (left) this.link(left, 0, node, 0);
+    if (right) this.link(right, 0, node, 1);
+    return node;
+  }
+
+  concatObject(
+    title: string,
+    pos: [number, number],
+    first: NodeRef,
+    second: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'utils/concat-object',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value: [] },
+    });
+    this.link(first, 0, node, 0);
+    this.link(second, 0, node, 1);
+    return node;
+  }
+
+  stringsToArray(
+    title: string,
+    pos: [number, number],
+    first: NodeRef,
+    second?: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'utils/strings-to-array',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value: [] },
+    });
+    this.link(first, 0, node, 0);
+    if (second) this.link(second, 0, node, 1);
+    return node;
+  }
+
+  clean(title: string, pos: [number, number], source?: NodeRef): NodeRef {
+    const node = this.add({
+      type: 'preprocessing/clean',
+      title,
+      pos,
+      size: [260, 140],
+      properties: {
+        value: '',
+        trim: true,
+        space: false,
+        doubleSpace: true,
+        dot: false,
+        comma: false,
+        lower: false,
+        upper: false,
+        stem: false,
+        removeEnclosingSpecialChars: true,
+      },
+      widgetsValues: [
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+      ],
+    });
+    if (source) this.link(source, 0, node, 0);
+    return node;
+  }
+
+  /** System-role prompt text → message in one call. Returns the message node. */
+  systemPrompt(title: string, pos: [number, number], source: NodeRef): NodeRef {
+    const node = this.add({
+      type: 'basic/prompt-message',
+      title,
+      pos,
+      size: [260, 80],
+      properties: { value: { role: 'system', content: '' } },
+      widgetsValues: ['system'],
+    });
+    this.link(source, 0, node, 0);
     return node;
   }
 
