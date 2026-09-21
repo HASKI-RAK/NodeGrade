@@ -9,6 +9,8 @@ import {
   watchDevicePixelRatio
 } from '@/utils/canvasPixelRatio'
 import { installDebugBridge } from '@/utils/debugBridge'
+import { installGroupTitleDrag } from '@/utils/groupTitleDrag'
+import { installGroupTitleStyle } from '@/utils/groupTitleStyle'
 import { installNodeConnectionHighlight } from '@/utils/nodeConnectionHighlight'
 import { hideStockSubgraphChrome } from '@/utils/subgraphChrome'
 
@@ -47,6 +49,8 @@ const Canvas = (props: CanvasProps) => {
         installCanvasPixelRatio(canvas, {
           onRatioChange: (pixelRatio) => applyCanvasTheme(canvas, { pixelRatio })
         })
+        installGroupTitleDrag(canvas)
+        installGroupTitleStyle(canvas)
         installNodeConnectionHighlight(canvas)
         // The breadcrumb above the canvas owns block navigation; LiteGraph's
         // own banner and Graph Inputs/Outputs panels would duplicate it.
