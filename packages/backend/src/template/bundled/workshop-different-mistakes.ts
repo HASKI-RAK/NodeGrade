@@ -236,7 +236,11 @@ const build = () => {
     diagnosisLabel,
     diagnosis,
   );
-  g.group('Feedback policy (educator-owned)', [500, 1230, 2180, 440], '#6f621f');
+  g.group(
+    'Feedback policy (educator-owned)',
+    [500, 1230, 2180, 440],
+    '#6f621f',
+  );
 
   // Feedback drafting -------------------------------------------------------------------
   const feedbackTop = 1830;
