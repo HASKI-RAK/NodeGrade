@@ -228,7 +228,9 @@ transformer worker on port 8002, the backend on port 5000, and the frontend on p
 The backend reaches the embedding worker through the Compose network at `models:8002`.
 The frontend nginx container forwards `/api`, `/socket.io`, `/lti`, and `/health` to the
 backend over the Compose network, so browsers use the frontend's public origin.
-`MODEL_WORKER_URL` remains the address of an OpenAI-compatible text-generation worker.
+`MODEL_WORKER_URL` is an optional external OpenAI-compatible text-generation
+endpoint offered as the `local` provider; it stays empty unless a deployment
+provides one.
 
 ```bash
 PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \

@@ -21,7 +21,7 @@ test('template gallery filters kinds and previews graph structure', async ({ pag
     page.getByRole('heading', { name: 'WAIE free-text assessment' })
   ).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Preview structure' }).click()
+  await page.getByRole('button', { name: 'Preview structure' }).first().click()
   const structure = page.getByLabel('Template structure')
   await expect(structure).toBeVisible()
   await expect(structure).toContainText(/\d+ nodes · \d+ connections/)

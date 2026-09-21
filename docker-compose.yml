@@ -47,8 +47,11 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       COOKIE_INSECURE: ${COOKIE_INSECURE:-true}
-      MODEL_WORKER_URL: http://models:8000
-      SIMILARITY_WORKER_URL: http://models:8002
+      # Optional external OpenAI-compatible text-generation endpoint offered as
+      # the `local` provider. Empty by default: the bundled `models` service is
+      # the sentence-transformer similarity worker on 8002, not a text model.
+      MODEL_WORKER_URL: ${MODEL_WORKER_URL:-}
+      SIMILARITY_WORKER_URL: ${SIMILARITY_WORKER_URL:-http://models:8002}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       KATALYST_API_KEY: ${KATALYST_API_KEY:-}
