@@ -137,71 +137,79 @@ const FEEDBACK_INSTRUCTIONS = [
 const build = () => {
   const g = new GraphBuilder();
 
+  // Layout: 80px horizontal gaps between columns, 60px vertical gaps between
+  // stacked nodes, 40px group padding (80px top for the title bar) and 40px
+  // gaps between groups. Join chains use a 150px row pitch; criterion rows
+  // use a 360px pitch (260px rubric + 100px gap) so tall rubric and model
+  // nodes never touch the next row.
+  const JOIN_ROW_HEIGHT = 150;
+
   // Task context ---------------------------------------------------------------------
-  const question = g.question('Question', [40, 60], QUESTION);
-  const answer = g.answer('Student answer', [40, 250], {
+  const question = g.question('Question', [40, 80], QUESTION);
+  const answer = g.answer('Student answer', [40, 290], {
     minChars: 10,
     maxChars: 1500,
   });
-  const reference = g.sampleSolution('Reference answer', [40, 380], REFERENCE);
+  const reference = g.sampleSolution('Reference answer', [40, 440], REFERENCE);
   const referenceLabel = g.textfield(
     'Reference label',
-    [40, 590],
+    [40, 670],
     REFERENCE_LABEL,
     [340, 70],
   );
   const answerLabel = g.textfield(
     'Answer label',
-    [40, 700],
+    [40, 800],
     ANSWER_LABEL,
     [340, 90],
   );
   const reportsLabel = g.textfield(
     'Reports label',
-    [40, 830],
+    [40, 950],
     REPORTS_LABEL,
     [340, 90],
   );
-  g.group('Task context', [20, 0, 380, 950], '#50664a');
+  g.group('Task context', [0, 0, 420, 1080], '#50664a');
 
   // Shared context -----------------------------------------------------------------------
   const context = g.join(
     'Task context',
-    [440, 60],
+    [500, 80],
     [question, referenceLabel, reference, answerLabel, answer],
+    JOIN_ROW_HEIGHT,
   );
 
   // One grader per criterion -----------------------------------------------------------
-  const rowTop = (index: number) => 540 + index * 300;
+  const rowTop = (index: number) => 690 + index * 360;
   const reports: NodeRef[] = [];
   const points: NodeRef[] = [];
   CRITERIA.forEach((criterion, index) => {
     const y = rowTop(index);
     const rubric = g.textfield(
       `${criterion.title} rubric`,
-      [440, y],
+      [500, y],
       criterionInstructions(criterion),
       [340, 260],
     );
     const prompt = g.concat(
       `${criterion.title} prompt`,
-      [820, y],
+      [920, y],
       rubric,
       context,
     );
-    const grader = g.llmStage(`${criterion.title} grader`, [1100, y], prompt);
+    const grader = g.llmStage(`${criterion.title} grader`, [1240, y], prompt);
     const awarded = g.extractNumber(
       `${criterion.title} points`,
-      [1760, y],
+      [1940, y],
       grader,
     );
-    g.output(`Criterion report: ${criterion.title}`, [1760, y + 100], grader);
+    g.output(`Criterion report: ${criterion.title}`, [1940, y + 120], grader);
     reports.push(grader);
     points.push(awarded);
   });
   g.group(
     'Criterion scoring (one prompt per rubric criterion)',
-    [420, 0, 1780, 1740],
+    [460, 0, 1780, 2070],
     '#405775',
   );
 
@@ -214,55 +222,51 @@ const build = () => {
   ];
   const sum1 = g.math(
     'Sum 1 (Evaporation + Condensation)',
-    [2240, rowTop(0) + 150],
+    [2320, 900],
     '+',
     evaporation,
     condensation,
   );
   const sum2 = g.math(
     'Sum 2 (Rain + Collection)',
-    [2240, rowTop(2) + 150],
+    [2320, 1620],
     '+',
     rain,
     collection,
   );
-  const total = g.math(
-    'Total points',
-    [2520, rowTop(1) + 150],
-    '+',
-    sum1,
-    sum2,
-  );
-  g.output('Proposed points / 8', [2800, rowTop(1) + 150], total);
+  const total = g.math('Total points', [2620, 1260], '+', sum1, sum2);
+  g.output('Proposed points / 8', [2920, 1260], total);
   g.group(
     'Add the scores without another model',
-    [2220, 620, 860, 800],
+    [2280, 820, 940, 930],
     '#6f621f',
   );
 
   // Formative feedback from the criterion reports ---------------------------------------
-  const feedbackTop = 1800;
+  const feedbackTop = 2190;
   const feedbackInstructions = g.textfield(
     'Feedback instructions',
-    [440, feedbackTop],
+    [500, feedbackTop],
     FEEDBACK_INSTRUCTIONS,
     [340, 300],
   );
   const joinedReports = g.join(
     'Criterion reports',
-    [820, feedbackTop],
+    [920, feedbackTop],
     reports,
+    JOIN_ROW_HEIGHT,
   );
   const feedbackPrompt = g.join(
     'Feedback prompt',
-    [1100, feedbackTop],
+    [1240, feedbackTop],
     [feedbackInstructions, context, reportsLabel, joinedReports],
+    JOIN_ROW_HEIGHT,
   );
-  const feedback = g.llmStage('Feedback', [1400, feedbackTop], feedbackPrompt);
-  g.output('What to improve next', [2080, feedbackTop], feedback);
+  const feedback = g.llmStage('Feedback', [1560, feedbackTop], feedbackPrompt);
+  g.output('What to improve next', [2260, feedbackTop], feedback);
   g.group(
     'Feedback from the missing criterion',
-    [420, 1740, 1940, 420],
+    [460, 2110, 2100, 500],
     '#5b3d6e',
   );
 

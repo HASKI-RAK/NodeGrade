@@ -139,123 +139,133 @@ const REVIEW_INSTRUCTIONS = [
 const build = () => {
   const g = new GraphBuilder();
 
+  // Layout: 80px horizontal gaps between columns, 60px vertical gaps between
+  // stacked nodes, 40px group padding (80px top for the title bar) and 40px
+  // gaps between groups. Join chains use a 150px row pitch (80px node + 70px
+  // gap). Stage groups share one width (460-2240) so their left and right
+  // edges align down the canvas.
+  const JOIN_ROW_HEIGHT = 150;
+
   // Task context ---------------------------------------------------------------------
-  const question = g.question('Question', [40, 60], QUESTION);
-  const reference = g.sampleSolution('Reference answer', [40, 260], REFERENCE);
-  const answer = g.answer('Student answer', [40, 470], {
+  const question = g.question('Question', [40, 80], QUESTION);
+  const reference = g.sampleSolution('Reference answer', [40, 290], REFERENCE);
+  const answer = g.answer('Student answer', [40, 520], {
     minChars: 10,
     maxChars: 1500,
   });
   const referenceLabel = g.textfield(
     'Reference label',
-    [40, 600],
+    [40, 670],
     REFERENCE_LABEL,
     [340, 70],
   );
   const answerLabel = g.textfield(
     'Answer label',
-    [40, 710],
+    [40, 800],
     ANSWER_LABEL,
     [340, 90],
   );
   const questionLabel = g.textfield(
     'Question label',
-    [40, 840],
+    [40, 950],
     QUESTION_LABEL,
     [340, 70],
   );
   const diagnosisLabel = g.textfield(
     'Diagnosis label',
-    [40, 950],
+    [40, 1080],
     DIAGNOSIS_LABEL,
     [340, 90],
   );
   const draftLabel = g.textfield(
     'Draft label',
-    [40, 1080],
+    [40, 1230],
     DRAFT_LABEL,
     [340, 70],
   );
-  g.group('Task context', [20, 0, 380, 1180], '#50664a');
+  g.group('Task context', [0, 0, 420, 1340], '#50664a');
 
   const context = g.join(
     'Task context',
-    [440, 60],
+    [500, 80],
     [question, referenceLabel, reference, answerLabel, answer],
+    JOIN_ROW_HEIGHT,
   );
-  g.group('Shared task context', [420, 0, 300, 480], '#3f5159');
+  g.group('Shared task context', [460, 0, 320, 700], '#3f5159');
 
   // Classification -------------------------------------------------------------------
-  const classificationTop = 520;
+  const classificationTop = 820;
   const classificationInstructions = g.textfield(
     'Classification instructions',
-    [440, classificationTop],
+    [500, classificationTop],
     CLASSIFICATION_INSTRUCTIONS,
     [340, 300],
   );
   const classificationPrompt = g.concat(
     'Classification prompt',
-    [820, classificationTop],
+    [920, classificationTop],
     classificationInstructions,
     context,
   );
   const diagnosis = g.llmStage(
     'Classification',
-    [1100, classificationTop],
+    [1240, classificationTop],
     classificationPrompt,
   );
-  g.output('Answer type', [1780, classificationTop], diagnosis);
-  g.group('Classification', [420, 460, 1640, 380], '#405775');
+  g.output('Answer type', [1940, classificationTop], diagnosis);
+  g.group('Classification', [460, 740, 1780, 420], '#405775');
 
   // Educator-owned policy and shared blocks --------------------------------------------
-  const policyTop = 900;
+  const policyTop = 1280;
   const policy = g.textfield(
     'Feedback policy (educator-owned)',
-    [440, policyTop],
+    [500, policyTop],
     FEEDBACK_POLICY,
     [340, 320],
   );
   const policyAndContext = g.join(
     'Policy and task context',
-    [820, policyTop],
+    [920, policyTop],
     [policy, questionLabel, context],
+    JOIN_ROW_HEIGHT,
   );
   const diagnosisBlock = g.concat(
     'Diagnosis block',
-    [1120, policyTop],
+    [1240, policyTop],
     diagnosisLabel,
     diagnosis,
   );
-  g.group('Feedback policy (educator-owned)', [420, 840, 980, 400], '#6f621f');
+  g.group('Feedback policy (educator-owned)', [460, 1200, 1780, 440], '#6f621f');
 
   // Feedback drafting -------------------------------------------------------------------
-  const feedbackTop = 1300;
+  const feedbackTop = 1760;
   const feedbackInstructions = g.textfield(
     'Feedback instructions',
-    [440, feedbackTop],
+    [500, feedbackTop],
     FEEDBACK_INSTRUCTIONS,
     [340, 280],
   );
   const feedbackPrompt = g.join(
     'Feedback prompt',
-    [820, feedbackTop],
+    [920, feedbackTop],
     [feedbackInstructions, policyAndContext, diagnosisBlock],
+    JOIN_ROW_HEIGHT,
   );
-  const feedback = g.llmStage('Feedback', [1100, feedbackTop], feedbackPrompt);
-  g.output('Draft student feedback', [1780, feedbackTop], feedback);
-  g.group('Feedback drafting', [420, 1240, 1640, 360], '#5b3d6e');
+  const feedback = g.llmStage('Feedback', [1240, feedbackTop], feedbackPrompt);
+  g.output('Draft student feedback', [1940, feedbackTop], feedback);
+  g.group('Feedback drafting', [460, 1680, 1780, 400], '#5b3d6e');
 
   // Review -----------------------------------------------------------------------------
-  const reviewTop = 1660;
+  const reviewTop = 2200;
   const reviewInstructions = g.textfield(
     'Review instructions',
-    [440, reviewTop],
+    [500, reviewTop],
     REVIEW_INSTRUCTIONS,
     [340, 320],
   );
   const reviewPrompt = g.join(
     'Review prompt',
-    [820, reviewTop],
+    [920, reviewTop],
     [
       reviewInstructions,
       policyAndContext,
@@ -263,12 +273,13 @@ const build = () => {
       draftLabel,
       feedback,
     ],
+    JOIN_ROW_HEIGHT,
   );
-  const review = g.llmStage('Review', [1100, reviewTop], reviewPrompt);
-  g.output('Review recommendation', [1780, reviewTop], review);
+  const review = g.llmStage('Review', [1240, reviewTop], reviewPrompt);
+  g.output('Review recommendation', [1940, reviewTop], review);
   g.group(
     'Review (recommendation, not approval)',
-    [420, 1600, 1640, 500],
+    [460, 2120, 1780, 650],
     '#7a3b3b',
   );
 
