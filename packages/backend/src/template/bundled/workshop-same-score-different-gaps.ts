@@ -274,7 +274,7 @@ export const workshopSameScoreDifferentGapsTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 2 · The water cycle: the same score can mean different learning needs',
   description:
-    'Rubric-based scoring of a water-cycle description with one model prompt per criterion (0/1/2 points each), deterministic point aggregation to 8, and formative feedback generated from the criterion reports rather than the total.',
+    'The water cycle — the same score can mean different learning needs. Rubric-based scoring of a water-cycle description against four rubric criteria (evaporation, condensation, rain, collection), 0–2 points each.\n\nMethods: (1) One LLM grader per criterion returning points on the first line plus evidence and gap; (2) Deterministic point aggregation — extract-number plus math nodes sum the four awards to a total / 8, the model never adds; (3) Formative feedback from the criterion reports, not the total, so equal scores get different next steps.\n\nUse the live weighting activity (double cloud formation with a ×2 math node) to see how the total changes while the feedback still follows the missing stage.',
   category: 'Workshop',
   tags: ['tutorial', 'workshop', 'rubric', 'scoring', 'feedback', 'katalyst'],
   content: build(),

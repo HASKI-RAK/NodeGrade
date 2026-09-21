@@ -280,7 +280,7 @@ export const workshopDifferentMistakesTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 3 · Sharing a pizza: different mistakes need different help',
   description:
-    'Classifies an explanation of why one half is larger than one quarter into one of five answer types, drafts feedback from an educator-owned policy, and adds a review stage that recommends educator inspection.',
+    'Sharing a pizza — different mistakes need different help. Classifies an explanation of why one half is larger than one quarter, then follows a classify → feedback → review chain.\n\nMethods: (1) LLM classification into five answer types (CORRECT, INCOMPLETE, MISCONCEPTION, TOO_VAGUE_OR_IRRELEVANT, CONTRADICTORY) with evidence; (2) Educator-owned feedback policy — one response rule per answer type kept in its own text node; (3) LLM feedback draft that drafts feedback following the policy, plus a review stage with an LLM review recommending EDUCATOR_REVIEW or KEEP_AS_DRAFT.\n\nNothing here auto-releases: every output is a visible draft. Change only the policy (guiding question vs. direct explanation) and watch the diagnosis stay fixed while the feedback changes.',
   category: 'Workshop',
   tags: [
     'tutorial',
