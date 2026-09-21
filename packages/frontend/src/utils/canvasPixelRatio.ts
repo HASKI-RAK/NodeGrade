@@ -19,6 +19,12 @@ import type { LGraphCanvas, LGraphNode, Vector2, Vector4 } from 'litegraph.js'
  * at identity and copies backing pixels 1:1. `renderInfo` is the one
  * remaining screen-space drawing and is wrapped on its own.
  *
+ * A dense bitmap alone is not enough: the element's CSS box is usually
+ * fractional (flex layout), so mapping an integer bitmap onto it makes the
+ * browser resample the whole canvas and softens everything again. The resize
+ * therefore pins the element style to exactly `backing / ratio`, so bitmap
+ * pixels land 1:1 on device pixels.
+ *
  * After installation `canvas.canvas.width/height` are backing pixels.
  * LiteGraph's own readers of that size (`centerOnNode`,
  * `DragAndScale.computeVisibleArea`) are replaced with CSS-size versions;
@@ -78,11 +84,17 @@ export const installCanvasPixelRatio = (
   const applySize = (cssWidth: number, cssHeight: number): void => {
     const ratio = normalizeRatio(state.pixelRatio())
     const ratioChanged = ratio !== state.ratio
-    state.cssWidth = cssWidth
-    state.cssHeight = cssHeight
+    const backingWidth = Math.max(1, Math.round(cssWidth * ratio))
+    const backingHeight = Math.max(1, Math.round(cssHeight * ratio))
+    // Pin the style to exactly backing/ratio: the incoming CSS size is
+    // usually fractional, and an integer bitmap stretched over it would be
+    // resampled by the compositor. The snap is a fraction of a CSS pixel and
+    // lives inside the overflow-hidden host, so layout is unaffected.
+    const snappedWidth = backingWidth / ratio
+    const snappedHeight = backingHeight / ratio
+    state.cssWidth = snappedWidth
+    state.cssHeight = snappedHeight
     state.ratio = ratio
-    const backingWidth = Math.round(cssWidth * ratio)
-    const backingHeight = Math.round(cssHeight * ratio)
     const element = canvas.canvas
     const sizeChanged = element.width !== backingWidth || element.height !== backingHeight
     if (sizeChanged) {
@@ -91,6 +103,10 @@ export const installCanvasPixelRatio = (
       canvas.bgcanvas.width = backingWidth
       canvas.bgcanvas.height = backingHeight
     }
+    const styleWidth = `${snappedWidth}px`
+    const styleHeight = `${snappedHeight}px`
+    if (element.style.width !== styleWidth) element.style.width = styleWidth
+    if (element.style.height !== styleHeight) element.style.height = styleHeight
     if (ratioChanged) state.onRatioChange?.(ratio)
     if (sizeChanged || ratioChanged) canvas.setDirty(true, true)
   }

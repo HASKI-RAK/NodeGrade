@@ -88,6 +88,9 @@ describe('installCanvasPixelRatio', () => {
     expect([fixture.element.width, fixture.element.height]).toEqual([1600, 1200])
     expect([fixture.bgcanvas.width, fixture.bgcanvas.height]).toEqual([1600, 1200])
     expect(canvasCssSize(fixture.canvas)).toEqual([800, 600])
+    // Style pinned so the bitmap maps 1:1 onto device pixels.
+    expect(fixture.element.style.width).toBe('800px')
+    expect(fixture.element.style.height).toBe('600px')
     expect(fixture.setDirty).toHaveBeenCalledWith(true, true)
   })
 
@@ -98,7 +101,25 @@ describe('installCanvasPixelRatio', () => {
     fixture.canvas.resize(1234.4, 777.7)
 
     expect([fixture.element.width, fixture.element.height]).toEqual([1543, 972])
-    expect(canvasCssSize(fixture.canvas)).toEqual([1234.4, 777.7])
+    // 972 / 1.25 is 777.6, not the requested 777.7: the reported size is what
+    // is actually on screen, so downstream maths stays consistent with it.
+    expect(canvasCssSize(fixture.canvas)).toEqual([1234.4, 777.6])
+  })
+
+  it('pins a fractional CSS box to exactly backing/ratio', () => {
+    const fixture = makeCanvas()
+    installCanvasPixelRatio(fixture.canvas, { pixelRatio: () => 1.5 })
+
+    fixture.canvas.resize(847.63, 520)
+
+    // round(847.63 * 1.5) = 1271: without the snap the browser would stretch
+    // those 1271 device pixels over 847.63 * 1.5 = 1271.445 and resample.
+    expect([fixture.element.width, fixture.element.height]).toEqual([1271, 780])
+    const [cssWidth, cssHeight] = canvasCssSize(fixture.canvas)
+    expect(fixture.element.width).toBe(cssWidth * 1.5)
+    expect(fixture.element.height).toBe(cssHeight * 1.5)
+    expect(fixture.element.style.width).toBe(`${1271 / 1.5}px`)
+    expect(fixture.element.style.height).toBe('520px')
   })
 
   it('leaves the bitmap alone when nothing changed', () => {
