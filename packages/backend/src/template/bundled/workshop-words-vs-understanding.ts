@@ -166,7 +166,7 @@ export const workshopWordsVsUnderstandingTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 1 · Day and night: words are not the same as understanding',
   description:
-    'Learn why matching words and a high similarity score are not the same as understanding. Swap the expected words and run the graph to compare keyword hits, the similarity score, and a criterion-based conceptual assessment side by side. Three parallel branches over one day-and-night answer; produces evidence on purpose, never a grade.',
+    'Compares three kinds of evidence about one answer to "Why do we have day and night?": expected words, embedding similarity to a reference, and a criterion-based conceptual assessment. Produces no grade on purpose.',
   category: 'Workshop',
   tags: [
     'tutorial',
