@@ -15,6 +15,7 @@ import type { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js'
 import { useMemo, useState } from 'react'
 
 import type { WorkflowTemplate } from '@/api/http'
+import { canvasViewportCenter } from '@/utils/canvasPixelRatio'
 
 import { CATEGORY_ORDER } from './categoryInfo'
 import { CategoryPill } from './CategoryPill'
@@ -65,10 +66,7 @@ export const NodePalette = ({
   const addNode = (type: string) => {
     const node = LiteGraph.createNode(type)
     if (!node) return
-    const center = canvas?.convertCanvasToOffset([
-      canvas.canvas.width / 2,
-      canvas.canvas.height / 2
-    ]) ?? [0, 0]
+    const center = canvas ? canvasViewportCenter(canvas) : [0, 0]
     node.pos = [center[0] - node.size[0] / 2, center[1] - node.size[1] / 2]
     compactNodeWidgets(node)
     onMutate(() => {

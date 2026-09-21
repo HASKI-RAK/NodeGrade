@@ -3,8 +3,14 @@ import { useTheme } from '@mui/material'
 import { LGraphCanvas, type LGraphNode } from 'litegraph.js'
 import { useEffect, useRef } from 'react'
 
+import {
+  installCanvasPixelRatio,
+  refreshCanvasPixelRatio,
+  watchDevicePixelRatio
+} from '@/utils/canvasPixelRatio'
 import { installDebugBridge } from '@/utils/debugBridge'
 import { installNodeConnectionHighlight } from '@/utils/nodeConnectionHighlight'
+import { hideStockSubgraphChrome } from '@/utils/subgraphChrome'
 
 type CanvasProps = {
   lgraph: LGraph
@@ -34,7 +40,13 @@ const Canvas = (props: CanvasProps) => {
         lcanvas.current.render_connections_shadows = false
         lcanvas.current.render_shadows = false
         lcanvas.current.connections_width = 3
+        // Bitmap at device resolution; LiteGraph alone sizes it in CSS pixels
+        // and everything it draws comes out soft on scaled displays.
+        installCanvasPixelRatio(lcanvas.current)
         installNodeConnectionHighlight(lcanvas.current)
+        // The breadcrumb above the canvas owns block navigation; LiteGraph's
+        // own banner and Graph Inputs/Outputs panels would duplicate it.
+        hideStockSubgraphChrome(lcanvas.current)
         // Dark blue-gray canvas + grid tile that the node fills are tuned
         // against (see CANVAS_THEME); LiteGraph's stock #222 barely separates
         // from the node bodies.
@@ -86,7 +98,16 @@ const Canvas = (props: CanvasProps) => {
       props.lgraph.setDirtyCanvas(true, true)
     })
     observer.observe(canvas.parentElement ?? canvas)
-    return () => observer.disconnect()
+    // Monitor switch or browser zoom: same CSS box, different device pixels.
+    const stopWatchingRatio = watchDevicePixelRatio(() => {
+      if (!lcanvas.current) return
+      refreshCanvasPixelRatio(lcanvas.current)
+      props.lgraph.setDirtyCanvas(true, true)
+    })
+    return () => {
+      observer.disconnect()
+      stopWatchingRatio()
+    }
   }, [props.lgraph])
 
   useEffect(() => {
