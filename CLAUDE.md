@@ -41,6 +41,7 @@ Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/n
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
 Graph execution (server)          → packages/backend/src/graphgateway/, src/core/Graph.ts
 Workflow persistence, ETags       → packages/backend/src/workflow/
+Version history, restore          → packages/backend/src/workflow/workflow-history.service.ts
 Workspace access, retention       → packages/backend/src/workspace/
 Templates, bundled content        → packages/backend/src/template/
 Workshops and join codes          → packages/backend/src/workshop/

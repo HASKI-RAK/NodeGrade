@@ -35,9 +35,13 @@ Responsibilities:
 - optimistic concurrency through `If-Match`/`ETag`
 - draft `content` versus `publishedContent` projection (ADR-0007)
 - creation and reset from a template revision
+- version history: a `WorkflowVersion` row per state the workflow leaves, coalesced on
+  save and forced before a reset or restore, with a per-workflow cap (newest 20)
 
-Primary entry points: `workflow.controller.ts`, `workflow.service.ts`, `workflow-etag.ts`,
-`workflow-slug.ts`, `dto/workflow.dto.ts`
+Primary entry points: `workflow.controller.ts`, `workflow.service.ts`,
+`workflow-history.service.ts`, `workflow-history.controller.ts`
+(`/workflows/:id/versions`), `workflow-etag.ts`, `workflow-slug.ts`,
+`workflow-serialize.ts`, `dto/workflow.dto.ts`
 
 Depends on: Prisma, templates. Used by: editor UI, graph execution, benchmark.
 

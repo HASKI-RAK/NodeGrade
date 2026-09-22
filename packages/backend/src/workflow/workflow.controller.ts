@@ -25,26 +25,8 @@ import {
   UpdateWorkflowDto,
 } from './dto/workflow.dto.js';
 import { parseIfMatch, versionToEtag } from './workflow-etag.js';
-import type { WorkflowDetail, WorkflowSummary } from './workflow.service.js';
+import { serializeDetail, serializeSummary } from './workflow-serialize.js';
 import { WorkflowService } from './workflow.service.js';
-
-const serializeSummary = (workflow: WorkflowSummary) => ({
-  id: workflow.id,
-  name: workflow.name,
-  slug: workflow.slug,
-  version: workflow.version,
-  createdAt: workflow.createdAt.toISOString(),
-  updatedAt: workflow.updatedAt.toISOString(),
-  publishedVersion: workflow.publishedVersion,
-  publishedAt: workflow.publishedAt?.toISOString() ?? null,
-  sourceTemplateId: workflow.sourceTemplateId,
-  sourceTemplateRevisionId: workflow.sourceTemplateRevisionId,
-});
-
-const serializeDetail = (workflow: WorkflowDetail) => ({
-  ...serializeSummary(workflow),
-  content: workflow.content,
-});
 
 @Controller('workflows')
 @WorkspaceScoped()

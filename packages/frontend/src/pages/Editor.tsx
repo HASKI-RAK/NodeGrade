@@ -31,6 +31,7 @@ import { EditorRail } from '@/components/editor/EditorRail'
 import { EditorToolbar } from '@/components/editor/EditorToolbar'
 import { NodeInspector } from '@/components/editor/NodeInspector'
 import { NodePalette } from '@/components/editor/NodePalette'
+import { WorkflowHistoryDialog } from '@/components/editor/WorkflowHistoryDialog'
 import TaskView, { type TaskViewHandle } from '@/components/TaskView'
 import { useAutosave } from '@/hooks/useAutosave'
 import { useGraphHistory } from '@/hooks/useGraphHistory'
@@ -101,6 +102,7 @@ export const Editor = () => {
   )
   const [railOpen, setRailOpen] = useState(true)
   const [developerTools, setDeveloperTools] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [blocks, setBlocks] = useState<WorkflowTemplate[]>([])
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([])
   const [defaultModel, setDefaultModel] = useState<ModelRef | null>(null)
@@ -407,6 +409,30 @@ export const Editor = () => {
     setWorkflow(latest)
   }, [autosave, history, lgraph, token, workflowId])
 
+  /**
+   * Loads a stored version back into the editor (SPEC-0021/FR-003).
+   *
+   * The pending edits are saved first so they become a history entry of their own:
+   * the server snapshots what it holds, and what it holds should be what the user
+   * sees. A save that conflicts is ignored — the restore overwrites either way.
+   */
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      await autosave.saveNow()
+      const restored = await api.restoreWorkflowVersion(token, workflowId, versionId)
+      const content = restored.content ?? '{"nodes":[]}'
+      const parsed = parseWorkflow(content)
+      autosave.replaceWithLatest(content, restored.version)
+      prepareGraph(lgraph, parsed)
+      history.clear()
+      setSelection([])
+      setWorkflow(restored)
+      setHistoryOpen(false)
+      setNotice('Earlier version restored.')
+    },
+    [autosave, history, lgraph, token, workflowId]
+  )
+
   const resetToTemplate = useCallback(async () => {
     await api.resetWorkflow(token, workflowId)
     const { workflow: restored } = await api.workflow(workflowId, token)
@@ -550,6 +576,7 @@ export const Editor = () => {
         onRun={run}
         onPreview={showPreview}
         onSaveAs={saveAs}
+        onHistory={() => setHistoryOpen(true)}
         onImport={importWorkflow}
         onExport={exportWorkflow}
         onReset={resetToTemplate}
@@ -671,6 +698,15 @@ export const Editor = () => {
           )}
         </EditorRail>
       </Box>
+      <WorkflowHistoryDialog
+        open={historyOpen}
+        currentVersion={workflow.version}
+        onClose={() => setHistoryOpen(false)}
+        onLoad={() => api.workflowVersions(workflowId, token)}
+        onRestore={restoreVersion}
+        onDelete={(versionId) => api.deleteWorkflowVersion(token, workflowId, versionId)}
+        onClear={() => api.clearWorkflowVersions(token, workflowId)}
+      />
       <Snackbar
         open={!!notice}
         autoHideDuration={5000}

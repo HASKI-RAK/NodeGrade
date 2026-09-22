@@ -320,6 +320,7 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
 | `RETENTION_ENABLED` | Delete idle browser and ended workshop workspaces after 60 days (default true). |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
+| `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
 | `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window (room-tolerant join throttle). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |

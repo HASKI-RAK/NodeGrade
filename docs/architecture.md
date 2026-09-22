@@ -161,6 +161,10 @@ PostgreSQL through Prisma 7; the client is generated into
   outputs as `jsonb` (capped per value and per run), the derived review flag and the
   participant's review mark. Rows cascade with their workspace and workflow and are
   trimmed to the newest 200 per workflow (ADR-0009, SPEC-0020).
+- `WorkflowVersion` holds the states a workflow has left: captured before the save that
+  replaces them (coalesced to one per two minutes) and unconditionally before a reset or
+  a restore. Rows cascade with their workflow and are trimmed to the newest 20 per
+  workflow (SPEC-0021).
 
 ## Boot lifecycle
 

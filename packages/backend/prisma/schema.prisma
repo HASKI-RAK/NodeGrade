@@ -99,12 +99,45 @@ model Workflow {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  runs Run[]
+  runs     Run[]
+  versions WorkflowVersion[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, updatedAt(sort: Desc)])
   @@index([sourceTemplateRevisionId])
   @@index([contentSchema])
+}
+
+/// A past state of a workflow, kept so an edit can be undone after the editor is closed
+/// (SPEC-0021).
+///
+/// Written *before* the state it records is overwritten, so the row always holds content
+/// that is no longer current: the live row is the present, these are the past. The
+/// version number is the workflow's optimistic counter at the moment of capture, which
+/// is what the history list shows.
+model WorkflowVersion {
+  id         String   @id @default(cuid(2))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  /// `Workflow.version` the snapshot was taken at. Not unique: a restore captures the
+  /// live state again, and repeated saves at the same version cannot happen but a
+  /// restored-then-re-restored workflow can revisit one.
+  version Int
+  name    String
+  content String
+  /// Carried, not stamped: restoring must not claim content was migrated when it was
+  /// captured before a content-schema change.
+  contentSchema Int @default(2)
+  /// Why the state was captured: `save`, `reset` or `restore`. A code rather than a
+  /// sentence, so the wording of the history list stays in the frontend.
+  reason String @default("save")
+  /// Nodes in the captured graph, so the list can be read without loading content.
+  nodeCount Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([workflowId, createdAt(sort: Desc)])
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ is included in a release.
 | 7 — Specification governance | SPEC-0015                       | The lint check attaches to the existing pull-request workflow that SPEC-0008 extends.                                          | Specification validation runs locally and in CI.                                                                                               |
 | 8 — Authoring refinements    | SPEC-0019 | SPEC-0005, SPEC-0007, and SPEC-0010 are accepted.                                                                         | A plain string or string array can drive a language model node.             |
 | 9 — Tutor experience         | SPEC-0020 | SPEC-0004, SPEC-0006, and SPEC-0007 are accepted.                                                                         | Runs are flagged for review and kept as a participant's submission inbox.   |
+| 10 — Recoverable editing     | SPEC-0021                       | SPEC-0004 and SPEC-0005 are accepted.                                                                                            | An edit can be undone after the tab that made it is gone.                                                                                        |
 
 Every wave is implemented. The Status
 column of the specification table below is authoritative and must match each
@@ -51,3 +52,4 @@ the required provider-management capabilities from SPEC-0009 are available.
 | SPEC-0016 | Feature | Deployment default model                             | SPEC-0009 | Implemented |
 | SPEC-0019 | Feature | Language model node accepts a plain string prompt    | SPEC-0001 | Implemented |
 | SPEC-0020 | Feature | Review flags and submission history                  | SPEC-0001 | Implemented |
+| SPEC-0021 | Feature | Workflow version history                             | SPEC-0001 | Implemented |

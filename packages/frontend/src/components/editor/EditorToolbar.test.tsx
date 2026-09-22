@@ -30,6 +30,7 @@ describe('EditorToolbar', () => {
         onRun={action}
         onPreview={action}
         onSaveAs={async () => undefined}
+        onHistory={action}
         onImport={async () => undefined}
         onExport={action}
         onReset={async () => undefined}
@@ -49,6 +50,7 @@ describe('EditorToolbar', () => {
     expect(screen.getByRole('button', { name: 'Run' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'More editor actions' }))
     expect(screen.getByText('Save as…')).toBeVisible()
+    expect(screen.getByText('Version history…')).toBeVisible()
     expect(screen.getByText('Import workflow…')).toBeVisible()
     expect(screen.getByText('Export workflow')).toBeVisible()
     expect(screen.getByText('Reset to source template…')).toBeVisible()
@@ -74,6 +76,7 @@ describe('EditorToolbar', () => {
         onRun={vi.fn()}
         onPreview={vi.fn()}
         onSaveAs={async () => undefined}
+        onHistory={vi.fn()}
         onImport={async () => undefined}
         onExport={vi.fn()}
         onReset={reset}
@@ -120,6 +123,7 @@ describe('EditorToolbar', () => {
           onRun={action}
           onPreview={action}
           onSaveAs={async () => undefined}
+          onHistory={action}
           onImport={async () => undefined}
           onExport={action}
           onReset={async () => undefined}
@@ -161,6 +165,7 @@ describe('EditorToolbar', () => {
         onRun={action}
         onPreview={action}
         onSaveAs={async () => undefined}
+        onHistory={action}
         onImport={async () => undefined}
         onExport={action}
         onReset={async () => undefined}

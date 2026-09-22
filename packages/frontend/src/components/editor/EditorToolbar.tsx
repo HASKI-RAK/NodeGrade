@@ -54,6 +54,7 @@ export const EditorToolbar = ({
   onRun,
   onPreview,
   onSaveAs,
+  onHistory,
   onImport,
   onExport,
   onReset,
@@ -76,6 +77,7 @@ export const EditorToolbar = ({
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
+  onHistory: () => void
   onImport: (file: File) => Promise<void>
   onExport: () => void
   onReset: () => Promise<void>
@@ -181,6 +183,16 @@ export const EditorToolbar = ({
             }}
           >
             Reset to source template…
+          </MenuItem>
+        )}
+        {!student && (
+          <MenuItem
+            onClick={() => {
+              setAnchor(null)
+              onHistory()
+            }}
+          >
+            Version history…
           </MenuItem>
         )}
         {!student && (

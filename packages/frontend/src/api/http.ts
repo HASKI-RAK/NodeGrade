@@ -66,6 +66,19 @@ export type Workflow = {
   updatedAt?: string
 }
 
+/** Why a past state was kept (SPEC-0021/FR-006). The wording of it is the client's. */
+export type WorkflowVersionReason = 'save' | 'reset' | 'restore'
+/** One state the workflow has already left; the live workflow is never in this list. */
+export type WorkflowVersion = {
+  id: string
+  /** The workflow's version counter at the moment of capture. */
+  version: number
+  name: string
+  reason: WorkflowVersionReason
+  nodeCount: number
+  createdAt: string
+}
+
 export type TemplateKind = 'WORKFLOW' | 'BLOCK'
 export type TemplateInterfaces = BlockInterfaces
 export type WorkflowTemplate = {
@@ -192,6 +205,33 @@ export const api = {
         body: {}
       })
     ).data,
+  workflowVersions: async (id: string, token?: string | null) =>
+    (
+      await apiRequest<{ versions: WorkflowVersion[] }>(`/workflows/${id}/versions`, {
+        token
+      })
+    ).data.versions,
+  /** Returns the workflow as it is after the restore, content included. */
+  restoreWorkflowVersion: async (token: string | null, id: string, versionId: string) =>
+    (
+      await apiRequest<Workflow>(
+        `/workflows/${id}/versions/${encodeURIComponent(versionId)}/restore`,
+        { method: 'POST', token, body: {} }
+      )
+    ).data,
+  deleteWorkflowVersion: async (
+    token: string | null,
+    id: string,
+    versionId: string
+  ): Promise<void> => {
+    await apiRequest<void>(`/workflows/${id}/versions/${encodeURIComponent(versionId)}`, {
+      method: 'DELETE',
+      token
+    })
+  },
+  clearWorkflowVersions: async (token: string | null, id: string): Promise<void> => {
+    await apiRequest<void>(`/workflows/${id}/versions`, { method: 'DELETE', token })
+  },
   publishWorkflow: async (token: string | null, id: string) =>
     (
       await apiRequest<Workflow>(`/workflows/${id}/publish`, {

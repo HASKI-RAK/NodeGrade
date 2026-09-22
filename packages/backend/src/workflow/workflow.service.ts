@@ -14,6 +14,7 @@ import type {
   UpdateWorkflowDto,
 } from './dto/workflow.dto.js';
 import type { IfMatch } from './workflow-etag.js';
+import { WorkflowHistoryService } from './workflow-history.service.js';
 import { dedupeSlug, slugify } from './workflow-slug.js';
 
 /**
@@ -72,6 +73,7 @@ export class WorkflowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly templates: TemplateService,
+    private readonly history: WorkflowHistoryService,
   ) {}
 
   private get maxWorkflows(): number {
@@ -304,10 +306,30 @@ export class WorkflowService {
     const versionFilter =
       ifMatch.kind === 'versions' ? { version: { in: ifMatch.versions } } : {};
 
+    // Read before the write, and only when a checkpoint is due: what the save is about
+    // to replace cannot be recovered afterwards (SPEC-0021/FR-001). A rename carries no
+    // graph, so it is not worth a snapshot of content that has not changed.
+    const previous =
+      dto.content !== undefined && (await this.history.isDue(id))
+        ? await this.prisma.workflow.findFirst({
+            where: { id, workspaceId },
+            select: {
+              version: true,
+              name: true,
+              content: true,
+              contentSchema: true,
+            },
+          })
+        : null;
+
     const { count } = await this.prisma.workflow.updateMany({
       where: { id, workspaceId, ...versionFilter },
       data,
     });
+
+    // Only once the save landed: a rejected save replaced nothing, so there is no past
+    // state to keep.
+    if (count > 0 && previous) await this.history.capture(id, previous);
 
     if (count === 0) {
       const current = await this.prisma.workflow.findFirst({
@@ -344,7 +366,13 @@ export class WorkflowService {
   async reset(workspaceId: string, id: string): Promise<WorkflowSummary> {
     const workflow = await this.prisma.workflow.findFirst({
       where: { id, workspaceId },
-      select: { sourceTemplateRevisionId: true },
+      select: {
+        sourceTemplateRevisionId: true,
+        version: true,
+        name: true,
+        content: true,
+        contentSchema: true,
+      },
     });
     if (!workflow) throw this.notFound();
 
@@ -358,6 +386,10 @@ export class WorkflowService {
     const revision = await this.templates.getRevision(
       workflow.sourceTemplateRevisionId,
     );
+
+    // Unconditional, unlike a save: discarding every edit is exactly the operation a
+    // user regrets, so the window that coalesces autosaves does not apply (FR-002).
+    await this.history.capture(id, workflow, 'reset');
 
     const { count } = await this.prisma.workflow.updateMany({
       where: { id, workspaceId },
