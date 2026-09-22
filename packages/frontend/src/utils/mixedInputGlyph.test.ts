@@ -12,16 +12,29 @@ const fixture = () => {
     restore: vi.fn(),
     beginPath: vi.fn(),
     arc: vi.fn(),
-    fill: vi.fn()
+    fill: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn((text: string) => ({ width: text.length * 5 }))
   } as unknown as CanvasRenderingContext2D
-  const canvas = { drawNode, live_mode: false } as unknown as LGraphCanvas
+  const canvas = {
+    drawNode,
+    ds: { scale: 1 },
+    inner_text_font: '14px Arial',
+    live_mode: false
+  } as unknown as LGraphCanvas
   const node = {
     pos: [100, 200],
     flags: {},
     inputs: [
-      { name: 'message', type: 'message,string,[message]', link: null },
+      {
+        name: 'message',
+        label: 'message | string',
+        type: 'message,string,[message]',
+        link: null
+      },
       {
         name: 'messages',
+        label: 'messages | strings',
         type: 'message,[message],[string],string',
         link: null
       },
@@ -38,23 +51,36 @@ const fixture = () => {
 }
 
 describe('mixed input glyph', () => {
-  it('overlays the string circle on a mixed message arrow', () => {
+  it('draws separated message and string legends after the stock arrows', () => {
     const { canvas, context, drawNode, node } = fixture()
+    drawNode.mockImplementation((drawnNode: LGraphNode) => {
+      expect(drawnNode.inputs?.map(({ label }) => label)).toEqual(['', '', undefined])
+    })
     installMixedInputGlyph(canvas)
 
     canvas.drawNode(node, context)
 
     expect(drawNode).toHaveBeenCalledWith(node, context)
-    expect(context.fillStyle).toBe(LINK_TYPE_COLORS.string)
+    expect(node.inputs?.map(({ label }) => label)).toEqual([
+      'message | string',
+      'messages | strings',
+      undefined
+    ])
+    expect(context.fillText).toHaveBeenNthCalledWith(1, 'message', 10, 35)
+    expect(context.fillText).toHaveBeenNthCalledWith(2, ' | ', 45, 35)
+    expect(context.fillText).toHaveBeenNthCalledWith(3, 'string', 72, 35)
+    expect(context.fillText).toHaveBeenNthCalledWith(4, 'messages', 10, 55)
+    expect(context.fillText).toHaveBeenNthCalledWith(5, ' | ', 50, 55)
+    expect(context.fillText).toHaveBeenNthCalledWith(6, 'strings', 77, 55)
     expect(context.arc).toHaveBeenCalledWith(
-      -1,
+      64,
       30,
       MIXED_INPUT_GLYPH_RADIUS,
       0,
       Math.PI * 2
     )
     expect(context.arc).toHaveBeenCalledWith(
-      -1,
+      69,
       50,
       MIXED_INPUT_GLYPH_RADIUS,
       0,
