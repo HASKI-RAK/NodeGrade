@@ -185,7 +185,8 @@ backend image (`node dist/src/main.js` after `prisma migrate deploy`), and an ng
 serving the built PWA as static files with SPA fallback. The nginx layer proxies `/api`,
 `/socket.io`, `/lti`, and `/health` to the backend service, keeping browser traffic on the
 frontend's public origin. The production runtime config therefore uses the relative
-`/api` URL.
+`/api` URL. `tools/stack.mjs` (`yarn dev:up`) drives that file, so a developer runs the
+deployed topology with the real models by the same verbs as the debug stack.
 
 `docker-compose.debug.yml` plus `tools/debug/stack.mjs` reproduce the whole stack
 deterministically on the 15xxx/18000 port range with a fake model worker, a seeded demo

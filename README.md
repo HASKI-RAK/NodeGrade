@@ -179,8 +179,9 @@ only through `api/http.ts` and `utils/socket.ts`; sessions live in
 - `models/`: Flask + sentence-transformers embedding/similarity worker
   (`models/Dockerfile` builds it).
 - `packages/backend/prisma/`: schema + migrations; `e2e/`: Playwright browser coverage;
-  `tools/debug/`: deterministic debug stack; `tools/spec-lint/`: `specs/` consistency
-  linter; `specs/`, `docs/adr/`: requirements and decisions.
+  `tools/debug/`: deterministic debug stack; `tools/stack.mjs`: the deployable stack
+  (`yarn dev:up`); `tools/spec-lint/`: `specs/` consistency linter; `specs/`,
+  `docs/adr/`: requirements and decisions.
 
 ## Example Usage
 
@@ -199,10 +200,25 @@ same on every run and no API key is needed.
 
 ## Docker
 
+Two stacks, and which one you want depends on whether you need real model output.
+
 `yarn debug:up` starts PostgreSQL, the backend, frontend, and deterministic
 OpenAI-compatible model worker (ports `15xxx` / `18000`). `yarn debug:status` and
 `yarn debug:logs` inspect it, `yarn debug:down` stops it, and `yarn debug:reset`
-recreates its database.
+recreates its database. Nothing is downloaded and no API key is needed, but the
+worker only imitates the models: its embeddings are a hash of the words, so
+scores are stable and comparable rather than meaningful.
+
+`yarn dev:up` starts the deployable stack from `docker-compose.yml` instead —
+the same containers a server runs, with the real embedding model (`BAAI/bge-m3`)
+and the real entailment model behind `text/semantic-equivalence`. `dev:status`,
+`dev:logs`, `dev:down` and `dev:reset` mirror the debug commands. The first start
+downloads about 2.3 GB of weights before the NLP worker reports healthy, so give
+it several minutes; later starts read the cached copy from a Docker volume.
+`yarn dev:serve` runs it in the foreground.
+
+Both stacks can run at once: their containers, volumes and host ports do not
+overlap.
 
 ## Providers and model governance
 
@@ -251,6 +267,19 @@ backend over the Compose network, so browsers use the frontend's public origin.
 `MODEL_WORKER_URL` is an optional external OpenAI-compatible text-generation
 endpoint offered as the `local` provider; it stays empty unless a deployment
 provides one.
+
+```bash
+yarn dev:up
+```
+
+That wrapper (`tools/stack.mjs`) is the same `docker compose` call with the
+mistakes removed: it always passes `--build`, it generates a
+`PROVIDER_ENCRYPTION_KEY` into `.env` on the first run and never touches it
+again, and after the stack reports healthy it prints the endpoints and names
+whatever is still missing. `yarn dev:down` stops it; `yarn dev:reset` deletes
+the database and the model cache and starts over.
+
+On a host without Yarn, the equivalent is:
 
 ```bash
 PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
