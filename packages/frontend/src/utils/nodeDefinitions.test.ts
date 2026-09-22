@@ -92,6 +92,10 @@ describe('node definition registry', () => {
       expect(slot.color_on).toBe(LINK_TYPE_COLORS.message)
       expect(slot.shape).toBe(LINK_TYPE_SHAPES.message)
     }
+    expect(node.inputs?.map(({ label }) => label)).toEqual([
+      'message | string',
+      'messages | strings'
+    ])
   })
 
   it('links a text output straight into either message port', () => {
@@ -121,6 +125,10 @@ describe('node definition registry', () => {
 
     expect(node.inputs?.[0].type).toContain('string')
     expect(node.inputs?.[1].type).toContain('[string]')
+    expect(node.inputs?.map(({ label }) => label)).toEqual([
+      'message | string',
+      'messages | strings'
+    ])
     // The wire the graph was saved with survives the retype.
     expect(node.inputs?.[1].link).toBe(7)
     expect(node.inputs?.[1].color_on).toBe(LINK_TYPE_COLORS.message)
