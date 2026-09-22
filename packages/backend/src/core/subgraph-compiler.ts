@@ -447,12 +447,36 @@ export function compileEditorGraphForExecution(
   emitScopeNodes(content, [], null);
   emitScopeLinks(content, []);
 
+  // Node slot metadata duplicates the graph-level link table in LiteGraph's
+  // serialized format. Since compilation assigns fresh sequential link ids, the
+  // cloned metadata must be rebuilt as well. Leaving the editor ids in place makes
+  // getInputData() read an unrelated link (or no link at all) after configure().
+  const inputLinks = new Map<string, number>();
+  const outputLinks = new Map<string, number[]>();
+  const slotKey = (nodeId: number, slot: number): string => `${nodeId}:${slot}`;
+  for (const [linkId, originId, originSlot, targetId, targetSlot] of links) {
+    inputLinks.set(slotKey(targetId, targetSlot), linkId);
+    const key = slotKey(originId, originSlot);
+    outputLinks.set(key, [...(outputLinks.get(key) ?? []), linkId]);
+  }
+  const linkedNodes = nodes.map((node) => ({
+    ...node,
+    inputs: node.inputs?.map((input, slot) => ({
+      ...input,
+      link: inputLinks.get(slotKey(node.id, slot)) ?? null,
+    })),
+    outputs: node.outputs?.map((output, slot) => ({
+      ...output,
+      links: outputLinks.get(slotKey(node.id, slot)) ?? null,
+    })),
+  }));
+
   return {
     content: {
       ...shallowRest(content),
       last_node_id: nextId,
       last_link_id: nextLinkId,
-      nodes,
+      nodes: linkedNodes,
       links,
     },
     sourceMap,

@@ -81,7 +81,11 @@ export const NodePalette = ({
     <Box
       aria-label="Node palette"
       sx={{
+        position: 'absolute',
+        inset: '0 auto 0 0',
+        zIndex: 1,
         width: 320,
+        maxWidth: '100%',
         height: '100%',
         overflowY: 'auto',
         bgcolor: 'background.paper',

@@ -167,6 +167,49 @@ describe('compileEditorGraphForExecution', () => {
     expect(first).toEqual(second);
   });
 
+  it('rebuilds node slot references when editor link ids are sparse', () => {
+    const content = {
+      nodes: [
+        {
+          ...innerText(10, 'hello'),
+          outputs: [{ name: 'value', type: 'string', links: [7, 19] }],
+        },
+        {
+          ...innerWatch(20),
+          inputs: [{ name: 'value', type: 'string', link: 7 }],
+        },
+        {
+          ...innerWatch(30),
+          inputs: [{ name: 'value', type: 'string', link: 19 }],
+        },
+      ],
+      links: [
+        [7, 10, 0, 20, 0, 'string'],
+        [19, 10, 0, 30, 0, 'string'],
+      ],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+
+    const compiled = compileEditorGraphForExecution(content as never, {
+      registeredType: registered(['basic/string', 'basic/watch']),
+    });
+    const [source, firstTarget, secondTarget] = compiled.content.nodes;
+
+    expect(source?.outputs?.[0]?.links).toEqual([1, 2]);
+    expect(firstTarget?.inputs?.[0]?.link).toBe(1);
+    expect(secondTarget?.inputs?.[0]?.link).toBe(2);
+
+    const graph = new LGraph();
+    graph.configure(structuredClone(compiled.content) as never);
+    const serialized = graph.serialize();
+    expect(serialized.nodes[0]?.outputs?.[0]?.links).toEqual([1, 2]);
+    expect(serialized.nodes[1]?.inputs?.[0]?.link).toBe(1);
+    expect(serialized.nodes[2]?.inputs?.[0]?.link).toBe(2);
+  });
+
   it('reports the wrapper path and inner identity for bad boundaries and types', () => {
     const missingInner = {
       nodes: [

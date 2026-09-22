@@ -59,6 +59,7 @@ test('the deployment offers only the deterministic provider', async ({ request }
 test('a participant joins the WAIE workshop, edits the rubric, runs it and reloads', async ({
   page
 }) => {
+  test.slow()
   await joinFromLandingPage(page, WAIE_WORKSHOP_CODE)
 
   // Joining duplicated the published template revision into this browser's own workspace.
@@ -86,8 +87,19 @@ test('a participant joins the WAIE workshop, edits the rubric, runs it and reloa
   await page.getByRole('button', { name: 'Preview' }).click()
   await page.getByRole('textbox', { name: 'Your answer' }).fill(ANSWER)
   await page.getByRole('button', { name: 'Run assessment' }).click()
-  await page.evaluate(() =>
-    window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished', 60_000)
+  const runOutcome = await page.evaluate(async () => {
+    const debug = window.__NODEGRADE_DEBUG__
+    if (!debug) throw new Error('NodeGrade debug bridge is unavailable.')
+    const event = await Promise.race([
+      debug.waitForEvent('graphFinished', 60_000).then(() => 'graphFinished' as const),
+      debug
+        .waitForEvent('graphOperationFailed', 60_000)
+        .then(() => 'graphOperationFailed' as const)
+    ])
+    return { event, recentEvents: debug.recentEvents() }
+  })
+  expect(runOutcome.event, JSON.stringify(runOutcome.recentEvents, null, 2)).toBe(
+    'graphFinished'
   )
   // Runs stay on the Test tab with inline progress; the trace is one click away.
   await page.getByRole('tab', { name: 'Trace' }).click()
