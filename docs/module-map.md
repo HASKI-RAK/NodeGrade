@@ -273,6 +273,23 @@ high. Use it to check that a graph runs, never to judge how the equivalence casc
 behaves. `DEBUG_NLI_DISABLED=1` makes `/entailment` answer 503, which is what the real
 worker does when `NLI_MODEL` is empty.
 
+## Deployable stack
+
+Location: `tools/stack.mjs`, `docker-compose.yml`
+
+The same `up|serve|down|status|logs|reset` verbs as the debug driver, against the real
+stack: Postgres, the sentence-transformer worker with `EMBEDDING_MODEL` and `NLI_MODEL`
+actually loaded, the backend and the frontend, on the default 8080/5000/8002/5432 ports
+(each overridable through `NODEGRADE_*_PORT`). Exposed as `yarn dev:up` and friends.
+
+It wraps Compose rather than documenting it because three of the ways this stack fails
+look like success: a start without `--build` serves the previous image's routes,
+templates and migrations; a `PROVIDER_ENCRYPTION_KEY` supplied per command cannot decrypt
+what the last one wrote; and a stack with no `ADMIN_USERNAME`/`ADMIN_PASSWORD` comes up
+healthy with no way to create a workshop. So `up` always builds, writes a key into `.env`
+once and never rewrites a value that exists, and reports what is still missing after the
+containers are healthy.
+
 ## Browser suite
 
 Location: `e2e/`, `playwright.config.ts`

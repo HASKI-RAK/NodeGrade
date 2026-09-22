@@ -23,6 +23,7 @@ Database schema + migrations   packages/backend/prisma/
 Specifications                 specs/SPEC-00xx-*/spec.md
 Architecture decisions         docs/adr/
 Debug stack (Docker Compose)   tools/debug/, docker-compose.debug.yml
+Real stack (Docker Compose)    tools/stack.mjs, docker-compose.yml
 Browser e2e                    e2e/
 ```
 
@@ -65,6 +66,7 @@ yarn install                       # install
 yarn setup                         # prisma generate + migrate deploy (needs DATABASE_URL)
 yarn dev                           # all workspaces in watch mode
 yarn debug:up                      # deterministic full stack in Docker (ports 15xxx/18000); also debug:status|logs|down|reset
+yarn dev:up                        # deployable stack with the real models (ports 8080/5000/8002/5432); also dev:serve|status|logs|down|reset
 yarn build                         # topological build of all workspaces
 yarn typecheck                     # backend tsc --noEmit + frontend tsc
 yarn lint:check                    # eslint, zero warnings
