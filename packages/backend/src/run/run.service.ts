@@ -13,7 +13,12 @@ export const OUTPUTS_LIMIT = 50;
 export const FLAG_REASON_LIMIT = 1000;
 export const DEFAULT_LIST_LIMIT = 50;
 
-export const RUN_FILTERS = ['all', 'needs-review', 'reviewed', 'failed'] as const;
+export const RUN_FILTERS = [
+  'all',
+  'needs-review',
+  'reviewed',
+  'failed',
+] as const;
 export type RunFilter = (typeof RUN_FILTERS)[number];
 
 export type RunOutcome = 'COMPLETED' | 'FAILED';

@@ -39,7 +39,41 @@ export type PreviewMessages = {
   answerTooShort: (minChars: number) => string
   answerTooLong: (maxChars: number) => string
   answerBoundsConflict: (minChars: number, maxChars: number) => string
+  /** The Submissions inbox (SPEC-0020/FR-009 to FR-012). */
+  submissionsTab: (needsReview: number) => string
+  submissionsTotal: string
+  reviewed: string
+  failed: string
+  submissionCounts: string
+  filterSubmissions: string
+  filterAll: string
+  submissionList: string
+  submissionDetail: string
+  submissionsEmpty: string
+  submissionsFilterEmpty: string
+  submissionsLoadFailed: string
+  submissionGone: string
+  showingLatest: (count: number) => string
+  emptyAnswer: string
+  scoreChip: (score: number) => string
+  runDuration: (ms: number) => string
+  back: string
+  answerHeading: string
+  noOutputs: string
+  flagReason: string
+  tutorReview: string
+  reviewNoteLabel: string
+  markReviewed: string
+  reopenReview: string
+  reviewedAt: (when: string) => string
+  reviewSaveFailed: string
+  runAgain: string
+  runAgainHint: string
+  submittedBy: (name: string) => string
 }
+
+const durationLabel = (ms: number, secondsUnit: string): string =>
+  ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} ${secondsUnit}`
 
 const en: PreviewMessages = {
   testTab: 'Test',
@@ -72,7 +106,38 @@ const en: PreviewMessages = {
   answerTooShort: (minChars) => `This workflow asks for at least ${minChars} characters.`,
   answerTooLong: (maxChars) => `This workflow allows at most ${maxChars} characters.`,
   answerBoundsConflict: (minChars, maxChars) =>
-    `This workflow asks for at least ${minChars} characters but allows at most ${maxChars}. Fix the answer node before running.`
+    `This workflow asks for at least ${minChars} characters but allows at most ${maxChars}. Fix the answer node before running.`,
+  submissionsTab: (needsReview) =>
+    needsReview > 0 ? `Submissions (${needsReview})` : 'Submissions',
+  submissionsTotal: 'Submissions',
+  reviewed: 'Reviewed',
+  failed: 'Failed',
+  submissionCounts: 'Submission counts',
+  filterSubmissions: 'Filter submissions',
+  filterAll: 'All',
+  submissionList: 'Submission list',
+  submissionDetail: 'Submission',
+  submissionsEmpty: 'No submissions yet. Run an answer to see it here as a tutor would.',
+  submissionsFilterEmpty: 'No submissions match this filter.',
+  submissionsLoadFailed: 'Submissions could not be loaded.',
+  submissionGone: 'This submission no longer exists.',
+  showingLatest: (count) => `Showing the latest ${count} submissions.`,
+  emptyAnswer: 'Empty answer',
+  scoreChip: (score) => `Score ${score}`,
+  runDuration: (ms) => durationLabel(ms, 's'),
+  back: 'Back to submissions',
+  answerHeading: 'Answer',
+  noOutputs: 'This run produced no outputs.',
+  flagReason: 'Why it was flagged',
+  tutorReview: 'Tutor review',
+  reviewNoteLabel: 'Note (optional)',
+  markReviewed: 'Mark as reviewed',
+  reopenReview: 'Reopen',
+  reviewedAt: (when) => `Reviewed ${when}`,
+  reviewSaveFailed: 'The review could not be saved.',
+  runAgain: 'Run again',
+  runAgainHint: 'Runs this answer against the current graph.',
+  submittedBy: (name) => `Submitted by ${name}`
 }
 
 const de: PreviewMessages = {
@@ -109,7 +174,39 @@ const de: PreviewMessages = {
     `Dieser Workflow verlangt mindestens ${minChars} Zeichen.`,
   answerTooLong: (maxChars) => `Dieser Workflow erlaubt höchstens ${maxChars} Zeichen.`,
   answerBoundsConflict: (minChars, maxChars) =>
-    `Dieser Workflow verlangt mindestens ${minChars} Zeichen, erlaubt aber höchstens ${maxChars}. Bitte den Antwort-Knoten korrigieren.`
+    `Dieser Workflow verlangt mindestens ${minChars} Zeichen, erlaubt aber höchstens ${maxChars}. Bitte den Antwort-Knoten korrigieren.`,
+  submissionsTab: (needsReview) =>
+    needsReview > 0 ? `Einreichungen (${needsReview})` : 'Einreichungen',
+  submissionsTotal: 'Einreichungen',
+  reviewed: 'Geprüft',
+  failed: 'Fehlgeschlagen',
+  submissionCounts: 'Anzahl der Einreichungen',
+  filterSubmissions: 'Einreichungen filtern',
+  filterAll: 'Alle',
+  submissionList: 'Liste der Einreichungen',
+  submissionDetail: 'Einreichung',
+  submissionsEmpty:
+    'Noch keine Einreichungen. Starte eine Antwort, um sie hier aus Tutor-Sicht zu sehen.',
+  submissionsFilterEmpty: 'Keine Einreichungen für diesen Filter.',
+  submissionsLoadFailed: 'Die Einreichungen konnten nicht geladen werden.',
+  submissionGone: 'Diese Einreichung existiert nicht mehr.',
+  showingLatest: (count) => `Die neuesten ${count} Einreichungen werden angezeigt.`,
+  emptyAnswer: 'Leere Antwort',
+  scoreChip: (score) => `Punktzahl ${score}`,
+  runDuration: (ms) => durationLabel(ms, 's'),
+  back: 'Zurück zu den Einreichungen',
+  answerHeading: 'Antwort',
+  noOutputs: 'Diese Auswertung hat keine Ausgaben erzeugt.',
+  flagReason: 'Grund für die Markierung',
+  tutorReview: 'Prüfung durch die Lehrperson',
+  reviewNoteLabel: 'Notiz (optional)',
+  markReviewed: 'Als geprüft markieren',
+  reopenReview: 'Erneut öffnen',
+  reviewedAt: (when) => `Geprüft ${when}`,
+  reviewSaveFailed: 'Die Prüfung konnte nicht gespeichert werden.',
+  runAgain: 'Erneut ausführen',
+  runAgainHint: 'Führt diese Antwort mit dem aktuellen Graphen aus.',
+  submittedBy: (name) => `Eingereicht von ${name}`
 }
 
 export const DEFAULT_PREVIEW_LOCALE: PreviewLocale = 'en'

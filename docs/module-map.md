@@ -210,13 +210,15 @@ registration happens in this package.
 Location: `packages/frontend/src/pages/Editor.tsx`, `packages/frontend/src/components/`
 
 Responsibilities: LiteGraph canvas hosting, palette/inspector/toolbar rails, autosave and
-version conflict handling, undo history, run controls, trace and task views.
+version conflict handling, undo history, run controls, trace and task views, the
+Submissions inbox over stored runs (editor only; hidden for LTI student launches).
 
 Primary entry points: `components/Canvas.tsx`, `components/editor/EditorToolbar.tsx`,
 `components/editor/NodePalette.tsx`, `components/editor/NodeInspector.tsx`,
 `components/editor/EditorRail.tsx`, `components/TaskView.tsx`, `components/TraceView.tsx`,
-`hooks/useAutosave.ts`, `hooks/useGraphHistory.ts`, `hooks/useGraphOperations.ts`,
-`hooks/useSocket.ts`, `hooks/useServerEvents.ts`, `hooks/useWorkflowForm.ts`,
+`components/SubmissionsView.tsx`, `components/ResultCard.tsx`, `hooks/useAutosave.ts`,
+`hooks/useGraphHistory.ts`, `hooks/useGraphOperations.ts`, `hooks/useSocket.ts`,
+`hooks/useServerEvents.ts`, `hooks/useSubmissions.ts`, `hooks/useWorkflowForm.ts`,
 `i18n/preview.ts`, `utils/graphBlocks.ts`
 
 LiteGraph canvas installers live in `utils/`: `canvasPixelRatio.ts` (device-pixel-ratio

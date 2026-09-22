@@ -36,6 +36,7 @@ import { useAutosave } from '@/hooks/useAutosave'
 import { useGraphHistory } from '@/hooks/useGraphHistory'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
+import { useSubmissions } from '@/hooks/useSubmissions'
 import { useWorkflowForm } from '@/hooks/useWorkflowForm'
 import { DEFAULT_PREVIEW_LOCALE, previewMessages } from '@/i18n/preview'
 import { workspaceStore } from '@/store/workspaceStore'
@@ -193,6 +194,30 @@ export const Editor = () => {
     handleSnackbarClose
   } = useServerEvents({ socket, lgraph })
   const runMessages = previewMessages[DEFAULT_PREVIEW_LOCALE]
+
+  // The Submissions inbox is the editor's; a student launch shares the workspace with
+  // every other launch of the same resource link and must not list them (SPEC-0020/FR-007).
+  const submissions = useSubmissions({
+    workflowId,
+    token,
+    enabled: workflow !== null && !student,
+    runId,
+    runState
+  })
+  const submissionsProps = useMemo(
+    () => ({
+      runs: submissions.runs,
+      summary: submissions.summary,
+      filter: submissions.filter,
+      loading: submissions.loading,
+      error: submissions.error,
+      onFilterChange: submissions.setFilter,
+      onRefresh: submissions.refresh,
+      onLoadDetail: submissions.loadDetail,
+      onSetReview: submissions.setReview
+    }),
+    [submissions]
+  )
 
   // The preview poses the question the graph currently holds, so an inspector edit shows
   // up in the Test tab without a run in between (SPEC-0007/FR-003).
@@ -633,6 +658,7 @@ export const Editor = () => {
               onCancel={handleCancel}
               onSelectTraceNode={selectTraceNode}
               onSelectOutputNode={student ? undefined : selectTraceNode}
+              submissions={student ? undefined : submissionsProps}
             />
           ) : (
             <NodeInspector

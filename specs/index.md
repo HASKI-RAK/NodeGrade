@@ -22,7 +22,7 @@ is included in a release.
 | 8 — Authoring refinements    | SPEC-0019 | SPEC-0005, SPEC-0007, and SPEC-0010 are accepted.                                                                         | A plain string or string array can drive a language model node.             |
 | 9 — Tutor experience         | SPEC-0020 | SPEC-0004, SPEC-0006, and SPEC-0007 are accepted.                                                                         | Runs are flagged for review and kept as a participant's submission inbox.   |
 
-Every wave up to 8 is implemented; wave 9 is in progress. The Status
+Every wave is implemented. The Status
 column of the specification table below is authoritative and must match each
 specification's frontmatter `status`.
 
@@ -50,4 +50,4 @@ the required provider-management capabilities from SPEC-0009 are available.
 | SPEC-0015 | Feature | Automated specification linting                      | SPEC-0008 | Implemented |
 | SPEC-0016 | Feature | Deployment default model                             | SPEC-0009 | Implemented |
 | SPEC-0019 | Feature | Language model node accepts a plain string prompt    | SPEC-0001 | Implemented |
-| SPEC-0020 | Feature | Review flags and submission history                  | SPEC-0001 | Draft       |
+| SPEC-0020 | Feature | Review flags and submission history                  | SPEC-0001 | Implemented |
