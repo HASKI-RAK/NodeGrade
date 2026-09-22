@@ -33,6 +33,9 @@ const MESSAGES_PORT: readonly InOut[] = [
   'string'
 ]
 
+const MESSAGE_INPUT_LABEL = 'message | string'
+const MESSAGES_INPUT_LABEL = 'messages | strings'
+
 /** Language-model node. Provider credentials remain behind ModelCompletionRuntime. */
 export class LLMNode extends LGraphNode {
   static path = 'models/llm'
@@ -43,8 +46,8 @@ export class LLMNode extends LGraphNode {
 
   constructor() {
     super()
-    this.addIn(MESSAGE_PORT, 'message')
-    this.addIn(MESSAGES_PORT, 'messages')
+    this.addIn(MESSAGE_PORT, 'message', { label: MESSAGE_INPUT_LABEL })
+    this.addIn(MESSAGES_PORT, 'messages', { label: MESSAGES_INPUT_LABEL })
     this.addWidget(
       'number',
       'max_tokens',
@@ -218,6 +221,8 @@ export class LLMNode extends LGraphNode {
     // this call a stored graph keeps the narrow slot types it was saved with
     // (SPEC-0019/FR-008).
     super.onConfigure(serialized)
+    if (this.inputs?.[0]) this.inputs[0].label = MESSAGE_INPUT_LABEL
+    if (this.inputs?.[1]) this.inputs[1].label = MESSAGES_INPUT_LABEL
     const modelRef = this.properties.model_ref
     if (isModelRef(modelRef)) {
       this.properties.model = modelRef.modelId
