@@ -7,6 +7,7 @@ import { ConcatObject } from './ConcatObject'
 import { ConcatString } from './ConcatString'
 import { CosineSimilarity } from './CosineSimilarity'
 import { DocumentLoader } from './DocumentLoader'
+import { ExtractLineNode } from './ExtractLineNode'
 import { ExtractNumberNode } from './ExtractNumberNode'
 import { ImageNode } from './ImageNode'
 import { KeywordCheckNode } from './KeywordCheckNode'
@@ -289,6 +290,13 @@ const entries: readonly Entry[] = [
     description: 'Extract a number from text.'
   },
   {
+    node: ExtractLineNode,
+    category: 'Validation',
+    description: 'Extract the line that follows a prefix.',
+    tags: ['classification', 'structured'],
+    properties: [text('prefix', 'Line prefix', true)]
+  },
+  {
     node: MathOperationNode,
     category: 'Validation',
     description: 'Apply a numeric operation.',
@@ -424,6 +432,7 @@ const legacyWidgetKeys = new Map<string, readonly string[]>([
     ]
   ],
   [Precision.getPath(), ['precision']],
+  [ExtractLineNode.getPath(), ['prefix']],
   [NumberNode.getPath(), ['value']],
   [MathOperationNode.getPath(), ['operation']],
   [StringArrayToString.getPath(), ['separator']],

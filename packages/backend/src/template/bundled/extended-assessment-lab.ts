@@ -101,8 +101,8 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
   category: 'Assessment laboratories',
   tags: ['assessment', 'llm', 'katalyst', 'validation', 'extended-palette'],
   content: {
-    last_node_id: 47,
-    last_link_id: 51,
+    last_node_id: 49,
+    last_link_id: 53,
     nodes: [
       node({
         id: 1,
@@ -447,7 +447,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
           input('message', 'message,string,[message]', 35),
           input('messages', 'message,[message],[string],string', 33),
         ],
-        outputs: [output('string', 'string', [38, 39, 40, 51])],
+        outputs: [output('string', 'string', [38, 39, 40, 51, 52])],
         properties: llmProperties,
         widgetsValues: [2048, 0.2, 0.9, 40, 0, KATALYST_MODEL_QWEN_FLASH],
         size: [320, 220],
@@ -643,6 +643,31 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
         widgetsValues: ['Needs a tutor?', 'EDUCATOR_REVIEW', 'REASON:'],
         size: [410, 110],
       }),
+      node({
+        id: 48,
+        type: 'text/extract-line',
+        pos: [3110, 560],
+        title: 'Extract score line',
+        inputs: [input('text', 'string', 52)],
+        outputs: [output('line', 'string', [53])],
+        properties: { prefix: 'Score:', value: '' },
+        widgetsValues: ['Score:'],
+        size: [320, 80],
+      }),
+      node({
+        id: 49,
+        type: 'output/output',
+        pos: [3510, 560],
+        title: 'Score line output',
+        inputs: [input('*', '*', 53)],
+        properties: {
+          uniqueId: '49',
+          type: 'text',
+          label: 'Score line',
+          value: '',
+        },
+        widgetsValues: ['Score line', 'text'],
+      }),
     ],
     links: [
       [1, 1, 0, 25, 0, 'string'],
@@ -694,6 +719,8 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
       [49, 3, 0, 45, 1, 'string'],
       [50, 45, 2, 46, 0, 'string'],
       [51, 32, 0, 47, 0, 'string'],
+      [52, 32, 0, 48, 0, 'string'],
+      [53, 48, 0, 49, 0, 'string'],
     ],
     groups: [
       {

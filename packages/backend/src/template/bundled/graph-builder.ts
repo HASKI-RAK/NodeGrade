@@ -70,6 +70,10 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     inputs: [slot('string')],
     outputs: [slot('number')],
   },
+  'text/extract-line': {
+    inputs: [slot('text', 'string')],
+    outputs: [slot('line', 'string')],
+  },
   'math/math-operation': {
     inputs: [slot('number'), slot('number')],
     outputs: [slot('number')],
@@ -403,6 +407,30 @@ export class GraphBuilder {
       properties: { value: '' },
     });
     this.link(source, 0, node, 0);
+    return node;
+  }
+
+  /**
+   * Lifts one `KEY: value` line out of a model reply. This is how a four-line
+   * diagnosis becomes the bare category a `classifications` output wants,
+   * without asking the model a second time.
+   */
+  extractLine(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+    prefix: string,
+    sourceSlot = 0,
+  ): NodeRef {
+    const node = this.add({
+      type: 'text/extract-line',
+      title,
+      pos,
+      size: [320, 80],
+      properties: { prefix, value: '' },
+      widgetsValues: [prefix],
+    });
+    this.link(source, sourceSlot, node, 0);
     return node;
   }
 

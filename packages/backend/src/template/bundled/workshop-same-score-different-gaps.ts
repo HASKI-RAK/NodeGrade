@@ -13,9 +13,14 @@ import { GraphBuilder, type NodeRef } from './graph-builder.js';
  * educator should look; a review flag turns that recommendation into the structured
  * verdict the Submissions inbox counts (SPEC-0020/FR-003).
  *
+ * The total reaches the participant twice. "Proposed points / 8" is a text output in
+ * the rubric's own unit. "Score" is a `score` output in percent: the venue the preview
+ * draws as a bar with a pass chip, which is why only the scaled number goes through it.
+ * Dividing by a visible "Maximum points" node keeps that conversion in the graph.
+ *
  * The weighting activity (make cloud formation count double) is done live in the editor:
  * a Number node with value 2 and a Math Operation `*` between "Condensation points" and
- * the first sum.
+ * the first sum, then "Maximum points" raised to 10 so the percentage stays honest.
  */
 
 const QUESTION = [
@@ -278,6 +283,32 @@ const build = () => {
     '#6f621f',
   );
 
+  // Student-facing score ---------------------------------------------------------------
+  // The `score` venue reads a 0-100 number: the preview draws it as a bar and awards
+  // the "passed" chip at 60 (SPEC-0007/FR-004). Eight rubric points are not a
+  // percentage, so the graph divides by the maximum and scales, again without a
+  // model. "Maximum points" is the second node the weighting activity edits: doubling
+  // cloud formation makes it 10.
+  const maxPoints = g.number('Maximum points', [4390, 1120], 8);
+  const fraction = g.math(
+    'Fraction of maximum',
+    [4390, 1260],
+    '/',
+    total,
+    maxPoints,
+  );
+  const percentScale = g.number('Percent scale', [4890, 1120], 100);
+  const percent = g.math(
+    'Score in percent',
+    [4890, 1260],
+    '*',
+    fraction,
+    percentScale,
+  );
+  const rounded = g.precision('Rounded score', [5390, 1260], percent, 1);
+  g.output('Score', [5730, 1260], rounded, 0, 'score');
+  g.group('Show the points as a score', [4350, 820, 1830, 930], '#6f621f');
+
   // Formative feedback from the criterion reports ---------------------------------------
   const feedbackTop = 2230;
   const feedbackInstructions = g.textfield(
@@ -346,7 +377,7 @@ export const workshopSameScoreDifferentGapsTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 2 · The water cycle: the same score can mean different learning needs',
   description:
-    'The water cycle — the same score can mean different learning needs. Rubric-based scoring of a water-cycle description against four rubric criteria (evaporation, condensation, rain, collection), 0–2 points each.\n\nMethods: (1) One LLM grader per criterion returning points on the first line plus evidence and gap; (2) Deterministic point aggregation — extract-number plus math nodes sum the four awards to a total / 8, the model never adds; (3) Formative feedback from the criterion reports, not the total, so equal scores get different next steps; (4) A review stage that checks the reports and the draft against the answer and flags the run for a tutor when something does not hold.\n\nUse the live weighting activity (double cloud formation with a ×2 math node) to see how the total changes while the feedback still follows the missing stage.',
+    'The water cycle — the same score can mean different learning needs. Rubric-based scoring of a water-cycle description against four rubric criteria (evaporation, condensation, rain, collection), 0–2 points each.\n\nMethods: (1) One LLM grader per criterion returning points on the first line plus evidence and gap; (2) Deterministic point aggregation — extract-number plus math nodes sum the four awards to a total / 8, the model never adds; (3) Formative feedback from the criterion reports, not the total, so equal scores get different next steps; (4) A review stage that checks the reports and the draft against the answer and flags the run for a tutor when something does not hold; (5) A score card for the learner — total ÷ maximum × 100, shown as a percentage with the pass mark at 60 — next to the raw points, so you see both the rubric’s unit and the grade a student would get.\n\nUse the live weighting activity (double cloud formation with a ×2 math node, then raise Maximum points to 10) to see how the total changes while the feedback still follows the missing stage.',
   category: 'Workshop',
   tags: ['tutorial', 'workshop', 'rubric', 'scoring', 'feedback', 'katalyst'],
   content: build(),

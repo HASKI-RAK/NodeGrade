@@ -5,6 +5,7 @@ import { ConcatObject } from './ConcatObject'
 import { ConcatString } from './ConcatString'
 import { CosineSimilarity } from './CosineSimilarity'
 import { DocumentLoader } from './DocumentLoader'
+import { ExtractLineNode } from './ExtractLineNode'
 import { ExtractNumberNode } from './ExtractNumberNode'
 import { ImageNode } from './ImageNode'
 import { KeywordCheckNode } from './KeywordCheckNode'
@@ -67,6 +68,7 @@ export {
   KeywordCheckNode,
   TFIDF,
   ExtractNumberNode,
+  ExtractLineNode,
   MathOperationNode,
   StringArrayToString,
   StringsToArray
@@ -130,6 +132,7 @@ export {
   evaluateReviewSignal,
   type ReviewSignal
 } from './ReviewFlagNode'
+export { DEFAULT_LINE_PREFIX, extractLine } from './ExtractLineNode'
 export {
   compactNodeWidgets,
   getDefinedNodeConstructors,
