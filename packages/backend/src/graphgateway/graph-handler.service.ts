@@ -32,6 +32,11 @@ import { WorkflowService } from '../workflow/workflow.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 import { ExecutionLimitsService } from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
+import {
+  type RecordedOutput,
+  type RunOutcome,
+  RunService,
+} from '../run/run.service.js';
 
 type ActiveRun = {
   runId: string;
@@ -40,6 +45,13 @@ type ActiveRun = {
   workspaceId: string;
   workflowId: string;
   controller: AbortController;
+  /** Outputs the run emitted so far, in execution order, already sanitized. */
+  outputs: RecordedOutput[];
+  answer: string;
+  /** Set once execution starts; a run without it leaves no record (SPEC-0020/FR-004). */
+  startedAt?: Date;
+  /** LTI launch display name, so the instructor's inbox tells learners apart. */
+  submittedBy?: string;
 };
 
 @Injectable()
@@ -62,6 +74,7 @@ export class GraphHandlerService {
     private readonly xapiService: XapiService,
     private readonly modelRuntime: ProviderRuntimeService,
     private readonly limits: ExecutionLimitsService,
+    private readonly runs: RunService,
   ) {}
 
   /**
@@ -106,7 +119,7 @@ export class GraphHandlerService {
   private readonly addOnNodeAdded = (
     lgraph: LGraph,
     client: Socket,
-    correlation: { runId: string; workflowId: string },
+    run: ActiveRun,
   ): void => {
     lgraph.onNodeAdded = (node: LGraphNode) => {
       this.logger.debug(
@@ -120,6 +133,7 @@ export class GraphHandlerService {
           type: string;
           label: string;
           value: unknown;
+          verdict?: 'flagged' | 'clear';
         };
         const output = sanitizeTraceOutputs(
           [
@@ -137,15 +151,28 @@ export class GraphHandlerService {
         // it to editor identity the same way traces do, so the editor can locate the
         // node that produced this output.
         const source = this.executionSourceMaps
-          .get(correlation.runId)
+          .get(run.runId)
           ?.find((entry) => entry.executionId === Number(node.id));
+        const wrapperId = source?.wrapperId ?? null;
+        const sourceId = source?.sourceId ?? null;
+        // The same sanitized output the client sees is what the run record keeps.
+        run.outputs.push({
+          uniqueId: payload.uniqueId,
+          type: payload.type,
+          label: payload.label,
+          value: output.value,
+          verdict: payload.verdict,
+          wrapperId,
+          sourceId,
+          truncated: output.truncated,
+        });
         client.emit(event.eventName, {
           ...payload,
           value: output.value,
-          wrapperId: source?.wrapperId ?? null,
-          sourceId: source?.sourceId ?? null,
-          runId: correlation.runId,
-          workflowId: correlation.workflowId,
+          wrapperId,
+          sourceId,
+          runId: run.runId,
+          workflowId: run.workflowId,
           timestamp: new Date().toISOString(),
         });
       };
@@ -382,6 +409,8 @@ export class GraphHandlerService {
         workspaceId: workspace.id,
         workflowId: payload.workflowId,
         controller: new AbortController(),
+        outputs: [],
+        answer: '',
       };
       this.activeRuns.set(run.runId, run);
       emitEvent(client, 'runStateChanged', {
@@ -439,6 +468,7 @@ export class GraphHandlerService {
 
       // Start measuring execution time
       const startTime = Date.now();
+      run.startedAt = new Date(startTime);
 
       for (const node of lgraph.findNodesByClass<AnswerInputNode>(
         AnswerInputNode,
@@ -449,9 +479,11 @@ export class GraphHandlerService {
         .findNodesByClass<AnswerInputNode>(AnswerInputNode)
         .map((node) => node.properties.value)
         .join(' ');
+      run.answer = answer;
 
       // Extract LtiCookie data from the client's handshake (guarded for tests)
       const ltiCookie: LtiCookie | undefined = auth?.ltiCookie;
+      run.submittedBy = ltiCookie?.lis_person_name_full || undefined;
 
       // Send initial xAPI statement before executing the graph
       if (ltiCookie && payload.xapi) {
@@ -658,6 +690,7 @@ export class GraphHandlerService {
         });
       }
 
+      await this.persistRun(run, 'COMPLETED');
       emitEvent(client, 'runStateChanged', {
         requestId: run.requestId,
         runId: run.runId,
@@ -673,6 +706,9 @@ export class GraphHandlerService {
       });
     } catch (error) {
       this.logger.error('Error running graph: ', error);
+      const cancelled =
+        error instanceof GraphExecutionError &&
+        error.traceError.code === 'cancelled';
       if (run) {
         const traceError =
           error instanceof GraphExecutionError
@@ -681,18 +717,17 @@ export class GraphHandlerService {
                 code: 'node_failed',
                 message: 'Run failed.',
               });
+        // A cancelled run is the participant's own doing and leaves no submission.
+        if (!cancelled) await this.persistRun(run, 'FAILED', traceError.message);
         emitEvent(client, 'runStateChanged', {
           requestId: run.requestId,
           runId: run.runId,
           workflowId: run.workflowId,
-          state: traceError.code === 'cancelled' ? 'cancelled' : 'failed',
+          state: cancelled ? 'cancelled' : 'failed',
           timestamp: new Date().toISOString(),
           error: traceError,
         });
       }
-      const cancelled =
-        error instanceof GraphExecutionError &&
-        error.traceError.code === 'cancelled';
       if (!cancelled) {
         emitEvent(client, 'graphOperationFailed', {
           operation: 'run',
@@ -709,6 +744,36 @@ export class GraphHandlerService {
         this.activeRuns.delete(run.runId);
         this.executionSourceMaps.delete(run.runId);
       }
+    }
+  }
+
+  /**
+   * Writes the run record before the terminal event goes out, so a client that
+   * refetches its submissions on `completed` finds the row (SPEC-0020/FR-004). A run
+   * that never started executing leaves no record, and a failed write is logged and
+   * changes nothing the participant receives (NFR-001).
+   */
+  private async persistRun(
+    run: ActiveRun,
+    outcome: RunOutcome,
+    errorMessage?: string,
+  ): Promise<void> {
+    if (!run.startedAt) return;
+    try {
+      await this.runs.record({
+        runId: run.runId,
+        workspaceId: run.workspaceId,
+        workflowId: run.workflowId,
+        outcome,
+        answer: run.answer,
+        outputs: run.outputs,
+        errorMessage,
+        submittedBy: run.submittedBy,
+        startedAt: run.startedAt,
+        finishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.warn(`Run ${run.runId} was not recorded: ${String(error)}`);
     }
   }
 }

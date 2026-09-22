@@ -4,9 +4,10 @@ import { GraphHandlerService } from './graph-handler.service.js';
 import { XapiService } from '../xapi.service.js';
 import { WorkflowModule } from '../workflow/workflow.module.js';
 import { ProviderModule } from '../provider/provider.module.js';
+import { RunModule } from '../run/run.module.js';
 
 @Module({
-  imports: [WorkflowModule, ProviderModule],
+  imports: [WorkflowModule, ProviderModule, RunModule],
   providers: [GraphGateway, GraphHandlerService, XapiService],
 })
 export class GraphModule {}

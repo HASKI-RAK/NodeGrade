@@ -67,6 +67,10 @@ REST persists, Socket.IO executes (ADR-0002).
   workspace-scoped `workflowId`. Progress comes back as `runStateChanged`,
   `nodeExecutionChanged`, `outputSet` and `graphFinished` events typed in
   `packages/lib/src/events/ServerEvents.ts`.
+- One deliberate crossing (ADR-0009): the run handler writes a `Run` record for every
+  completed or failed execution before it emits the terminal event, and REST
+  (`GET /api/workflows/:id/runs`, `PATCH .../runs/:runId/review`) reads and marks those
+  records for the Submissions inbox. The trace is never stored.
 
 ## Execution flow
 
@@ -78,6 +82,7 @@ sequenceDiagram
     participant EX as executeLgraph (core/Graph.ts)
     participant PR as ProviderRuntimeService
     participant EXT as Provider / worker
+    participant RS as RunService (Postgres)
 
     UI->>GW: runGraph { workflowId, graph, requestId }
     GW->>GH: handleRunGraph
@@ -88,6 +93,7 @@ sequenceDiagram
     EXT-->>PR: text / embedding
     EX-->>GH: node lifecycle + trace outputs
     GH-->>UI: nodeExecutionChanged, outputSet
+    GH->>RS: record run (answer, outputs, review flag) on completed | failed
     GH-->>UI: runStateChanged(completed | failed | cancelled)
 ```
 
@@ -151,6 +157,10 @@ PostgreSQL through Prisma 7; the client is generated into
   stored. Provider API keys are AES-256-GCM ciphertext in `Provider.apiKeyEnc`.
 - `LegacyGraph` and `Workflow.legacyPath` remain until the pre-workspace rows are retired
   (ADR-0004).
+- `Run` holds one row per completed or failed execution: the answer, the sanitized
+  outputs as `jsonb` (capped per value and per run), the derived review flag and the
+  participant's review mark. Rows cascade with their workspace and workflow and are
+  trimmed to the newest 200 per workflow (ADR-0009, SPEC-0020).
 
 ## Boot lifecycle
 

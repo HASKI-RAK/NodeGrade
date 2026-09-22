@@ -363,3 +363,4 @@ Then the list has one more row
 | Date       | Change                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------- |
 | 2026-09-22 | Initial specification created (draft). FR-001 to FR-003 land with the review flag node.      |
+| 2026-09-22 | FR-004 to FR-008, NFR-001 and NFR-002 implemented: `Run` model and migration, `packages/backend/src/run/`, record written by the run handler before the terminal event (ADR-0009). |
