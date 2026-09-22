@@ -151,14 +151,36 @@ Responsibilities:
 - Socket.IO `runGraph`/`cancelRun` handling, per-client run registry, cancellation
 - topological LiteGraph execution with per-node lifecycle events
 - trace output sanitizing and truncation
+- writing the run record before the terminal event (ADR-0009)
 - xAPI statements for LTI launches
 
 Primary entry points: `graph.gateway.ts`, `graph-handler.service.ts`, `core/Graph.ts`,
 `core/trace-sanitizer.ts`, `config/node-env.ts`, `packages/backend/utils/socket-emitter.ts`
 
-Depends on: workflow service, provider runtime, `@haski/ta-lib` nodes.
+Depends on: workflow service, provider runtime, run service, `@haski/ta-lib` nodes.
 
 Tests: `packages/backend/src/graphgateway/**/*.spec.ts`, `src/core/*.spec.ts`
+
+## Run records
+
+Location: `packages/backend/src/run/`
+
+Responsibilities:
+
+- one `Run` row per completed or failed execution: answer, sanitized outputs, first score,
+  the derived review flag and reason, the LTI launch name, the participant's review mark
+- workspace-scoped list with filter and summary counts, detail, mark reviewed / reopen
+- refusing LTI launches under the published projection (learners never see the inbox)
+- per-workflow cap (newest 200) applied at write time; deletion cascades from workspace
+  and workflow
+
+Primary entry points: `run.service.ts` (`record`, `list`, `get`, `setReview`),
+`run.controller.ts` (`/workflows/:id/runs`), `dto/run.dto.ts`
+
+Depends on: Prisma, workspace guard. Used by: graph execution (writes), the Submissions
+tab in the preview rail (reads).
+
+Tests: `packages/backend/src/run/*.spec.ts`, `packages/backend/test/run-records.int-spec.ts`
 
 ## Shared graph library (`@haski/ta-lib`)
 

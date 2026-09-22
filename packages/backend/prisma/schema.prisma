@@ -56,6 +56,7 @@ model Workspace {
   lastActiveAt DateTime @default(now())
 
   workflows Workflow[]
+  runs      Run[]
 
   @@index([type, lastActiveAt])
   @@index([workshopId])
@@ -98,10 +99,58 @@ model Workflow {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  runs Run[]
+
   @@unique([workspaceId, slug])
   @@index([workspaceId, updatedAt(sort: Desc)])
   @@index([sourceTemplateRevisionId])
   @@index([contentSchema])
+}
+
+// ---------------------------------------------------------------------------
+// Run records (SPEC-0020)
+// ---------------------------------------------------------------------------
+
+enum RunOutcome {
+  COMPLETED
+  FAILED
+}
+
+/// One completed or failed execution, written by the socket run handler before the
+/// terminal event and read over REST (ADR-0009). The trace stays ephemeral (SPEC-0006);
+/// only the answer, the emitted outputs and the derived review flag are kept.
+model Run {
+  /// The run id the socket events carried, so a client can match what it saw.
+  id          String    @id
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflowId  String
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  outcome RunOutcome
+  /// Capped in the service; the graph already cuts answers at 1500 characters.
+  answer  String
+  /// Sanitized `outputSet` payloads in execution order, capped per value and per run.
+  outputs Json
+  /// First `score` output, denormalized so the list never loads `outputs`.
+  score   Float?
+
+  /// Any `review` output with verdict `flagged` (FR-005); the reasons joined.
+  flagged      Boolean @default(false)
+  flagReason   String?
+  errorMessage String?
+  /// LTI launch display name; null for browser and workshop workspaces (FR-007).
+  submittedBy  String?
+
+  reviewedAt DateTime?
+  reviewNote String?
+
+  startedAt  DateTime
+  finishedAt DateTime
+  durationMs Int
+
+  @@index([workflowId, startedAt(sort: Desc)])
+  @@index([workspaceId])
 }
 
 // ---------------------------------------------------------------------------
