@@ -11,6 +11,15 @@ import { GraphBuilder } from './graph-builder.js';
  * enclosing punctuation) sits in front so participants get the Workshop 1
  * evidence branch without discovering the preset by trial and error.
  *
+ * The node ships lexical. Its `use semantic similarity` toggle falls back to the
+ * embedding for keywords the literal test did not find, scoring each keyword
+ * against each sentence rather than against the whole answer, and the slider
+ * beside it is the cutoff that decides. A facilitator who turns it on should
+ * re-measure that cutoff: one word against a sentence scores far lower than two
+ * short answers against each other, the useful value moves with the embedding,
+ * and the default model is the weakest of six measured on exactly this
+ * comparison (`docs/embedding-model-comparison.md`).
+ *
  * Fully deterministic: no language model, so no `model_ref` to configure and no
  * deployment default needed (SPEC-0016 does not apply).
  */

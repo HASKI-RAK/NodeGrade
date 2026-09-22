@@ -101,6 +101,13 @@ const concat = (
  * German expert-solution texts are transcribed best-effort from the screenshot and the
  * system instruction is new (the screenshot does not show it). A facilitator should
  * proofread all copy before handing out a workshop on this template.
+ *
+ * The similarity score here reaches the model as text and nothing else reads it, which
+ * is the only defensible use for it: measured over six embedding models, none separates
+ * correct from incorrect free-text answers better than chance
+ * (`docs/embedding-model-comparison.md`). A facilitator adapting this graph into
+ * something that decides should reach for the `answer-equivalence` block rather than
+ * putting a threshold on this number.
  */
 export const simpleLlmFeedbackTemplate: BundledTemplate = {
   slug: 'simple-llm-feedback',

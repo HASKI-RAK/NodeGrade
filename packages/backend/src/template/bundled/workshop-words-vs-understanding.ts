@@ -4,11 +4,20 @@ import { GraphBuilder } from './graph-builder.js';
 /**
  * Workshop workflow 1 — Day and night: words are not the same as understanding.
  *
- * Three kinds of evidence about the same answer, kept deliberately separate so that
+ * Four kinds of evidence about the same answer, kept deliberately separate so that
  * participants can compare them: a lexical keyword check, an embedding similarity to the
- * reference answer, and a criterion-based conceptual assessment by the model. The model
- * never sees the keyword or similarity results, and no branch produces a grade. The point
- * of this graph is to show the difference between evidence and an assessment decision.
+ * reference answer, a staged equivalence verdict, and a criterion-based conceptual
+ * assessment by the model. The model never sees the other three results, and no branch
+ * produces a grade. The point of this graph is to show the difference between evidence
+ * and an assessment decision.
+ *
+ * Branches B and D are the pair worth demonstrating side by side. Both consult the same
+ * embedding; only D can answer the question a grader asks. A similarity number moves
+ * whenever the wording moves — paraphrase the answer and watch it drop while the meaning
+ * holds — and it does not fall when the meaning inverts, because "the Sun orbits the
+ * Earth" and "the Earth orbits the Sun" sit 0.97 apart in that space. The equivalence
+ * branch reports which stage decided, so a participant sees *why* a verdict came out the
+ * way it did rather than being handed a number to threshold.
  *
  * The subject matter is everyday science on purpose: participants evaluate the assessment
  * workflow, not their own knowledge, so the reference answer is all they need.
@@ -166,6 +175,24 @@ const build = () => {
     '#6f621f',
   );
 
+  // Branch D: decide equivalence against the reference ---------------------------------
+  // Deliberately fed the same two texts as Branch B, so the contrast is the method and
+  // nothing else. This branch does produce a yes or no, which is the point: it is the
+  // only one of the four that is entitled to.
+  const equivalence = g.semanticEquivalence(
+    'Semantic equivalence',
+    [540, 1600],
+    answer,
+    reference,
+  );
+  g.output('Means the same as the reference', [1080, 1560], equivalence, 0);
+  g.output('Decided by', [1080, 1700], equivalence, 2);
+  g.group(
+    'Branch D: decide equivalence against the reference',
+    [500, 1520, 1750, 320],
+    '#6f621f',
+  );
+
   return g.build();
 };
 
@@ -174,7 +201,7 @@ export const workshopWordsVsUnderstandingTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 1 · Day and night: words are not the same as understanding',
   description:
-    'Day and night — words are not the same as understanding. One student answer is examined three ways at once, with no grade on purpose.\n\nMethods: (1) Expected-words check — lexical keyword search for “rotation, axis, sunlight”; (2) Embedding similarity to a reference — sentence-transformer embeddings compared with cosine similarity, shown to 3 decimals; (3) Criterion-based conceptual assessment — LLM judgment (CORRECT / INCOMPLETE / MISCONCEPTION / UNCLEAR) with evidence, reason and next step.\n\nThe three branches stay separate — the model never sees the keyword or similarity results — so you can compare lexical match vs. semantic closeness vs. conceptual judgment. Try swapping the expected words or paraphrasing the answer and watch similarity move while the judgment may not.',
+    'Day and night — words are not the same as understanding. One student answer is examined four ways at once, with no grade on purpose.\n\nMethods: (1) Expected-words check — lexical keyword search for “rotation, axis, sunlight”; (2) Embedding similarity to a reference — sentence-transformer embeddings compared with cosine similarity, shown to 3 decimals; (3) Semantic equivalence to the same reference — rules, then an embedding floor, then an entailment model, reporting which stage decided; (4) Criterion-based conceptual assessment — LLM judgment (CORRECT / INCOMPLETE / MISCONCEPTION / UNCLEAR) with evidence, reason and next step.\n\nThe four branches stay separate — the model never sees the other results — so you can compare lexical match vs. semantic closeness vs. a staged verdict vs. conceptual judgment. Try swapping the expected words or paraphrasing the answer and watch similarity move while the judgment may not. Methods 2 and 3 read the same two texts through the same embedding: only one of them is entitled to answer yes or no, and the “Decided by” output says which stage did it.',
   category: 'Workshop',
   tags: [
     'tutorial',
@@ -182,6 +209,7 @@ export const workshopWordsVsUnderstandingTemplate: BundledTemplate = {
     'evidence',
     'keyword',
     'similarity',
+    'equivalence',
     'katalyst',
   ],
   content: build(),
