@@ -6,6 +6,10 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { AppModule } from './app/app.module.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
+import {
+  LEGACY_MODEL_WORKER_URL,
+  unsetWorkerUrls,
+} from './config/configuration.js';
 import { cookiesInsecure } from './config/cookies.js';
 import { resolveCorsOrigins } from './config/cors.js';
 import { WebSocketCookieAdapter } from './utils/websocket-cookie.adapter.js';
@@ -66,6 +70,13 @@ async function bootstrap() {
   if (cookiesInsecure()) {
     logger.warn(
       'COOKIE_INSECURE is set: cookies are issued without the Secure attribute. Use this for local HTTP only.',
+    );
+  }
+
+  const unset = unsetWorkerUrls();
+  if (unset.length > 0) {
+    logger.warn(
+      `${unset.join(' and ')} not set: falling back to ${LEGACY_MODEL_WORKER_URL.replace(':8000', '')}, which is not this deployment. Learner answers reaching embedding, keyword or equivalence nodes will be sent there. Set them in .env (see .env_template).`,
     );
   }
 

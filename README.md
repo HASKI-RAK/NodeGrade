@@ -84,6 +84,26 @@ yarn dev
 
 This will launch both the server and the frontend PWA in development mode.
 
+`yarn dev` does not start the NLP worker. Without it the embedding, keyword and
+equivalence nodes have nothing to call — and if `SIMILARITY_WORKER_URL` is unset the
+backend silently falls back to a remote host that is not yours, so those nodes keep
+working while every answer they touch leaves your machine. The backend logs a warning at
+startup when that happens.
+
+Either point `SIMILARITY_WORKER_URL` at the debug stack (`yarn debug:up`, deterministic,
+no model download) or run the real worker beside `yarn dev`:
+
+```bash
+cd models
+python -m venv .venv && .venv/bin/pip install -r requirements.txt   # Windows: .venv/Scripts/pip
+cp .env_template .env        # defaults are fine; HF_HOME needs a writable path
+.venv/bin/python model_worker.py
+```
+
+First boot downloads `BAAI/bge-m3` (2.3 GB) before `/health` answers; the entailment
+model loads on the first `/entailment` request, not at startup. Then set
+`SIMILARITY_WORKER_URL="http://127.0.0.1:8002"` in your backend `.env`.
+
 ### Workshop flow
 
 Workshops move `DRAFT` → `PUBLISHED` → `CLOSED`. Facilitators sign in at `/admin`,

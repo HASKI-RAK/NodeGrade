@@ -9,6 +9,21 @@ import { resolveCorsOrigins } from './cors.js';
 export const LEGACY_MODEL_WORKER_URL = 'http://193.174.195.36:8000';
 export const LEGACY_SIMILARITY_WORKER_URL = 'http://193.174.195.36:8002';
 
+/**
+ * Names the worker variables that were left unset, so the caller can say which
+ * traffic is about to leave the machine.
+ *
+ * These fallbacks are a third-party host. A developer who runs `yarn dev`
+ * without an `.env` still gets working similarity and keyword nodes, which is
+ * convenient and is exactly the problem: every answer those nodes touch is sent
+ * somewhere nobody chose. Silence is the wrong default for that.
+ */
+export const unsetWorkerUrls = (): string[] =>
+  [
+    process.env.MODEL_WORKER_URL ? '' : 'MODEL_WORKER_URL',
+    process.env.SIMILARITY_WORKER_URL ? '' : 'SIMILARITY_WORKER_URL',
+  ].filter(Boolean);
+
 export type AppConfig = {
   nodeEnv: string;
   port: number;
