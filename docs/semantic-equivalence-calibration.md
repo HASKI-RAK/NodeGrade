@@ -61,6 +61,10 @@ languages, trained multi-granularity from short phrases to 8192 tokens.
 
 Finding 2 is the reason to expect little from that swap. The embedding is one
 stage of five, and the only thing it decides alone is the floor.
+`embedding-model-comparison.md` runs six models through this whole cascade and
+measures an 11-point spread where raw cosine spreads 28 — and finds that the MIT
+`multilingual-e5-large-instruct` outscores jina-v3 regardless, so the licence
+question need never be answered.
 
 ## Finding 2 — staging the decision is what actually helps
 

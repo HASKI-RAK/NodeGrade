@@ -14,7 +14,11 @@ import { GraphBuilder } from './graph-builder.js';
  * correctness. On the calibration set in
  * `docs/semantic-equivalence-calibration.md`, "Yes" against "No" scores 89 and
  * "Yes" against "Correct" scores 61 — so a threshold on this output marks the
- * wrong learner correct. A pass/fail decision belongs in the
+ * wrong learner correct. On paragraph-length answers it is worse than that:
+ * `docs/embedding-model-comparison.md` measures six embedding models on
+ * free-text answers and none reaches 0.55 ROC AUC, which is close enough to
+ * chance that the number carries almost no information about correctness.
+ * Show it; do not decide with it. A pass/fail decision belongs in the
  * `answer-equivalence` block, which stages rules, embeddings and entailment
  * instead of thresholding a single number.
  *

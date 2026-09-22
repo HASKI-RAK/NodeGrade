@@ -272,9 +272,12 @@ the backend):
 | `EMBEDDING_TRUST_REMOTE_CODE` | Allow the model repository to execute its own Python on load. Default `false`. |
 | `NLI_MODEL` | Entailment cross-encoder behind `/entailment`, loaded on first use. Set it empty to disable the stage; `text/semantic-equivalence` then falls back to its cosine ceiling. |
 
-Model choice is measured, not assumed — see
-[docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md) and
-`models/calibrate.py`.
+Model choice is measured, not assumed:
+[docs/embedding-model-comparison.md](docs/embedding-model-comparison.md) ranks six models
+across the four comparisons the graph performs, and
+[docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md)
+records where the thresholds come from. `models/compare_models.py` and
+`models/calibrate.py` reproduce them.
 
 ### Choosing a different embedding model
 
@@ -284,17 +287,29 @@ applies to your deployment is the licence of the model you choose, and accepting
 your decision rather than this project's. The defaults are MIT on both models so that
 every deployment can use them unchanged.
 
-Stronger models exist under terms not everyone can accept. `jinaai/jina-embeddings-v3`
-is the clearest example: it ranks above `bge-m3` on public retrieval benchmarks and its
-`text-matching` adapter targets exactly the question this repository asks, but the
-weights are **CC-BY-NC-4.0**. That licence permits non-commercial use with attribution;
-attribution alone does not extend it to commercial use. If your deployment is
-non-commercial — a university course, an internal research pilot — it may be available
-to you. Read the licence and decide for your own context; if money changes hands
-anywhere near the deployment, get that decision reviewed by someone qualified rather
-than relying on this paragraph.
+Six candidates are measured across the four comparisons the graph performs in
+[docs/embedding-model-comparison.md](docs/embedding-model-comparison.md). Two results
+decide most overrides:
 
-To run it:
+- `intfloat/multilingual-e5-large-instruct` is the strongest embedding measured, and it
+  is **MIT**. It wins on raw similarity and loses inside the full cascade, so prefer it
+  when your workflow scores with `models/cosine-similarity` or `text/keyword-check`
+  rather than with `text/semantic-equivalence`.
+- Model choice is worth a few points; staging the decision is worth thirty. Across six
+  models raw cosine spans 28 points of accuracy on the same pairs and the cascade spans
+  11, with the ranking inverted between them.
+
+`jinaai/jina-embeddings-v3` is the model whose licence question comes up most often, and
+it does **not** win: `e5-large-instruct` beats it on three scenarios of four. Its weights
+are **CC-BY-NC-4.0**, which permits non-commercial use with attribution; attribution
+alone does not extend it to commercial use. If your deployment is non-commercial — a
+university course, an internal research pilot — it may be available to you. Read the
+licence and decide for your own context; if money changes hands anywhere near the
+deployment, get that decision reviewed by someone qualified rather than relying on this
+paragraph. Since a permissively licensed model measures better here, the simplest answer
+is not to need the review.
+
+To run it anyway:
 
 ```yaml
 environment:
@@ -303,21 +318,19 @@ environment:
   EMBEDDING_TRUST_REMOTE_CODE: 'true'
 ```
 
-Two caveats before you do.
-
 `EMBEDDING_TRUST_REMOTE_CODE=true` lets `transformers` download and execute Python from
-that model repository inside the worker process. Jina v3 requires it because its
-architecture lives next to the weights rather than in `transformers` itself. Enable it
-only for a specific repository you have reason to trust, pin a revision if you can, and
-never enable it together with an `EMBEDDING_MODEL` value that anything outside your
-deployment can influence.
+the model repository inside the worker process. Jina v3 requires it because its
+architecture lives next to the weights rather than in `transformers` itself, and it pulls
+that code from a *second* repository, `jinaai/xlm-roberta-flash-implementation`. Enable it
+only for repositories you have reason to trust, pin a revision if you can, and never
+enable it together with an `EMBEDDING_MODEL` value that anything outside your deployment
+can influence.
 
-And measure before switching. Across this repository's calibration set the embedding
-accounts for less of the outcome than the staging does: `bge-m3` reaches 71% best-possible
-accuracy against mpnet's 69%, while the full cascade reaches 89%. A better embedding
-raises the floor a little; it does not change the shape of the problem. Run
-`python models/calibrate.py --trust-remote-code --task text-matching jinaai/jina-embeddings-v3`
-against your own pairs and keep the result only if it earns its licence review.
+Measure before switching, on your own pairs:
+
+```bash
+python models/compare_models.py --models <repository-id>
+```
 
 Apply schema migrations on every release, before the new backend serves traffic:
 

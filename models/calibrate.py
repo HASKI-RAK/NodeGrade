@@ -309,15 +309,17 @@ parser.add_argument(
     default="",
     help="task name for task-conditioned models, e.g. text-matching",
 )
-args = parser.parse_args()
-
-if args.grid:
-    grid_search()
-elif args.cascade:
-    compare_cascade(args.low, args.high, args.contradiction, args.entailment)
-else:
-    compare_models(
-        args.models or [BASELINE_MODEL, EMBEDDING_MODEL],
-        args.trust_remote_code,
-        args.task,
-    )
+if __name__ == "__main__":
+    # Guarded so `benchmark.py` can import PAIRS and the rule stages from here
+    # instead of keeping a second copy of them that would drift.
+    args = parser.parse_args()
+    if args.grid:
+        grid_search()
+    elif args.cascade:
+        compare_cascade(args.low, args.high, args.contradiction, args.entailment)
+    else:
+        compare_models(
+            args.models or [BASELINE_MODEL, EMBEDDING_MODEL],
+            args.trust_remote_code,
+            args.task,
+        )
