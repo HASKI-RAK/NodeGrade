@@ -20,10 +20,17 @@ services:
       context: ./models
       dockerfile: Dockerfile
     environment:
-      # Multilingual and MIT licensed. See
+      # Multilingual and MIT licensed, so every deployment may run the default
+      # unchanged. Point it elsewhere once you have read that model's licence:
+      # README.md, "Choosing a different embedding model". See
       # docs/semantic-equivalence-calibration.md for why this one.
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
       EMBEDDING_MAX_SEQ_LENGTH: ${EMBEDDING_MAX_SEQ_LENGTH:-512}
+      # Only for task-conditioned models, e.g. text-matching on jina-v3.
+      EMBEDDING_TASK: ${EMBEDDING_TASK:-}
+      # Executes Python from the model repository in this process. Off unless
+      # the chosen model requires it and that repository is trusted.
+      EMBEDDING_TRUST_REMOTE_CODE: ${EMBEDDING_TRUST_REMOTE_CODE:-false}
       # Loaded on first /entailment request, not at boot. Set empty to run
       # without the stage; text/semantic-equivalence then falls back to cosine.
       NLI_MODEL: ${NLI_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}

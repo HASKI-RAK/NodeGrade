@@ -51,11 +51,16 @@ The wrong answer outscores the right one. This is not a defect: sentence
 embeddings encode *relatedness*, and "Yes" and "No" are as related as two words
 get. Grading needs *equivalence*, which is a different question.
 
-`jinaai/jina-embeddings-v3` with its `text_matching` adapter is the strongest
-candidate on paper, and was not adopted: the Hugging Face weights are
-CC-BY-NC-4.0 and this repository ships under MIT. `BAAI/bge-m3` is MIT,
-multilingual over 100+ languages, and trained multi-granularity from short
-phrases to 8192 tokens.
+`jinaai/jina-embeddings-v3` with its `text-matching` adapter is the strongest
+candidate on paper, and is not the default: the weights are CC-BY-NC-4.0, and a
+default pointing at them would hand every deployment a licence decision it never
+made. It stays selectable through `EMBEDDING_MODEL`, `EMBEDDING_TASK` and
+`EMBEDDING_TRUST_REMOTE_CODE` (see `README.md`) for operators whose own use is
+non-commercial. The default is `BAAI/bge-m3`: MIT, multilingual over 100+
+languages, trained multi-granularity from short phrases to 8192 tokens.
+
+Finding 2 is the reason to expect little from that swap. The embedding is one
+stage of five, and the only thing it decides alone is the floor.
 
 ## Finding 2 — staging the decision is what actually helps
 

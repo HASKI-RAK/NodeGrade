@@ -3,6 +3,12 @@
     python calibrate.py                      # compare mpnet against the current model
     python calibrate.py --cascade            # cosine alone against the full cascade
     python calibrate.py BAAI/bge-m3 intfloat/multilingual-e5-large-instruct
+    python calibrate.py --trust-remote-code --task text-matching \
+        jinaai/jina-embeddings-v3            # before pointing a deployment at it
+
+Before overriding `EMBEDDING_MODEL` for a real deployment, measure the candidate
+here first: an embedding that scores better on a public benchmark can still be
+worse on the pairs a particular cohort produces.
 
 Produced the numbers in `docs/semantic-equivalence-calibration.md`. The pair set
 below is the artefact worth growing: every threshold and every model choice in
@@ -140,20 +146,26 @@ def hard_check(answer: str, expected: str):
     return None
 
 
-def embed(name: str):
-    model = SentenceTransformer(name)
+def embed(name: str, trust_remote_code: bool = False, task: str = ""):
+    """Encode every distinct text in PAIRS once.
+
+    `trust_remote_code` and `task` mirror the worker's environment variables so a
+    candidate measured here is measured the way it would run.
+    """
+    model = SentenceTransformer(name, trust_remote_code=trust_remote_code)
     model.max_seq_length = 512
     texts = sorted({t for _, left, right, _ in PAIRS for t in (left, right)})
+    extra = {"task": task} if task else {}
     started = time.time()
-    vectors = model.encode(texts, normalize_embeddings=True, batch_size=16)
+    vectors = model.encode(texts, normalize_embeddings=True, batch_size=16, **extra)
     elapsed = time.time() - started
     return model, dict(zip(texts, vectors)), elapsed
 
 
-def compare_models(names):
+def compare_models(names, trust_remote_code: bool = False, task: str = ""):
     print(f"{'model':<46}{'@0.70':>7}{'best':>7}{'thr':>7}{'margin':>9}{'enc s':>7}")
     for name in names:
-        model, vectors, elapsed = embed(name)
+        model, vectors, elapsed = embed(name, trust_remote_code, task)
         rows = [
             (label, float(np.dot(vectors[left], vectors[right])))
             for _, left, right, label in PAIRS
@@ -287,6 +299,16 @@ parser.add_argument("--low", type=float, default=0.60)
 parser.add_argument("--high", type=float, default=0.92)
 parser.add_argument("--contradiction", type=float, default=0.50)
 parser.add_argument("--entailment", type=float, default=0.60)
+parser.add_argument(
+    "--trust-remote-code",
+    action="store_true",
+    help="let the model repository execute its own Python on load",
+)
+parser.add_argument(
+    "--task",
+    default="",
+    help="task name for task-conditioned models, e.g. text-matching",
+)
 args = parser.parse_args()
 
 if args.grid:
@@ -294,4 +316,8 @@ if args.grid:
 elif args.cascade:
     compare_cascade(args.low, args.high, args.contradiction, args.entailment)
 else:
-    compare_models(args.models or [BASELINE_MODEL, EMBEDDING_MODEL])
+    compare_models(
+        args.models or [BASELINE_MODEL, EMBEDDING_MODEL],
+        args.trust_remote_code,
+        args.task,
+    )

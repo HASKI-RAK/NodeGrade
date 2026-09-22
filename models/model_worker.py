@@ -6,9 +6,15 @@ Why this service has the shape it has:
   exactly where that distinction matters: "Yes"/"No", "increases"/"decreases" and
   "mitosis"/"meiosis" are near-neighbours in that space even though a grader must
   separate them. `BAAI/bge-m3` is trained multi-granularity (short phrase up to
-  8192 tokens) over 100+ languages and separates those pairs better. It is MIT
-  licensed, which `jinaai/jina-embeddings-v3` (CC-BY-NC-4.0) is not, and this
-  repository ships under MIT.
+  8192 tokens) over 100+ languages and separates those pairs better.
+* Every model here is named by an environment variable, never pinned in code.
+  This service downloads weights at runtime and no weights ship in the
+  repository, so the default has to be one every deployment may use — `bge-m3`
+  and the NLI cross-encoder are both MIT — while an operator who has checked
+  the terms for their own deployment can point `EMBEDDING_MODEL` anywhere,
+  including at non-commercially licensed weights such as
+  `jinaai/jina-embeddings-v3` (CC-BY-NC-4.0). See the worker section of
+  `README.md`.
 * Cosine alone is still not a correctness criterion. `/entailment` exposes a
   natural-language-inference cross-encoder so an ambiguous cosine band can be
   resolved by a model that distinguishes entailment from contradiction. It loads
@@ -27,6 +33,7 @@ from typing import Optional
 
 import dotenv
 import flask
+import numpy
 from flask_cors import CORS
 from huggingface_hub import snapshot_download
 from sentence_transformers import SentenceTransformer
@@ -34,12 +41,26 @@ from sentence_transformers import SentenceTransformer
 dotenv.load_dotenv()
 
 # Multilingual, multi-granularity, MIT licensed. Override to trade quality for
-# speed (`sentence-transformers/all-MiniLM-L6-v2`) or to pin an English-only
-# model (`Alibaba-NLP/gte-modernbert-base`).
+# speed (`sentence-transformers/all-MiniLM-L6-v2`), to pin an English-only model
+# (`Alibaba-NLP/gte-modernbert-base`), or to run weights whose licence only the
+# operator can accept (`jinaai/jina-embeddings-v3`, which also needs
+# EMBEDDING_TRUST_REMOTE_CODE=true and EMBEDDING_TASK=text-matching).
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-m3")
 # bge-m3 advertises 8192 tokens. Short-answer grading never needs that, and the
 # cap bounds worst-case latency on CPU deployments.
 EMBEDDING_MAX_SEQ_LENGTH = int(os.environ.get("EMBEDDING_MAX_SEQ_LENGTH", "512"))
+# Some repositories ship their architecture as Python next to the weights, and
+# transformers executes it on load. That is remote code running with this
+# process's privileges, so it stays opt-in and off by default: turning it on is
+# a statement that the specific repository in EMBEDDING_MODEL is trusted.
+EMBEDDING_TRUST_REMOTE_CODE = os.environ.get(
+    "EMBEDDING_TRUST_REMOTE_CODE", ""
+).strip().lower() in ("1", "true", "yes", "on")
+# Task-conditioned models (jina-v3 and its LoRA adapters, the `e5` instruct
+# family) encode differently per task and are markedly worse without the right
+# one. `text-matching` is the task that means "are these two texts equivalent".
+# Empty for models that take no task argument, which is most of them.
+EMBEDDING_TASK = os.environ.get("EMBEDDING_TASK", "").strip()
 # XNLI-trained multilingual cross-encoder, MIT licensed. Set to an empty string
 # to disable /entailment entirely.
 NLI_MODEL = os.environ.get(
@@ -60,12 +81,40 @@ def _download(repo_id: str) -> str:
     )
 
 
-model = SentenceTransformer(_download(EMBEDDING_MODEL))
+model = SentenceTransformer(
+    _download(EMBEDDING_MODEL), trust_remote_code=EMBEDDING_TRUST_REMOTE_CODE
+)
+
+if EMBEDDING_TASK:
+    # sentence-transformers forwards unknown keywords to the module's forward
+    # pass rather than rejecting them, so a task a model does not implement is
+    # accepted and quietly ignored. Encoding the same text twice is the only
+    # honest test: if the task changed nothing, it is not in effect, and an
+    # operator who set it deserves to learn that at boot rather than never.
+    try:
+        _plain = model.encode("probe", normalize_embeddings=True)
+        _tasked = model.encode("probe", normalize_embeddings=True, task=EMBEDDING_TASK)
+        _applied = not numpy.allclose(_plain, _tasked)
+    except TypeError as error:
+        raise SystemExit(
+            f"EMBEDDING_TASK={EMBEDDING_TASK!r} was rejected by {EMBEDDING_MODEL}: "
+            f"{error}. Leave EMBEDDING_TASK empty for this model."
+        ) from error
+    if not _applied:
+        raise SystemExit(
+            f"EMBEDDING_TASK={EMBEDDING_TASK!r} had no effect on {EMBEDDING_MODEL}: "
+            f"the same text encodes identically with and without it. Either the "
+            f"model takes no task, or this is not one of its task names."
+        )
+
 model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
 EMBEDDING_DIMENSIONS = model.get_sentence_embedding_dimension()
 print(
     f"Embedding model loaded: {EMBEDDING_MODEL} "
-    f"({EMBEDDING_DIMENSIONS} dimensions, max {EMBEDDING_MAX_SEQ_LENGTH} tokens)",
+    f"({EMBEDDING_DIMENSIONS} dimensions, max {EMBEDDING_MAX_SEQ_LENGTH} tokens"
+    + (f", task {EMBEDDING_TASK}" if EMBEDDING_TASK else "")
+    + (", remote code trusted" if EMBEDDING_TRUST_REMOTE_CODE else "")
+    + ")",
     flush=True,
 )
 
@@ -124,7 +173,13 @@ def _is_pair(value) -> bool:
 
 
 def _encode(sentences):
-    """Encode to unit vectors, so a dot product is already the cosine."""
+    """Encode to unit vectors, so a dot product is already the cosine.
+
+    `task` is only forwarded when configured: passing it to a model that takes
+    no task argument is a TypeError, and most models take none.
+    """
+    if EMBEDDING_TASK:
+        return model.encode(sentences, normalize_embeddings=True, task=EMBEDDING_TASK)
     return model.encode(sentences, normalize_embeddings=True)
 
 
@@ -222,6 +277,10 @@ def health_check():
             "embeddingModel": EMBEDDING_MODEL,
             "dimensions": EMBEDDING_DIMENSIONS,
             "maxSequenceLength": EMBEDDING_MAX_SEQ_LENGTH,
+            # An operator who has overridden the model needs to see which one
+            # actually loaded, and with which task, before trusting a score.
+            "embeddingTask": EMBEDDING_TASK or None,
+            "trustRemoteCode": EMBEDDING_TRUST_REMOTE_CODE,
             "nliModel": NLI_MODEL or None,
             "nliLoaded": _nli_model is not None,
         }

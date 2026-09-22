@@ -261,18 +261,63 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
 
-The NLP worker itself reads three variables of its own (set on the `models` service, not
+The NLP worker itself reads five variables of its own (set on the `models` service, not
 the backend):
 
 | Variable | Purpose |
 |---|---|
 | `EMBEDDING_MODEL` | Sentence-embedding model (default `BAAI/bge-m3`; multilingual, MIT). |
 | `EMBEDDING_MAX_SEQ_LENGTH` | Token cap per input (default 512), which bounds CPU latency. |
+| `EMBEDDING_TASK` | Task name for task-conditioned models, e.g. `text-matching`. Empty for models that take none, which is most of them. |
+| `EMBEDDING_TRUST_REMOTE_CODE` | Allow the model repository to execute its own Python on load. Default `false`. |
 | `NLI_MODEL` | Entailment cross-encoder behind `/entailment`, loaded on first use. Set it empty to disable the stage; `text/semantic-equivalence` then falls back to its cosine ceiling. |
 
 Model choice is measured, not assumed — see
 [docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md) and
 `models/calibrate.py`.
+
+### Choosing a different embedding model
+
+No model weights ship in this repository. The worker downloads whatever
+`EMBEDDING_MODEL` names from Hugging Face at startup, which means the licence that
+applies to your deployment is the licence of the model you choose, and accepting it is
+your decision rather than this project's. The defaults are MIT on both models so that
+every deployment can use them unchanged.
+
+Stronger models exist under terms not everyone can accept. `jinaai/jina-embeddings-v3`
+is the clearest example: it ranks above `bge-m3` on public retrieval benchmarks and its
+`text-matching` adapter targets exactly the question this repository asks, but the
+weights are **CC-BY-NC-4.0**. That licence permits non-commercial use with attribution;
+attribution alone does not extend it to commercial use. If your deployment is
+non-commercial — a university course, an internal research pilot — it may be available
+to you. Read the licence and decide for your own context; if money changes hands
+anywhere near the deployment, get that decision reviewed by someone qualified rather
+than relying on this paragraph.
+
+To run it:
+
+```yaml
+environment:
+  EMBEDDING_MODEL: jinaai/jina-embeddings-v3
+  EMBEDDING_TASK: text-matching
+  EMBEDDING_TRUST_REMOTE_CODE: 'true'
+```
+
+Two caveats before you do.
+
+`EMBEDDING_TRUST_REMOTE_CODE=true` lets `transformers` download and execute Python from
+that model repository inside the worker process. Jina v3 requires it because its
+architecture lives next to the weights rather than in `transformers` itself. Enable it
+only for a specific repository you have reason to trust, pin a revision if you can, and
+never enable it together with an `EMBEDDING_MODEL` value that anything outside your
+deployment can influence.
+
+And measure before switching. Across this repository's calibration set the embedding
+accounts for less of the outcome than the staging does: `bge-m3` reaches 71% best-possible
+accuracy against mpnet's 69%, while the full cascade reaches 89%. A better embedding
+raises the floor a little; it does not change the shape of the problem. Run
+`python models/calibrate.py --trust-remote-code --task text-matching jinaai/jina-embeddings-v3`
+against your own pairs and keep the result only if it earns its licence review.
 
 Apply schema migrations on every release, before the new backend serves traffic:
 
