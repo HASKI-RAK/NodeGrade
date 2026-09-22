@@ -64,6 +64,7 @@ const build = () => {
     evidence,
   );
   g.output('Review recommendation', [1080, 230], model);
+  g.reviewFlag('Needs a tutor?', [1080, 350], model);
   g.group('Validation review', [20, 20, 1340, 600], '#7a3b3b');
 
   return {

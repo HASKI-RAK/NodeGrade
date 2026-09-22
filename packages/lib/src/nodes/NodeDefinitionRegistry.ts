@@ -30,6 +30,7 @@ import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
 import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
+import { ReviewFlagNode } from './ReviewFlagNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
 import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
@@ -127,10 +128,21 @@ const entries: readonly Entry[] = [
       {
         key: 'type',
         label: 'Display',
-        control: { type: 'select', options: ['text', 'success', 'warning', 'error'] },
+        control: { type: 'select', options: ['text', 'score', 'classifications'] },
         advanced: false,
         required: true
       }
+    ]
+  },
+  {
+    node: ReviewFlagNode,
+    category: 'Assessment',
+    description: 'Flag a run for a human tutor.',
+    tags: ['review', 'flag'],
+    properties: [
+      text('label', 'Label', true),
+      text('flagPattern', 'Flag markers'),
+      text('reasonPrefix', 'Reason prefix')
     ]
   },
   {
@@ -380,6 +392,7 @@ const byType = new Map(definitions.map(({ definition }) => [definition.type, def
 
 const legacyWidgetKeys = new Map<string, readonly string[]>([
   [OutputNode.getPath(), ['label', 'type']],
+  [ReviewFlagNode.getPath(), ['label', 'flagPattern', 'reasonPrefix']],
   [
     LLMNode.getPath(),
     [

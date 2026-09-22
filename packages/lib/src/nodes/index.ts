@@ -19,6 +19,7 @@ import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
 import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
+import { ReviewFlagNode } from './ReviewFlagNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
 import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
@@ -53,6 +54,7 @@ export {
   Precision,
   PromptMessage,
   QuestionNode,
+  ReviewFlagNode,
   Route,
   SemanticEquivalenceNode,
   SentenceTransformer,
@@ -122,6 +124,12 @@ export {
   type EquivalenceReason
 } from './SemanticEquivalenceNode'
 export { DEFAULT_KEYWORD_THRESHOLD } from './KeywordCheckNode'
+export {
+  DEFAULT_FLAG_PATTERN,
+  DEFAULT_REASON_PREFIX,
+  evaluateReviewSignal,
+  type ReviewSignal
+} from './ReviewFlagNode'
 export {
   compactNodeWidgets,
   getDefinedNodeConstructors,

@@ -4,25 +4,18 @@ import {
   RunState,
   ServerEventPayload
 } from '@haski/ta-lib'
-import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   FormControl,
-  IconButton,
   Stack,
   Tab,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material'
-import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
-import { styled } from '@mui/material/styles'
+import LinearProgress from '@mui/material/LinearProgress'
 import { forwardRef, memo, useImperativeHandle, useRef, useState } from 'react'
 
 import {
@@ -32,31 +25,8 @@ import {
   previewMessages
 } from '@/i18n/preview'
 
+import { ResultCard } from './ResultCard'
 import { TraceView } from './TraceView'
-
-interface MyThemeComponentProps {
-  color?: 'primary' | 'secondary'
-}
-
-/** A score at or above this value counts as passed (SPEC-0007/FR-004). */
-const PASS_THRESHOLD = 60
-
-/**
- * based on value successPercentage, color progress bar changes
- */
-const BorderLinearProgress = styled(LinearProgress)<
-  MyThemeComponentProps & { value: number }
->(({ theme, value }) => ({
-  height: 10,
-  borderRadius: 5,
-  [`&.${linearProgressClasses.colorPrimary}`]: {
-    backgroundColor: theme.palette.grey[theme.palette.mode === 'light' ? 200 : 800]
-  },
-  [`& .${linearProgressClasses.bar}`]: {
-    borderRadius: 5,
-    backgroundColor: value >= PASS_THRESHOLD ? '#388E3C' : '#308fe8'
-  }
-}))
 
 export type TaskViewHandle = {
   submit: () => boolean
@@ -83,111 +53,6 @@ export type SelectGraphNode = (
 
 type Output = ServerEventPayload['outputSet']
 
-/**
- * One result on its own card: the output node's label as title, the value as body.
- * The locate button is an editor affordance and only renders when a handler is given;
- * students see the card without it.
- */
-const ResultCard = ({
-  output,
-  messages,
-  onLocate
-}: {
-  output: Output
-  messages: PreviewMessages
-  onLocate?: () => void
-}) => {
-  const title =
-    output.type === 'classifications'
-      ? output.label || messages.classificationsHeading
-      : output.label
-  const passed =
-    output.type === 'score' &&
-    typeof output.value === 'number' &&
-    output.value >= PASS_THRESHOLD
-
-  const body = (() => {
-    switch (output.type) {
-      case 'text':
-        return (
-          <Typography
-            variant="body1"
-            sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-          >
-            {String(output.value).trim()}
-          </Typography>
-        )
-      case 'score':
-        if (typeof output.value !== 'number') return null
-        return (
-          <Stack spacing={1}>
-            <Typography variant="h4" component="p" fontWeight={600}>
-              {output.value}
-            </Typography>
-            {output.value >= 0 && output.value <= 100 && (
-              <BorderLinearProgress
-                variant="determinate"
-                value={output.value}
-                aria-label={title}
-              />
-            )}
-          </Stack>
-        )
-      case 'classifications':
-        if (!Array.isArray(output.value)) return null
-        return (
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {output.value
-              // Unconnected list inputs arrive as null over the wire; never show an empty chip.
-              .filter(
-                (classification): classification is string =>
-                  typeof classification === 'string' && classification.trim().length > 0
-              )
-              .map((classification, index) => (
-                <Chip
-                  key={`${index}-${classification}`}
-                  label={classification}
-                  variant="outlined"
-                />
-              ))}
-          </Stack>
-        )
-    }
-  })()
-
-  return (
-    <Card variant="outlined" component="article" aria-label={title}>
-      <CardContent sx={{ '&:last-child': { paddingBottom: 2 } }}>
-        <Stack spacing={1}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
-            <Typography
-              variant="subtitle1"
-              component="h3"
-              fontWeight={600}
-              sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}
-            >
-              {title}
-            </Typography>
-            {passed && <Chip size="small" color="success" label={messages.passed} />}
-            {onLocate && (
-              <Tooltip title={messages.locateOutputNode(title)}>
-                <IconButton
-                  size="small"
-                  aria-label={messages.locateOutputNode(title)}
-                  onClick={onLocate}
-                >
-                  <CenterFocusStrongIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Stack>
-          {body}
-        </Stack>
-      </CardContent>
-    </Card>
-  )
-}
-
 const Results = ({
   outputs,
   messages,
@@ -198,7 +63,7 @@ const Results = ({
   onSelectOutputNode?: SelectGraphNode
 }) => {
   const values = Object.values(outputs ?? {})
-  const hasModelText = values.some((out) => out.type === 'text')
+  const hasModelText = values.some((out) => out.type === 'text' || out.type === 'review')
   return (
     <Stack spacing={1.5} aria-label={messages.resultsHeading}>
       <Typography variant="h6">{messages.resultsHeading}</Typography>
