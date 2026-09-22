@@ -10,19 +10,23 @@ export const LEGACY_MODEL_WORKER_URL = 'http://193.174.195.36:8000';
 export const LEGACY_SIMILARITY_WORKER_URL = 'http://193.174.195.36:8002';
 
 /**
- * Names the worker variables that were left unset, so the caller can say which
- * traffic is about to leave the machine.
+ * Whether the NLP worker address was left unset, so the caller can say that
+ * answers are about to leave the machine.
  *
- * These fallbacks are a third-party host. A developer who runs `yarn dev`
- * without an `.env` still gets working similarity and keyword nodes, which is
+ * The fallback is a third-party host. A developer who runs `yarn dev` without an
+ * `.env` still gets working similarity, keyword and equivalence nodes, which is
  * convenient and is exactly the problem: every answer those nodes touch is sent
  * somewhere nobody chose. Silence is the wrong default for that.
+ *
+ * `MODEL_WORKER_URL` is deliberately not part of this. Empty is its documented
+ * production value — `docker-compose.yml` sets it that way and
+ * `ProviderService` reads `process.env` directly to disable the `local`
+ * provider — and nothing in `packages/lib` reads the injected value, so its
+ * legacy fallback sends no traffic anywhere. Warning about it cried wolf on
+ * every correctly configured deployment.
  */
-export const unsetWorkerUrls = (): string[] =>
-  [
-    process.env.MODEL_WORKER_URL ? '' : 'MODEL_WORKER_URL',
-    process.env.SIMILARITY_WORKER_URL ? '' : 'SIMILARITY_WORKER_URL',
-  ].filter(Boolean);
+export const similarityWorkerUnset = (): boolean =>
+  !process.env.SIMILARITY_WORKER_URL;
 
 export type AppConfig = {
   nodeEnv: string;

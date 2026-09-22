@@ -7,8 +7,8 @@ import dotenv from 'dotenv';
 import { AppModule } from './app/app.module.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import {
-  LEGACY_MODEL_WORKER_URL,
-  unsetWorkerUrls,
+  LEGACY_SIMILARITY_WORKER_URL,
+  similarityWorkerUnset,
 } from './config/configuration.js';
 import { cookiesInsecure } from './config/cookies.js';
 import { resolveCorsOrigins } from './config/cors.js';
@@ -73,10 +73,9 @@ async function bootstrap() {
     );
   }
 
-  const unset = unsetWorkerUrls();
-  if (unset.length > 0) {
+  if (similarityWorkerUnset()) {
     logger.warn(
-      `${unset.join(' and ')} not set: falling back to ${LEGACY_MODEL_WORKER_URL.replace(':8000', '')}, which is not this deployment. Learner answers reaching embedding, keyword or equivalence nodes will be sent there. Set them in .env (see .env_template).`,
+      `SIMILARITY_WORKER_URL is not set: falling back to ${LEGACY_SIMILARITY_WORKER_URL}, which is not this deployment. Every answer an embedding, keyword or equivalence node touches will be sent there. Set it in .env (see .env_template).`,
     );
   }
 
