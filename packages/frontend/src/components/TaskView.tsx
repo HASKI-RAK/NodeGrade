@@ -26,12 +26,21 @@ import {
 } from '@/i18n/preview'
 
 import { ResultCard } from './ResultCard'
+import { SubmissionsView, type SubmissionsViewProps } from './SubmissionsView'
 import { TraceView } from './TraceView'
 
 export type TaskViewHandle = {
   submit: () => boolean
   focusAnswer: () => void
 }
+
+type PreviewTab = 'test' | 'trace' | 'submissions'
+
+/** What the host supplies for the Submissions tab; strings and run-again are TaskView's. */
+export type TaskViewSubmissions = Omit<
+  SubmissionsViewProps,
+  'messages' | 'locale' | 'onRunAgain' | 'runDisabled'
+>
 
 const lengthError = (
   answer: string,
@@ -128,6 +137,11 @@ const TaskView = forwardRef<
      * output node that produced it. Leave undefined for students.
      */
     onSelectOutputNode?: SelectGraphNode
+    /**
+     * Editor-only: the Submissions inbox (SPEC-0020/FR-009). Leave undefined for
+     * students, who share a workspace and must not see each other's runs (FR-007).
+     */
+    submissions?: TaskViewSubmissions
   }
 >(
   (
@@ -147,12 +161,13 @@ const TaskView = forwardRef<
       progress = 0,
       onCancel = () => undefined,
       onSelectTraceNode = () => undefined,
-      onSelectOutputNode
+      onSelectOutputNode,
+      submissions
     },
     ref
   ) => {
     const messages = previewMessages[locale]
-    const [tab, setTab] = useState<'test' | 'trace'>('test')
+    const [tab, setTab] = useState<PreviewTab>('test')
     const [answer, setAnswer] = useState('')
     const [error, setError] = useState<string | null>(null)
     const answerRef = useRef<HTMLInputElement>(null)
@@ -172,18 +187,28 @@ const TaskView = forwardRef<
       }
     }
 
-    const submit = (): boolean => {
+    const submitAnswer = (value: string): boolean => {
       if (submitDisabled) return false
-      const message = lengthError(answer, constraints, messages)
+      const message = lengthError(value, constraints, messages)
       setError(message)
       if (message) return false
-      onSubmit(answer)
+      onSubmit(value)
       return true
     }
+
+    const submit = (): boolean => submitAnswer(answer)
 
     const handleSubmit = (event?: React.FormEvent<HTMLFormElement>): void => {
       event?.preventDefault()
       submit()
+    }
+
+    // "Run again" from a stored submission: the old answer lands in the Test tab and
+    // runs against whatever the graph is now (FR-012).
+    const runAgain = (value: string): void => {
+      setAnswer(value)
+      setTab('test')
+      submitAnswer(value)
     }
 
     useImperativeHandle(ref, () => ({
@@ -195,11 +220,17 @@ const TaskView = forwardRef<
       <Stack spacing={2} padding={2}>
         <Tabs
           value={tab}
-          onChange={(_, value: 'test' | 'trace') => setTab(value)}
+          onChange={(_, value: PreviewTab) => setTab(value)}
           aria-label="Preview"
         >
           <Tab value="test" label={messages.testTab} />
           <Tab value="trace" label={messages.traceTab} />
+          {submissions && (
+            <Tab
+              value="submissions"
+              label={messages.submissionsTab(submissions.summary.needsReview)}
+            />
+          )}
         </Tabs>
         {tab === 'trace' && (
           <TraceView
@@ -209,6 +240,18 @@ const TaskView = forwardRef<
             onCancel={onCancel}
             onSelectNode={onSelectTraceNode}
           />
+        )}
+        {submissions && (
+          // Hidden rather than unmounted, so an open submission survives a look at Test.
+          <Box hidden={tab !== 'submissions'}>
+            <SubmissionsView
+              {...submissions}
+              messages={messages}
+              locale={locale}
+              onRunAgain={runAgain}
+              runDisabled={submitDisabled}
+            />
+          </Box>
         )}
         <Box hidden={tab !== 'test'}>
           <Typography variant="h5">{messages.questionHeading}</Typography>

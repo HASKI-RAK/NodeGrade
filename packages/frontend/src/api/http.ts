@@ -1,4 +1,4 @@
-import type { BlockInterfaces, ModelCatalog } from '@haski/ta-lib'
+import type { BlockInterfaces, ModelCatalog, ServerEventPayload } from '@haski/ta-lib'
 
 import { getConfig } from '@/utils/config'
 
@@ -101,6 +101,44 @@ export type WorkshopReadiness = {
   status: 'PASS' | 'FAIL'
   checks: ReadinessCheck[]
 }
+
+/** Run records behind the Submissions inbox (SPEC-0020/FR-006). */
+export type RunFilter = 'all' | 'needs-review' | 'reviewed' | 'failed'
+export type RunOutcome = 'COMPLETED' | 'FAILED'
+export type RunSummary = {
+  id: string
+  outcome: RunOutcome
+  answerExcerpt: string
+  flagged: boolean
+  flagReason: string | null
+  /** Flagged and not yet marked reviewed. */
+  needsReview: boolean
+  score: number | null
+  /** LTI launch display name; null for browser and workshop workspaces. */
+  submittedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+}
+/** One stored output: the `outputSet` payload minus its run correlation. */
+export type RunOutput = Omit<
+  ServerEventPayload['outputSet'],
+  'runId' | 'workflowId' | 'timestamp'
+> & { truncated?: boolean }
+export type RunDetail = RunSummary & {
+  answer: string
+  outputs: RunOutput[]
+  errorMessage: string | null
+}
+export type RunsSummary = {
+  total: number
+  needsReview: number
+  reviewed: number
+  failed: number
+}
+export type RunReview = { reviewed: boolean; note?: string }
 
 export const api = {
   models: async () => (await apiRequest<ModelCatalog>('/models')).data,
@@ -205,5 +243,26 @@ export const api = {
         token,
         body: {}
       })
-    ).data
+    ).data,
+  runs: async (id: string, token?: string | null, filter: RunFilter = 'all') =>
+    (
+      await apiRequest<{ runs: RunSummary[]; summary: RunsSummary }>(
+        `/workflows/${id}/runs?filter=${encodeURIComponent(filter)}`,
+        { token }
+      )
+    ).data,
+  run: async (id: string, runId: string, token?: string | null) =>
+    (
+      await apiRequest<{ run: RunDetail }>(
+        `/workflows/${id}/runs/${encodeURIComponent(runId)}`,
+        { token }
+      )
+    ).data.run,
+  reviewRun: async (token: string | null, id: string, runId: string, review: RunReview) =>
+    (
+      await apiRequest<{ run: RunSummary }>(
+        `/workflows/${id}/runs/${encodeURIComponent(runId)}/review`,
+        { method: 'PATCH', token, body: review }
+      )
+    ).data.run
 }

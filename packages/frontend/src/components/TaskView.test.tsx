@@ -21,6 +21,108 @@ const output = (
   value
 })
 
+const submissions = (needsReview = 2, answer = 'The old answer.') => ({
+  runs: [
+    {
+      id: 'run-1',
+      outcome: 'COMPLETED' as const,
+      answerExcerpt: answer,
+      flagged: true,
+      flagReason: 'Unclear.',
+      needsReview: true,
+      score: null,
+      submittedBy: null,
+      reviewedAt: null,
+      reviewNote: null,
+      startedAt: '2026-09-22T10:00:00.000Z',
+      finishedAt: '2026-09-22T10:00:03.000Z',
+      durationMs: 3000
+    }
+  ],
+  summary: { total: 3, needsReview, reviewed: 1, failed: 0 },
+  filter: 'all' as const,
+  loading: false,
+  error: null,
+  onFilterChange: vi.fn(),
+  onRefresh: vi.fn(),
+  onLoadDetail: vi.fn().mockImplementation((id: string) =>
+    Promise.resolve({
+      id,
+      outcome: 'COMPLETED' as const,
+      answerExcerpt: answer,
+      flagged: true,
+      flagReason: 'Unclear.',
+      needsReview: true,
+      score: null,
+      submittedBy: null,
+      reviewedAt: null,
+      reviewNote: null,
+      startedAt: '2026-09-22T10:00:00.000Z',
+      finishedAt: '2026-09-22T10:00:03.000Z',
+      durationMs: 3000,
+      answer,
+      outputs: [],
+      errorMessage: null
+    })
+  )
+})
+
+describe('TaskView submissions tab (SPEC-0020/FR-009, FR-012)', () => {
+  it('shows the tab with the pending count only when the host supplies the inbox', () => {
+    const { rerender } = render(<TaskView question="Question" onSubmit={vi.fn()} />)
+    expect(screen.queryByRole('tab', { name: /Submissions/ })).toBeNull()
+
+    rerender(
+      <TaskView question="Question" onSubmit={vi.fn()} submissions={submissions(2)} />
+    )
+    expect(screen.getByRole('tab', { name: 'Submissions (2)' })).toBeVisible()
+
+    rerender(
+      <TaskView question="Question" onSubmit={vi.fn()} submissions={submissions(0)} />
+    )
+    expect(screen.getByRole('tab', { name: 'Submissions' })).toBeVisible()
+  })
+
+  it('runs a stored answer again from the Test tab', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <TaskView question="Question" onSubmit={onSubmit} submissions={submissions()} />
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Submissions (2)' }))
+    await user.click(
+      within(screen.getByRole('list', { name: 'Submission list' })).getByRole('button')
+    )
+    await user.click(await screen.findByRole('button', { name: 'Run again' }))
+
+    expect(onSubmit).toHaveBeenCalledWith('The old answer.')
+    expect(screen.getByRole('tab', { name: 'Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.getByLabelText('Your answer')).toHaveValue('The old answer.')
+  })
+
+  it('keeps an open submission while the participant looks at the Test tab', async () => {
+    const user = userEvent.setup()
+    render(
+      <TaskView question="Question" onSubmit={vi.fn()} submissions={submissions()} />
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Submissions (2)' }))
+    await user.click(
+      within(screen.getByRole('list', { name: 'Submission list' })).getByRole('button')
+    )
+    await screen.findByLabelText('Submission')
+    await user.click(screen.getByRole('tab', { name: 'Test' }))
+    await user.click(screen.getByRole('tab', { name: 'Submissions (2)' }))
+
+    expect(screen.getByLabelText('Submission')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Back to submissions' })).toBeVisible()
+  })
+})
+
 describe('TaskView', () => {
   it('shows a flagged review output as a warning card with its reason (SPEC-0020/FR-002)', () => {
     render(

@@ -2,7 +2,7 @@
 id: SPEC-0020
 type: feature
 title: Review flags and submission history
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-22
@@ -364,3 +364,4 @@ Then the list has one more row
 | ---------- | -------------------------------------------------------------------------------------------- |
 | 2026-09-22 | Initial specification created (draft). FR-001 to FR-003 land with the review flag node.      |
 | 2026-09-22 | FR-004 to FR-008, NFR-001 and NFR-002 implemented: `Run` model and migration, `packages/backend/src/run/`, record written by the run handler before the terminal event (ADR-0009). |
+| 2026-09-22 | FR-009 to FR-012 implemented: Submissions tab in the preview rail (`SubmissionsView`, `useSubmissions`), mark reviewed / reopen, run again; browser check `e2e/submissions.spec.ts`. Status: implemented. |

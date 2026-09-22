@@ -718,7 +718,8 @@ export class GraphHandlerService {
                 message: 'Run failed.',
               });
         // A cancelled run is the participant's own doing and leaves no submission.
-        if (!cancelled) await this.persistRun(run, 'FAILED', traceError.message);
+        if (!cancelled)
+          await this.persistRun(run, 'FAILED', traceError.message);
         emitEvent(client, 'runStateChanged', {
           requestId: run.requestId,
           runId: run.runId,
