@@ -257,6 +257,20 @@ PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
   docker compose up --build -d
 ```
 
+`--build` is not optional after a `git pull`. Compose reuses an existing image
+whenever one carries the right tag, so without it a stack that starts cleanly can
+still be running code from weeks ago — visible as missing routes, an old set of
+bundled templates, or migrations that were already applied.
+
+Put `PROVIDER_ENCRYPTION_KEY` in `.env` rather than passing it per command: a new
+key on the next start cannot decrypt the provider credentials the previous one
+wrote.
+
+The database publishes on host port 5432, which is the port a local PostgreSQL
+already holds. Set `NODEGRADE_DATABASE_PORT` to move it;
+`NODEGRADE_MODELS_PORT`, `NODEGRADE_BACKEND_PORT` and `NODEGRADE_FRONTEND_PORT`
+do the same for the rest.
+
 The Compose defaults target local HTTP at `http://localhost:8080` and set
 `COOKIE_INSECURE=true`. For a public HTTPS deployment, set `FRONTEND_URL` and
 `CORS_ORIGIN` to the public origin and set `COOKIE_INSECURE=false`.
