@@ -27,9 +27,18 @@ services:
   # that answers both the text-generation and the NLP endpoints from fixed
   # arithmetic, so e2e results never move with a model version and no test needs
   # a 2.3 GB download. EMBEDDING_MODEL and NLI_MODEL do not apply here: nothing
-  # loads bge-m3, and /entailment answers 503 on purpose so the browser suite
-  # exercises the nli-unavailable fallback in text/semantic-equivalence. Point
-  # SIMILARITY_WORKER_URL at a real worker on the host to test against one.
+  # loads bge-m3.
+  #
+  # What it does and does not do is worth knowing before reading a verdict from
+  # this stack. Similarity is a hashed bag of words: identical text scores 1,
+  # shared vocabulary scores in between, unrelated text scores near 0. It has no
+  # idea what a paraphrase is, so a correct answer worded differently comes back
+  # not equivalent, with `nli-neutral` as the reason. Judging how the cascade
+  # behaves needs the real worker — run `docker compose up models` or point
+  # SIMILARITY_WORKER_URL at one on the host.
+  #
+  # DEBUG_NLI_DISABLED=1 makes /entailment answer 503, which is what production
+  # does when NLI_MODEL is empty, for testing the nli-unavailable fallback.
   model:
     <<: *debug-runtime
     command: ['node', 'tools/debug/fake-model.mjs']

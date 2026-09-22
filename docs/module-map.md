@@ -265,6 +265,14 @@ range with a fake model and embedding worker (`fake-model.mjs`), seeded demo gra
 both before the server starts, using the bundled content byte for byte so the bootstrap
 seeder recognises its own hash and appends no revision.
 
+`fake-model.mjs` stands in for every endpoint of the NLP worker as well as the
+text-generation one: `/sentence_embedding` and `/similarity` from a hashed bag of words,
+and `/entailment` from token overlap plus a negation list. It is arithmetic, not a model —
+unrelated text scores near 0 and a paraphrase scores low, where a real worker scores it
+high. Use it to check that a graph runs, never to judge how the equivalence cascade
+behaves. `DEBUG_NLI_DISABLED=1` makes `/entailment` answer 503, which is what the real
+worker does when `NLI_MODEL` is empty.
+
 ## Browser suite
 
 Location: `e2e/`, `playwright.config.ts`
