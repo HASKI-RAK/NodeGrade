@@ -498,6 +498,7 @@ export const Editor = () => {
       sx={{
         height: '100dvh',
         display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr)',
         gridTemplateRows: 'auto minmax(0, 1fr)',
         bgcolor: 'background.default',
         overflow: 'hidden'
@@ -545,7 +546,7 @@ export const Editor = () => {
           workflowId
         }}
       />
-      <Box sx={{ minHeight: 0, display: 'flex', position: 'relative' }}>
+      <Box sx={{ minWidth: 0, minHeight: 0, display: 'flex', position: 'relative' }}>
         {!student && paletteOpen && (
           <NodePalette
             graph={lgraph}

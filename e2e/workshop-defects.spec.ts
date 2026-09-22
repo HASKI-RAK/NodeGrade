@@ -69,6 +69,19 @@ test('node palette replaces details at tablet width', async ({ page }) => {
     .toBe((before ?? 0) + 1)
 })
 
+test('node palette keeps desktop editor controls within the viewport', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await joinFromLandingPage(page, WAIE_WORKSHOP_CODE)
+
+  await page.getByRole('button', { name: 'Add' }).click()
+
+  await expect(page.getByLabel('Node palette')).toBeVisible()
+  await expect(page.getByLabel('Editor details')).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'More editor actions' })).toBeInViewport()
+})
+
 test('facilitator manages template lifecycle and gallery visibility', async ({
   page
 }, testInfo) => {
