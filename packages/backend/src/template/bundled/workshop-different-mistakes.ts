@@ -4,7 +4,9 @@ import { GraphBuilder } from './graph-builder.js';
 /**
  * Workshop workflow 3 — Sharing a pizza: different mistakes need different help.
  *
- * A classification stage assigns one of five answer types with evidence. A feedback stage
+ * A classification stage assigns one of five answer types with evidence. The category
+ * alone also reaches the participant as a `classifications` output (a chip), read off
+ * the CATEGORY line deterministically rather than by a second model call. A feedback stage
  * receives the diagnosis together with an educator-owned feedback policy — one entry per
  * answer type — and drafts the instructional response. A review stage sees the original
  * answer, the policy, the diagnosis and the draft, and recommends whether an educator
@@ -213,8 +215,29 @@ const build = () => {
     [1370, classificationTop],
     classificationPrompt,
   );
-  g.output('Answer type', [2230, classificationTop], diagnosis);
-  g.group('Classification', [500, 730, 2180, 420], '#405775');
+  // The `classifications` venue renders a list of labels as chips, so the bare category
+  // is lifted off the four-line diagnosis and wrapped as a one-element list. The full
+  // diagnosis stays visible as text: the evidence is what participants check.
+  const category = g.extractLine(
+    'Category line',
+    [2230, classificationTop],
+    diagnosis,
+    'CATEGORY:',
+  );
+  const categoryList = g.stringsToArray(
+    'Category list',
+    [2630, classificationTop],
+    category,
+  );
+  g.output(
+    'Answer type',
+    [2930, classificationTop],
+    categoryList,
+    0,
+    'classifications',
+  );
+  g.output('Diagnosis', [2230, classificationTop + 140], diagnosis);
+  g.group('Classification', [500, 730, 2880, 420], '#405775');
 
   // Educator-owned policy and shared blocks --------------------------------------------
   const policyTop = 1310;
@@ -238,7 +261,7 @@ const build = () => {
   );
   g.group(
     'Feedback policy (educator-owned)',
-    [500, 1230, 2180, 440],
+    [500, 1230, 2880, 440],
     '#6f621f',
   );
 
@@ -258,7 +281,7 @@ const build = () => {
   );
   const feedback = g.llmStage('Feedback', [1370, feedbackTop], feedbackPrompt);
   g.output('Draft student feedback', [2230, feedbackTop], feedback);
-  g.group('Feedback drafting', [500, 1750, 2180, 400], '#5b3d6e');
+  g.group('Feedback drafting', [500, 1750, 2880, 400], '#5b3d6e');
 
   // Review -----------------------------------------------------------------------------
   const reviewTop = 2310;
@@ -285,7 +308,7 @@ const build = () => {
   g.reviewFlag('Needs a tutor?', [2230, reviewTop + 120], review);
   g.group(
     'Review (recommendation, not approval)',
-    [500, 2230, 2180, 650],
+    [500, 2230, 2880, 650],
     '#7a3b3b',
   );
 
@@ -297,7 +320,7 @@ export const workshopDifferentMistakesTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 3 · Sharing a pizza: different mistakes need different help',
   description:
-    'Sharing a pizza — different mistakes need different help. Classifies an explanation of why one half is larger than one quarter, then follows a classify → feedback → review chain.\n\nMethods: (1) LLM classification into five answer types (CORRECT, INCOMPLETE, MISCONCEPTION, TOO_VAGUE_OR_IRRELEVANT, CONTRADICTORY) with evidence; (2) Educator-owned feedback policy — one response rule per answer type kept in its own text node; (3) LLM feedback draft that drafts feedback following the policy, plus a review stage with an LLM review recommending EDUCATOR_REVIEW or KEEP_AS_DRAFT.\n\nNothing here auto-releases: every output is a visible draft. Change only the policy (guiding question vs. direct explanation) and watch the diagnosis stay fixed while the feedback changes.',
+    'Sharing a pizza — different mistakes need different help. Classifies an explanation of why one half is larger than one quarter, then follows a classify → feedback → review chain.\n\nMethods: (1) LLM classification into five answer types (CORRECT, INCOMPLETE, MISCONCEPTION, TOO_VAGUE_OR_IRRELEVANT, CONTRADICTORY) with evidence, the category shown as a chip next to the full diagnosis; (2) Educator-owned feedback policy — one response rule per answer type kept in its own text node; (3) LLM feedback draft that drafts feedback following the policy, plus a review stage with an LLM review recommending EDUCATOR_REVIEW or KEEP_AS_DRAFT.\n\nNothing here auto-releases: every output is a visible draft. Change only the policy (guiding question vs. direct explanation) and watch the diagnosis stay fixed while the feedback changes.',
   category: 'Workshop',
   tags: [
     'tutorial',
