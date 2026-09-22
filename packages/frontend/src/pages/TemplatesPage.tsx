@@ -75,6 +75,12 @@ const METHOD_PATTERN = new RegExp(
   'gi'
 )
 
+const VISIBLE_TEMPLATE_SLUGS = new Set([
+  'workshop-words-vs-understanding',
+  'workshop-same-score-different-gaps',
+  'workshop-different-mistakes-different-help'
+])
+
 const TemplateDescription = ({ text }: { text: string | null }) => {
   if (!text) return null
   const parts = text.split(METHOD_PATTERN)
@@ -127,7 +133,12 @@ export const TemplatesPage = () => {
   }, [])
 
   const visibleTemplates = useMemo(
-    () => templates?.filter((template) => kind === 'ALL' || template.kind === kind),
+    () =>
+      templates?.filter(
+        (template) =>
+          VISIBLE_TEMPLATE_SLUGS.has(template.slug) &&
+          (kind === 'ALL' || template.kind === kind)
+      ),
     [kind, templates]
   )
 
