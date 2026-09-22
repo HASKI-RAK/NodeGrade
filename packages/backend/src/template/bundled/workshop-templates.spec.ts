@@ -6,6 +6,7 @@ import {
 import type { SerializedGraph } from '@haski/ta-lib';
 import type { BundledTemplate } from './bundled-template.js';
 import { WORKSHOP_TEMPLATES } from './index.js';
+import { validationReviewBlock } from './validation-review-block.js';
 import { workshopDifferentMistakesTemplate } from './workshop-different-mistakes.js';
 import { workshopSameScoreDifferentGapsTemplate } from './workshop-same-score-different-gaps.js';
 import { workshopWordsVsUnderstandingTemplate } from './workshop-words-vs-understanding.js';
@@ -128,8 +129,35 @@ describe('workshop templates', () => {
     },
   );
 
+  // The presentation walks the same loop in every graph: a model recommends, a
+  // review flag turns that into a verdict, the Submissions inbox counts it
+  // (SPEC-0020/FR-003). One flag per graph keeps the story readable.
+  it.each(
+    [...WORKSHOP_TEMPLATES, validationReviewBlock].map((t) => [t.slug, t] as const),
+  )('%s carries exactly one review flag fed by a model', (_slug, template) => {
+    const flags = nodesOfType(template, 'output/review-flag');
+    expect(flags).toHaveLength(1);
+    const [flag] = flags as [Node];
+    const feeding = linksOf(template).find(
+      ([, , , targetId, targetSlot]) => targetId === flag.id && targetSlot === 0,
+    );
+    expect(feeding).toBeDefined();
+    const [, originId] = feeding as Link;
+    expect(template.content.nodes.find((n) => n.id === originId)?.type).toBe(
+      'models/llm',
+    );
+    expect(flag.properties).toEqual(
+      expect.objectContaining({ label: 'Needs a tutor?', reasonPrefix: 'REASON:' }),
+    );
+  });
+
   describe('workflow 1: words versus understanding', () => {
     const template = workshopWordsVsUnderstandingTemplate;
+
+    it('flags only the judgment the prompt reserves for "cannot tell"', () => {
+      const [flag] = nodesOfType(template, 'output/review-flag');
+      expect(flag?.properties?.flagPattern).toBe('JUDGMENT: UNCLEAR');
+    });
 
     it('keeps deterministic evidence out of the model prompt', () => {
       const [llm] = nodesOfType(template, 'models/llm');
@@ -176,9 +204,9 @@ describe('workshop templates', () => {
   describe('workflow 2: same score, different gaps', () => {
     const template = workshopSameScoreDifferentGapsTemplate;
 
-    it('runs one grader per criterion plus one feedback model', () => {
+    it('runs one grader per criterion plus one feedback and one review model', () => {
       const llms = nodesOfType(template, 'models/llm').map(titleOf);
-      expect(llms).toHaveLength(5);
+      expect(llms).toHaveLength(6);
       expect(llms).toEqual(
         expect.arrayContaining([
           'Evaporation grader model',
@@ -186,7 +214,32 @@ describe('workshop templates', () => {
           'Rain grader model',
           'Collection grader model',
           'Feedback model',
+          'Review model',
         ]),
+      );
+    });
+
+    it('gives the reviewer every report, the draft feedback and the answer', () => {
+      const review = nodesOfType(template, 'models/llm').find(
+        (node) => titleOf(node) === 'Review model',
+      ) as Node;
+      const upstream = upstreamOf(template, review);
+      const graders = nodesOfType(template, 'models/llm').filter((node) =>
+        titleOf(node).endsWith('grader model'),
+      );
+      expect(graders).toHaveLength(4);
+      for (const grader of graders) expect(upstream.has(grader.id)).toBe(true);
+      const feedback = nodesOfType(template, 'models/llm').find(
+        (node) => titleOf(node) === 'Feedback model',
+      ) as Node;
+      expect(upstream.has(feedback.id)).toBe(true);
+      const answer = nodesOfType(template, 'input/answer')[0] as Node;
+      expect(upstream.has(answer.id)).toBe(true);
+      const instructions = nodesOfType(template, 'basic/textfield').find(
+        (node) => titleOf(node) === 'Review instructions',
+      ) as Node;
+      expect(String(instructions.properties?.value)).toContain(
+        'RECOMMENDATION: EDUCATOR_REVIEW or KEEP_AS_DRAFT',
       );
     });
 
@@ -219,9 +272,10 @@ describe('workshop templates', () => {
         (node) => titleOf(node) === 'Feedback model',
       ) as Node;
       const upstream = upstreamOf(template, feedback);
-      const graders = nodesOfType(template, 'models/llm').filter(
-        (node) => node.id !== feedback.id,
+      const graders = nodesOfType(template, 'models/llm').filter((node) =>
+        titleOf(node).endsWith('grader model'),
       );
+      expect(graders).toHaveLength(4);
       for (const grader of graders) expect(upstream.has(grader.id)).toBe(true);
       for (const math of nodesOfType(template, 'math/math-operation'))
         expect(upstream.has(math.id)).toBe(false);

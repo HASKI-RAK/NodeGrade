@@ -1,7 +1,9 @@
 import {
+  DEFAULT_FLAG_PATTERN,
   DEFAULT_HIGH_THRESHOLD as EQUIVALENCE_HIGH_THRESHOLD,
   DEFAULT_KEYWORD_THRESHOLD as KEYWORD_SIMILARITY_THRESHOLD,
   DEFAULT_LOW_THRESHOLD as EQUIVALENCE_LOW_THRESHOLD,
+  DEFAULT_REASON_PREFIX,
   KATALYST_MODEL_QWEN_FLASH,
   PROVIDER_KEY_KATALYST,
 } from '@haski/ta-lib';
@@ -104,6 +106,12 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [slot('number')],
   },
   'output/output': { inputs: [slot('*')], outputs: [] },
+  // Mirrors `ReviewFlagNode`: `addIn(['string', 'boolean'], 'signal')`, so the stored
+  // slot type is the comma-joined form `onConfigure` restores on load.
+  'output/review-flag': {
+    inputs: [slot('signal', 'string,boolean')],
+    outputs: [slot('flagged', 'boolean')],
+  },
 };
 
 export type NodeRef = { readonly id: number; readonly type: string };
@@ -666,6 +674,39 @@ export class GraphBuilder {
       size: [410, 80],
       properties: { uniqueId: '', type, label, value: '' },
       widgetsValues: [label, type],
+    });
+    this.link(source, sourceSlot, node, 0);
+    return node;
+  }
+
+  /**
+   * Review flag: turns a reviewer's recommendation text (or a boolean) into the
+   * structured `review` output the preview card and the Submissions inbox count
+   * (SPEC-0020/FR-001, FR-003). The default markers match the two-line
+   * `RECOMMENDATION:` / `REASON:` contract the bundled review prompts print.
+   */
+  reviewFlag(
+    label: string,
+    pos: [number, number],
+    source: NodeRef,
+    options: {
+      sourceSlot?: number;
+      flagPattern?: string;
+      reasonPrefix?: string;
+    } = {},
+  ): NodeRef {
+    const {
+      sourceSlot = 0,
+      flagPattern = DEFAULT_FLAG_PATTERN,
+      reasonPrefix = DEFAULT_REASON_PREFIX,
+    } = options;
+    const node = this.add({
+      type: 'output/review-flag',
+      title: `${label} flag`,
+      pos,
+      size: [410, 110],
+      properties: { label, flagPattern, reasonPrefix, value: '' },
+      widgetsValues: [label, flagPattern, reasonPrefix],
     });
     this.link(source, sourceSlot, node, 0);
     return node;

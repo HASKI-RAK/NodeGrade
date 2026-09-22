@@ -132,6 +132,11 @@ const build = () => {
   );
   const assessment = g.llmStage('Assessment', [1320, 440], prompt);
   g.output('Conceptual assessment', [2180, 440], assessment);
+  // UNCLEAR is the one judgment the prompt reserves for "cannot tell": that is the
+  // answer a tutor has to read, so it is the one this graph flags (SPEC-0020/FR-003).
+  g.reviewFlag('Needs a tutor?', [2180, 560], assessment, {
+    flagPattern: 'JUDGMENT: UNCLEAR',
+  });
   g.group('Branch C: assess the explanation', [500, 0, 2130, 700], '#405775');
 
   // Branch A: look for vocabulary ------------------------------------------------------

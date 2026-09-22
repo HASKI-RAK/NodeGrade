@@ -64,7 +64,10 @@ Bundled graphs are TypeScript modules under `bundled/`. The three WAIE tutorial 
 `bundled/graph-builder.ts`, which owns slot wiring, link ids and `last_*_id` bookkeeping so a
 template states only nodes and connections. Their subject matter is everyday science (day
 and night, the water cycle, sharing a pizza) so participants evaluate the assessment
-workflow rather than their own knowledge. Slugs are named after the assessment concept,
+workflow rather than their own knowledge. Each of the three, and the `validation-review`
+block, ends in one `output/review-flag` node fed by a model, so the facilitator can walk
+the same recommend → flag → inbox loop in every example (SPEC-0020/FR-003). Slugs are
+named after the assessment concept,
 not the example, so an example can change without a new slug; slugs that did change are
 listed in `RETIRED_TEMPLATE_SLUGS` and the seeder unpublishes them on boot.
 `packages/backend/scripts/run-workshop-live.ts` (`yarn workspace backend workshop:live`)
@@ -163,7 +166,10 @@ Location: `packages/lib/src/`
 
 Responsibilities:
 
-- every LiteGraph node implementation (`nodes/*.ts`, ~28 types)
+- every LiteGraph node implementation (`nodes/*.ts`, ~29 types), including the review
+  flag (`nodes/ReviewFlagNode.ts`, `output/review-flag`) that turns a reviewer's
+  recommendation into the structured `review` output the preview marks and the
+  Submissions inbox counts (SPEC-0020)
 - node metadata used by palette and inspector (`nodes/NodeDefinition.ts`,
   `nodes/NodeDefinitionRegistry.ts`, `nodes/LGraphRegisterCustomNodes.ts`)
 - client/server event contracts and trace payloads (`events/ServerEvents.ts`)

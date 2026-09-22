@@ -101,8 +101,8 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
   category: 'Assessment laboratories',
   tags: ['assessment', 'llm', 'katalyst', 'validation', 'extended-palette'],
   content: {
-    last_node_id: 46,
-    last_link_id: 50,
+    last_node_id: 47,
+    last_link_id: 51,
     nodes: [
       node({
         id: 1,
@@ -447,7 +447,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
           input('message', 'message,string,[message]', 35),
           input('messages', 'message,[message],[string],string', 33),
         ],
-        outputs: [output('string', 'string', [38, 39, 40])],
+        outputs: [output('string', 'string', [38, 39, 40, 51])],
         properties: llmProperties,
         widgetsValues: [2048, 0.2, 0.9, 40, 0, KATALYST_MODEL_QWEN_FLASH],
         size: [320, 220],
@@ -627,6 +627,22 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
         properties: { label: 'Equivalence verdict', type: 'text', value: '' },
         widgetsValues: ['Equivalence verdict', 'text'],
       }),
+      node({
+        id: 47,
+        type: 'output/review-flag',
+        pos: [2790, 200],
+        title: 'Review flag',
+        inputs: [input('signal', 'string,boolean', 51)],
+        outputs: [output('flagged', 'boolean')],
+        properties: {
+          label: 'Needs a tutor?',
+          flagPattern: 'EDUCATOR_REVIEW',
+          reasonPrefix: 'REASON:',
+          value: '',
+        },
+        widgetsValues: ['Needs a tutor?', 'EDUCATOR_REVIEW', 'REASON:'],
+        size: [410, 110],
+      }),
     ],
     links: [
       [1, 1, 0, 25, 0, 'string'],
@@ -677,6 +693,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
       [48, 12, 0, 45, 0, '*'],
       [49, 3, 0, 45, 1, 'string'],
       [50, 45, 2, 46, 0, 'string'],
+      [51, 32, 0, 47, 0, 'string'],
     ],
     groups: [
       {

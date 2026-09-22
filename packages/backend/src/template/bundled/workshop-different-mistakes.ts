@@ -282,6 +282,7 @@ const build = () => {
   );
   const review = g.llmStage('Review', [1370, reviewTop], reviewPrompt);
   g.output('Review recommendation', [2230, reviewTop], review);
+  g.reviewFlag('Needs a tutor?', [2230, reviewTop + 120], review);
   g.group(
     'Review (recommendation, not approval)',
     [500, 2230, 2180, 650],
