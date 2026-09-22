@@ -105,7 +105,9 @@ const Canvas = (props: CanvasProps) => {
       if (!entry || !lcanvas.current) return
       const { width, height } = entry.contentRect
       lcanvas.current.resize(width, height)
-      props.lgraph.setDirtyCanvas(true, true)
+      // Resizing clears both canvas bitmaps. Paint them synchronously so a
+      // panel drag cannot present the cleared frame before LiteGraph's loop.
+      lcanvas.current.draw(true, true)
     })
     observer.observe(canvas.parentElement ?? canvas)
     // Monitor switch or browser zoom: same CSS box, different device pixels.
