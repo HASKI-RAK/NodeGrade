@@ -26,11 +26,41 @@ vi.mock('@/hooks/useWorkspaceSession', () => ({
 const templates = [
   {
     id: 'workflow-1',
-    slug: 'waie',
+    slug: 'workshop-words-vs-understanding',
+    kind: 'WORKFLOW' as const,
+    name: 'Workshop 1 · Day and night',
+    description: 'Complete assessment',
+    category: 'Workshop',
+    tags: [],
+    currentRevision: 1
+  },
+  {
+    id: 'workflow-2',
+    slug: 'workshop-same-score-different-gaps',
+    kind: 'WORKFLOW' as const,
+    name: 'Workshop 2 · The water cycle',
+    description: 'Rubric scoring workshop',
+    category: 'Workshop',
+    tags: [],
+    currentRevision: 1
+  },
+  {
+    id: 'workflow-3',
+    slug: 'workshop-different-mistakes-different-help',
+    kind: 'WORKFLOW' as const,
+    name: 'Workshop 3 · Sharing a pizza',
+    description: 'Feedback workshop',
+    category: 'Workshop',
+    tags: [],
+    currentRevision: 1
+  },
+  {
+    id: 'workflow-hidden',
+    slug: 'waie-assessment',
     kind: 'WORKFLOW' as const,
     name: 'WAIE assessment',
     description: 'Complete assessment',
-    category: 'Workshop',
+    category: 'Assessment',
     tags: [],
     currentRevision: 1
   },
@@ -68,19 +98,25 @@ describe('TemplatesPage', () => {
     })
   })
 
-  it('shows category metadata and filters workflow and block templates', async () => {
+  it('shows only Workshop 1, 2, and 3 templates', async () => {
     render(
       <MemoryRouter>
         <TemplatesPage />
       </MemoryRouter>
     )
 
-    expect(await screen.findByText('Workshop')).toBeVisible()
-    expect(screen.getByText('Feedback')).toBeVisible()
+    expect(await screen.findAllByText('Workshop')).toHaveLength(3)
+    expect(screen.getByText('Workshop 1 · Day and night')).toBeVisible()
+    expect(screen.getByText('Workshop 2 · The water cycle')).toBeVisible()
+    expect(screen.getByText('Workshop 3 · Sharing a pizza')).toBeVisible()
+    expect(screen.queryByText('WAIE assessment')).toBeNull()
+    expect(screen.queryByText('Feedback generator')).toBeNull()
     await userEvent.click(screen.getByRole('combobox', { name: 'Template type' }))
     await userEvent.click(screen.getByRole('option', { name: 'Blocks' }))
-    await waitFor(() => expect(screen.queryByText('WAIE assessment')).toBeNull())
-    expect(screen.getByText('Feedback generator')).toBeVisible()
+    await waitFor(() =>
+      expect(screen.queryByText('Workshop 1 · Day and night')).toBeNull()
+    )
+    expect(screen.getByText('No templates match this type.')).toBeVisible()
   })
 
   it('opens a structural preview before use', async () => {
