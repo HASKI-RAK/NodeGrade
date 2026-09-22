@@ -32,6 +32,7 @@ import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
+import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
 import { SentenceTransformer } from './SentenceTransformer'
 import { StringArrayToString } from './StringArrayToString'
 import { StringsToArray } from './StringToArray'
@@ -338,7 +339,23 @@ const entries: readonly Entry[] = [
     category: 'Validation',
     description: 'Check required keywords.',
     tags: ['semantic'],
-    properties: [toggle('useSemantic', 'Use semantic similarity')]
+    properties: [
+      toggle('useSemantic', 'Use semantic similarity'),
+      number('threshold', 'Similarity threshold', true)
+    ]
+  },
+  {
+    node: SemanticEquivalenceNode,
+    category: 'Validation',
+    description: 'Decide whether an answer means the same as the expected answer.',
+    tags: ['semantic', 'similarity', 'entailment'],
+    properties: [
+      number('lowThreshold', 'Reject below similarity', true),
+      number('highThreshold', 'Accept above similarity', true),
+      toggle('useEntailment', 'Verify with entailment'),
+      toggle('checkNumbers', 'Compare numbers'),
+      toggle('checkPolarity', 'Compare yes/no')
+    ]
   }
 ]
 
@@ -398,7 +415,17 @@ const legacyWidgetKeys = new Map<string, readonly string[]>([
   [MathOperationNode.getPath(), ['operation']],
   [StringArrayToString.getPath(), ['separator']],
   [CountNode.getPath(), ['operation']],
-  [KeywordCheckNode.getPath(), ['useSemantic']]
+  [KeywordCheckNode.getPath(), ['useSemantic', 'threshold']],
+  [
+    SemanticEquivalenceNode.getPath(),
+    [
+      'lowThreshold',
+      'highThreshold',
+      'useEntailment',
+      'checkNumbers',
+      'checkPolarity'
+    ]
+  ]
 ])
 
 export const getDefinedNodeConstructors = (): readonly DefinedNodeConstructor[] =>

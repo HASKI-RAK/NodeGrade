@@ -250,7 +250,7 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Facilitator sign-in at `/admin`. Without them the admin area stays disabled. |
 | `FRONTEND_URL`, `CORS_ORIGIN` | Public origin of the frontend, and the origins allowed to call the API. |
 | `MODEL_WORKER_URL` | An OpenAI-compatible endpoint offered as the `local` provider. |
-| `SIMILARITY_WORKER_URL` | The embedding worker used by the NLP nodes. |
+| `SIMILARITY_WORKER_URL` | The NLP worker (`models/`) behind the embedding, keyword and equivalence nodes. |
 | `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | Seed credentials for the cloud providers. A seeded cloud provider starts with its model policy set to deny-all; a facilitator opens it in `/admin/providers`. |
 | `BEARER_TOKEN` | Auth for a custom OpenAI-compatible endpoint, when needed. |
 | `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
@@ -260,6 +260,19 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window (room-tolerant join throttle). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
+
+The NLP worker itself reads three variables of its own (set on the `models` service, not
+the backend):
+
+| Variable | Purpose |
+|---|---|
+| `EMBEDDING_MODEL` | Sentence-embedding model (default `BAAI/bge-m3`; multilingual, MIT). |
+| `EMBEDDING_MAX_SEQ_LENGTH` | Token cap per input (default 512), which bounds CPU latency. |
+| `NLI_MODEL` | Entailment cross-encoder behind `/entailment`, loaded on first use. Set it empty to disable the stage; `text/semantic-equivalence` then falls back to its cosine ceiling. |
+
+Model choice is measured, not assumed — see
+[docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md) and
+`models/calibrate.py`.
 
 Apply schema migrations on every release, before the new backend serves traffic:
 

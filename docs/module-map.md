@@ -300,10 +300,19 @@ local IDs, and requirements with neither a tracing acceptance criterion nor a
 (`yarn test:specs`) covers it with node:test and is gated by the `specs` job in
 `.github/workflows/pr.yml`.
 
-## Embedding worker
+## NLP worker
 
 Location: `models/`
 
-Flask + sentence-transformers service backing `SentenceTransformer`, `CosineSimilarity`
-and semantic `KeywordCheckNode`. Reached through `MODEL_WORKER_URL` /
-`SIMILARITY_WORKER_URL` injected by `packages/backend/src/config/node-env.ts`.
+Flask service backing `SentenceTransformer`, `CosineSimilarity`, semantic
+`KeywordCheckNode` and `SemanticEquivalenceNode`. Reached through `MODEL_WORKER_URL` /
+`SIMILARITY_WORKER_URL` injected by `packages/backend/src/config/node-env.ts`; the nodes
+go through `packages/lib/src/nodes/utils/similarityWorker.ts`, the only place that knows
+the endpoint shapes.
+
+Three endpoints: `/sentence_embedding` (one string or a batch), `/similarity` (one source
+against many targets in a single forward pass) and `/entailment` (a
+natural-language-inference cross-encoder, loaded on first use, answering 503 when
+`NLI_MODEL` is empty). Models are chosen by `EMBEDDING_MODEL` and `NLI_MODEL`;
+`models/calibrate.py` measures both against a labelled pair set and
+`docs/semantic-equivalence-calibration.md` records what it found.

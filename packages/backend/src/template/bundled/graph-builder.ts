@@ -1,4 +1,7 @@
 import {
+  DEFAULT_HIGH_THRESHOLD as EQUIVALENCE_HIGH_THRESHOLD,
+  DEFAULT_KEYWORD_THRESHOLD as KEYWORD_SIMILARITY_THRESHOLD,
+  DEFAULT_LOW_THRESHOLD as EQUIVALENCE_LOW_THRESHOLD,
   KATALYST_MODEL_QWEN_FLASH,
   PROVIDER_KEY_KATALYST,
 } from '@haski/ta-lib';
@@ -82,6 +85,14 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [
       slot('present keywords', 'string'),
       slot('missing keywords', 'string'),
+    ],
+  },
+  'text/semantic-equivalence': {
+    inputs: [slot('answer', 'string'), slot('expected answer', 'string')],
+    outputs: [
+      slot('equivalent', 'boolean'),
+      slot('similarity', 'number'),
+      slot('verdict', 'string'),
     ],
   },
   'models/sentence-transformer': {
@@ -430,21 +441,67 @@ export class GraphBuilder {
     pos: [number, number],
     keywords?: NodeRef,
     text?: NodeRef,
+    options: { useSemantic?: boolean; threshold?: number } = {},
   ): NodeRef {
+    const { useSemantic = false, threshold = KEYWORD_SIMILARITY_THRESHOLD } =
+      options;
     const node = this.add({
       type: 'text/keyword-check',
       title,
       pos,
-      size: [300, 110],
+      size: [300, 130],
       properties: {
-        useSemantic: false,
+        useSemantic,
+        threshold,
         presentKeywords: '',
         missingKeywords: '',
       },
-      widgetsValues: [false],
+      widgetsValues: [useSemantic, threshold],
     });
     if (keywords) this.link(keywords, 0, node, 0);
     if (text) this.link(text, 0, node, 1);
+    return node;
+  }
+
+  /**
+   * Whether an answer *means* the expected answer, as opposed to how close the
+   * two sit in embedding space. See `text/semantic-equivalence` for why those
+   * are different questions and why the defaults sit where they do.
+   */
+  semanticEquivalence(
+    title: string,
+    pos: [number, number],
+    answer?: NodeRef,
+    expected?: NodeRef,
+    options: {
+      lowThreshold?: number;
+      highThreshold?: number;
+      useEntailment?: boolean;
+    } = {},
+  ): NodeRef {
+    const {
+      lowThreshold = EQUIVALENCE_LOW_THRESHOLD,
+      highThreshold = EQUIVALENCE_HIGH_THRESHOLD,
+      useEntailment = true,
+    } = options;
+    const node = this.add({
+      type: 'text/semantic-equivalence',
+      title,
+      pos,
+      size: [340, 200],
+      properties: {
+        lowThreshold,
+        highThreshold,
+        useEntailment,
+        checkNumbers: true,
+        checkPolarity: true,
+        similarity: 0,
+        verdict: '',
+      },
+      widgetsValues: [lowThreshold, highThreshold, useEntailment, true, true],
+    });
+    if (answer) this.link(answer, 0, node, 0);
+    if (expected) this.link(expected, 0, node, 1);
     return node;
   }
 

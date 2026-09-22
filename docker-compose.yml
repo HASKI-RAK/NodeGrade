@@ -19,6 +19,14 @@ services:
     build:
       context: ./models
       dockerfile: Dockerfile
+    environment:
+      # Multilingual and MIT licensed. See
+      # docs/semantic-equivalence-calibration.md for why this one.
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      EMBEDDING_MAX_SEQ_LENGTH: ${EMBEDDING_MAX_SEQ_LENGTH:-512}
+      # Loaded on first /entailment request, not at boot. Set empty to run
+      # without the stage; text/semantic-equivalence then falls back to cosine.
+      NLI_MODEL: ${NLI_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
     ports:
       - '8002:8002'
     volumes:
@@ -34,7 +42,8 @@ services:
       interval: 10s
       timeout: 10s
       retries: 30
-      start_period: 120s
+      # bge-m3 is 2.3 GB: the first boot downloads it before /health answers.
+      start_period: 600s
 
   backend:
     build:

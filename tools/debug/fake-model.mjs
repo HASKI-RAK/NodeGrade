@@ -32,6 +32,10 @@ function embedding(value) {
   return vector.map((entry) => entry / magnitude)
 }
 
+function cosine(a, b) {
+  return a.reduce((sum, entry, index) => sum + entry * b[index], 0)
+}
+
 const server = createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     json(response, 200, { status: 'ok', service: 'nodegrade-deterministic-model' })
@@ -79,11 +83,41 @@ const server = createServer(async (request, response) => {
   if (request.method === 'POST' && request.url === '/sentence_embedding') {
     try {
       const body = await readBody(request)
+      if (Array.isArray(body.sentence)) {
+        json(response, 200, body.sentence.map((entry) => embedding(String(entry))))
+        return
+      }
       const sentence = typeof body.sentence === 'string' ? body.sentence : ''
       json(response, 200, embedding(sentence))
     } catch {
       json(response, 400, { error: { message: 'Request body must be valid JSON.' } })
     }
+    return
+  }
+
+  if (request.method === 'POST' && request.url === '/similarity') {
+    try {
+      const body = await readBody(request)
+      const source = embedding(typeof body.source === 'string' ? body.source : '')
+      const targets = Array.isArray(body.targets) ? body.targets : []
+      json(response, 200, {
+        model: 'nodegrade-deterministic-embedding',
+        scores: targets.map((target) =>
+          cosine(source, embedding(String(target)))
+        )
+      })
+    } catch {
+      json(response, 400, { error: { message: 'Request body must be valid JSON.' } })
+    }
+    return
+  }
+
+  // No entailment model in the debug stack. 503 is the production answer when
+  // NLI_MODEL is empty, and the one `text/semantic-equivalence` is built to
+  // survive, so the browser suite exercises that fallback rather than a
+  // fabricated verdict.
+  if (request.method === 'POST' && request.url === '/entailment') {
+    json(response, 503, { error: 'NLI model is disabled (NLI_MODEL is empty)' })
     return
   }
 

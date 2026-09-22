@@ -1,19 +1,21 @@
 /* eslint-disable immutable/no-let */
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
-import { WebSocket } from 'ws'
-
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
+import { fetchEmbedding, resolveSimilarityWorkerUrl } from './utils/similarityWorker'
 
 /**
- * Cosine Similaritys
+ * Embeds a string with the NLP worker's sentence-transformer model.
+ *
+ * The vector this emits is only meaningful next to another vector from the same
+ * model, so it exists to feed `models/cosine-similarity`. What that pair
+ * measures is relatedness, not correctness — see `text/semantic-equivalence`
+ * for the decision that needs more than one number.
  */
 export class SentenceTransformer extends LGraphNode {
   env: Record<string, unknown>
   constructor() {
     super()
-    // https://platform.openai.com/docs/api-reference/chat/create
-
     this.addIn('string')
 
     this.addOut('[number]')
@@ -37,34 +39,12 @@ export class SentenceTransformer extends LGraphNode {
 
   //name of the function to call when executing
   async onExecute() {
-    // TODO: sanity check input
-
-    // fetch from server
-    console.log(this.env.SIMILARITY_WORKER_URL)
-    const url =
-      (this.env.SIMILARITY_WORKER_URL ?? 'http://193.174.195.36:8002') +
-      '/sentence_embedding'
-    console.log('URL: ', url)
-
-    const response_one = await fetch(url, {
-      method: 'POST',
-      signal: this.executionSignal,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        sentence: this.getInputData(0)
-      })
-    })
-    if (!response_one.ok) {
-      throw new Error('Network response was not ok')
-    }
-
-    // get response
-    const embedding_one = await response_one.json()
-
-    //send output to the output
-    this.setOutputData(0, embedding_one)
+    const embedding = await fetchEmbedding(
+      resolveSimilarityWorkerUrl(this.env),
+      String(this.getInputData(0) ?? ''),
+      this.executionSignal
+    )
+    this.setOutputData(0, embedding)
   }
 
   //register in the system

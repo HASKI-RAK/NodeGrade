@@ -10,6 +10,14 @@ import { GraphBuilder } from './graph-builder.js';
  * both sides with `models/sentence-transformer`, compare, scale to a percentage —
  * repeats in the Workshop 1 graph and the extended lab, now as one insertable unit.
  *
+ * The trap it does *not* remove: this score measures relatedness, not
+ * correctness. On the calibration set in
+ * `docs/semantic-equivalence-calibration.md`, "Yes" against "No" scores 89 and
+ * "Yes" against "Correct" scores 61 — so a threshold on this output marks the
+ * wrong learner correct. A pass/fail decision belongs in the
+ * `answer-equivalence` block, which stages rules, embeddings and entailment
+ * instead of thresholding a single number.
+ *
  * Fully deterministic: no language model, so no `model_ref` to configure and no
  * deployment default needed (SPEC-0016 does not apply).
  */
@@ -60,7 +68,7 @@ export const similarityScorerBlock: BundledTemplate = {
   kind: 'BLOCK',
   name: 'Similarity scorer',
   description:
-    'Compares a learner answer with a reference answer using embeddings and reports a 0–100 similarity score. Fully deterministic — no language model involved.',
+    'Compares a learner answer with a reference answer using embeddings and reports a 0–100 similarity score. Fully deterministic — no language model involved.\n\nThe score measures relatedness, not correctness: "Yes" against "No" scores 89. Use it to show how close two texts are, and use the Answer equivalence block when the workflow has to decide whether an answer counts.',
   category: 'Validation',
   tags: ['similarity', 'embedding', 'score', 'deterministic'],
   content,

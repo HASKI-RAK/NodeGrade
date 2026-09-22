@@ -1,5 +1,6 @@
 import type { BundledTemplate } from './bundled-template.js';
 import { answerClassifierBlock } from './answer-classifier-block.js';
+import { answerEquivalenceBlock } from './answer-equivalence-block.js';
 import { demoWorkflowTemplate } from './demo-workflow.js';
 import { extendedAssessmentLabTemplate } from './extended-assessment-lab.js';
 import { feedbackGeneratorBlock } from './feedback-generator-block.js';
@@ -29,6 +30,7 @@ export const BUNDLED_TEMPLATES: BundledTemplate[] = [
   rubricScorerBlock,
   answerClassifierBlock,
   similarityScorerBlock,
+  answerEquivalenceBlock,
   keywordCoverageBlock,
   scoreBlenderBlock,
   validationReviewBlock,

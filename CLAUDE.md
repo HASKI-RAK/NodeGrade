@@ -36,6 +36,7 @@ UI page, route, editor panel      → packages/frontend/src/pages/, src/componen
 Frontend server calls             → packages/frontend/src/api/http.ts
 Participant session / tokens      → packages/frontend/src/store/workspaceSession.ts, src/store/workspaceStore.ts
 Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionRegistry.ts)
+Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
 Graph execution (server)          → packages/backend/src/graphgateway/, src/core/Graph.ts
 Workflow persistence, ETags       → packages/backend/src/workflow/
@@ -96,6 +97,10 @@ a stale `dist` produces failures that look like code bugs.
 - Which models a participant may pick and run is decided server-side by the provider's
   `ModelPolicy`, enforced in `ProviderRuntimeService` on both the catalog and execution.
   Filtering in the editor is presentation, never enforcement (ADR-0008).
+- Embedding similarity is evidence, never a verdict. A pass/fail decision uses
+  `text/semantic-equivalence` (rules, then a cosine floor, then entailment); a threshold
+  on `models/cosine-similarity` marks the wrong learner correct, because "Yes" and "No"
+  score 0.89 against each other (`docs/semantic-equivalence-calibration.md`).
 - Node types exist once, in `packages/lib`. Frontend and backend both import them from
   `@haski/ta-lib`; neither defines its own.
 - Backend is ESM: relative imports carry a `.js` extension even in TypeScript.

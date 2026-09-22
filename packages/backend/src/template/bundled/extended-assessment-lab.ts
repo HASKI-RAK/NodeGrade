@@ -101,8 +101,8 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
   category: 'Assessment laboratories',
   tags: ['assessment', 'llm', 'katalyst', 'validation', 'extended-palette'],
   content: {
-    last_node_id: 44,
-    last_link_id: 47,
+    last_node_id: 46,
+    last_link_id: 50,
     nodes: [
       node({
         id: 1,
@@ -130,7 +130,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
         type: 'input/sample-solution',
         pos: [40, 400],
         title: 'Reference solution',
-        outputs: [output('string', 'string', [5, 6])],
+        outputs: [output('string', 'string', [5, 6, 49])],
         properties: {
           value:
             'The Strategy pattern defines interchangeable algorithms behind a common interface. A context delegates work to its current strategy and can replace it at runtime. A route planner can switch between car and bicycle routing strategies. This flexibility adds classes and indirection.',
@@ -246,7 +246,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
         pos: [750, 250],
         title: 'Route normalized answer',
         inputs: [input('*', '*', 13)],
-        outputs: [output('*', '*', [17, 18, 19])],
+        outputs: [output('*', '*', [17, 18, 19, 48])],
         properties: { value: '' },
       }),
       node({
@@ -592,6 +592,41 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
         properties: { value: '' },
         size: [240, 80],
       }),
+      node({
+        id: 45,
+        type: 'text/semantic-equivalence',
+        pos: [430, 1250],
+        title: 'Answer equivalence',
+        inputs: [
+          input('answer', 'string', 48),
+          input('expected answer', 'string', 49),
+        ],
+        outputs: [
+          output('equivalent', 'boolean'),
+          output('similarity', 'number'),
+          output('verdict', 'string', [50]),
+        ],
+        properties: {
+          lowThreshold: 0.6,
+          highThreshold: 0.92,
+          useEntailment: true,
+          checkNumbers: true,
+          checkPolarity: true,
+          similarity: 0,
+          verdict: '',
+        },
+        widgetsValues: [0.6, 0.92, true, true, true],
+        size: [340, 200],
+      }),
+      node({
+        id: 46,
+        type: 'output/output',
+        pos: [860, 1250],
+        title: 'Equivalence verdict output',
+        inputs: [input('*', '*', 50)],
+        properties: { label: 'Equivalence verdict', type: 'text', value: '' },
+        widgetsValues: ['Equivalence verdict', 'text'],
+      }),
     ],
     links: [
       [1, 1, 0, 25, 0, 'string'],
@@ -639,6 +674,9 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
       [45, 37, 0, 42, 0, 'number'],
       [46, 16, 0, 40, 0, 'string'],
       [47, 23, 0, 41, 0, 'number'],
+      [48, 12, 0, 45, 0, '*'],
+      [49, 3, 0, 45, 1, 'string'],
+      [50, 45, 2, 46, 0, 'string'],
     ],
     groups: [
       {
@@ -649,7 +687,7 @@ export const extendedAssessmentLabTemplate: BundledTemplate = {
       },
       {
         title: 'Deterministic validation',
-        bounding: [400, 210, 1580, 1110],
+        bounding: [400, 210, 1580, 1300],
         color: '#6f621f',
         font_size: 24,
       },

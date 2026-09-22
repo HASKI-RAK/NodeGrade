@@ -21,6 +21,7 @@ import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
+import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
 import { SentenceTransformer } from './SentenceTransformer'
 import { StringArrayToString } from './StringArrayToString'
 import { StringsToArray } from './StringToArray'
@@ -53,6 +54,7 @@ export {
   PromptMessage,
   QuestionNode,
   Route,
+  SemanticEquivalenceNode,
   SentenceTransformer,
   SampleSolutionNode,
   Textfield,
@@ -92,6 +94,34 @@ export {
   GRID_TILE_SIZE
 } from './litegraph-extensions/canvasTheme'
 export * from './NodeDefinition'
+export {
+  detectPolarity,
+  extractNumbers,
+  hardCheck,
+  hasAmbiguousNumber,
+  normalizeAnswer,
+  splitIntoSpans,
+  type HardCheck,
+  type HardCheckOptions,
+  type HardCheckReason,
+  type Polarity
+} from './utils/semanticEquivalence'
+export {
+  cosineSimilarity,
+  FALLBACK_SIMILARITY_WORKER_URL,
+  fetchEmbedding,
+  fetchEntailment,
+  fetchSimilarities,
+  resolveSimilarityWorkerUrl,
+  type EntailmentLabel,
+  type EntailmentScores
+} from './utils/similarityWorker'
+export {
+  DEFAULT_HIGH_THRESHOLD,
+  DEFAULT_LOW_THRESHOLD,
+  type EquivalenceReason
+} from './SemanticEquivalenceNode'
+export { DEFAULT_KEYWORD_THRESHOLD } from './KeywordCheckNode'
 export {
   compactNodeWidgets,
   getDefinedNodeConstructors,
