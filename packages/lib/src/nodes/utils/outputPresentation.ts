@@ -92,30 +92,80 @@ export type ParsedReport = {
   prose: string[]
 }
 
-const KEY_LINE = /^([A-Z][A-Z0-9 _/-]{0,40}?):\s*(.*)$/
+/**
+ * Keys the bundled prompts use. A line whose key is one of these counts even when a
+ * model writes it in title case; any other key must be upper-case, which is what
+ * keeps "Note: …" prose out of the table.
+ */
+const KNOWN_KEYS = new Set([
+  'JUDGMENT',
+  'EVIDENCE',
+  'REASON',
+  'REASONING',
+  'EXPLANATION',
+  'NEXT_STEP',
+  'NEXT_STEPS',
+  'CATEGORY',
+  'REVIEW',
+  'RECOMMENDATION',
+  'CRITERION',
+  'GAP',
+  'HINT',
+  'SUGGESTION',
+  'REVISION',
+  'TIP',
+  'SCORE',
+  'POINTS',
+  'FEEDBACK',
+  'VERDICT',
+  'DECISION',
+  'RESULT',
+  'STATUS',
+  'GRADE'
+])
+
+/**
+ * A `KEY: value` line as models actually print it: optional list marker or
+ * heading hashes, optional markdown emphasis around the key, an ASCII or
+ * full-width colon, then the value.
+ */
+const KEY_LINE =
+  /^(?:[-*+>#]+\s*|\d+[.)]\s+)?[*_`]*([A-Za-z][A-Za-z0-9 _/-]{0,40}?)[*_`]*\s*[:：]\s*(.*)$/
 const NUMBER_LINE = /^-?\d+(?:[.,]\d+)?$/
+const FENCE_LINE = /^`{3,}/
+
+/** Strips markdown emphasis and backticks wrapped around a value. */
+const unwrapMarkup = (value: string): string =>
+  value.replace(/^[*_`\s]+/, '').replace(/[*_`\s]+$/, '')
+
+const isReportKey = (key: string): boolean =>
+  key === key.toUpperCase() || KNOWN_KEYS.has(toneKey(key))
 
 /**
  * Splits a model reply written as `KEY: value` lines into entries. A line without
  * a key continues the entry before it, so a two-line reason stays one reason; a
- * leading line holding only a number is the awarded points. Keys are upper-case
- * by the prompt contract, which is what keeps "Note: …" prose out of the table.
+ * leading line holding only a number is the awarded points. Code fences are
+ * dropped, and emphasis around keys or values is ignored, because a model asked
+ * for `JUDGMENT: CORRECT` will happily print `**JUDGMENT:** CORRECT` instead.
  */
 export const parseReport = (text: unknown): ParsedReport => {
   const lines = String(text ?? '')
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    .filter((line) => line.length > 0 && !FENCE_LINE.test(line))
   const report: ParsedReport = { entries: [], prose: [] }
-  const first = lines[0]
+  const first = lines[0] === undefined ? undefined : unwrapMarkup(lines[0])
   if (first !== undefined && NUMBER_LINE.test(first)) {
     report.points = Number(first.replace(',', '.'))
     lines.shift()
   }
   lines.forEach((line) => {
     const match = KEY_LINE.exec(line)
-    if (match) {
-      report.entries.push({ key: match[1].trim(), value: match[2].trim() })
+    if (match && isReportKey(match[1].trim())) {
+      report.entries.push({
+        key: match[1].trim(),
+        value: unwrapMarkup(match[2])
+      })
       return
     }
     const last = report.entries[report.entries.length - 1]

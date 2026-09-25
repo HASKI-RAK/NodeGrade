@@ -79,6 +79,27 @@ describe('parseReport / reportHeadline', () => {
     ]);
   });
 
+  it('reads keys a model wrapped in markdown, listed or wrote in title case', () => {
+    const reply = [
+      '```',
+      '**JUDGMENT:** INCOMPLETE',
+      '- **Evidence**: "because the earth rotates"',
+      '1. Reason: The answer supports that Earth turns.',
+      '### NEXT STEP： *What happens to the far side?*',
+      '```',
+    ].join('\n');
+    expect(parseReport(reply).entries).toEqual([
+      { key: 'JUDGMENT', value: 'INCOMPLETE' },
+      { key: 'Evidence', value: '"because the earth rotates"' },
+      { key: 'Reason', value: 'The answer supports that Earth turns.' },
+      { key: 'NEXT STEP', value: 'What happens to the far side?' },
+    ]);
+    expect(reportHeadline(parseReport(reply), 'JUDGMENT')?.value).toBe(
+      'INCOMPLETE',
+    );
+    expect(parseReport('**2**\nCRITERION: Rain').points).toBe(2);
+  });
+
   it('keeps text without keys as prose and treats lower-case colons as prose', () => {
     const report = parseReport('Well done.\nNote: keep going.');
     expect(report.entries).toEqual([]);
