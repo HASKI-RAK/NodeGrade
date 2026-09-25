@@ -100,4 +100,15 @@ describe('mixed input glyph', () => {
     expect(drawNode).toHaveBeenCalledOnce()
     expect(context.arc).not.toHaveBeenCalled()
   })
+
+  it('keeps the mixed-input legend visible below 0.6 zoom', () => {
+    const { canvas, context, node } = fixture()
+    canvas.ds.scale = 0.5
+    installMixedInputGlyph(canvas)
+
+    canvas.drawNode(node, context)
+
+    expect(context.fillText).toHaveBeenCalledWith('message', 10, 35)
+    expect(context.fillText).toHaveBeenCalledWith('string', 72, 35)
+  })
 })
