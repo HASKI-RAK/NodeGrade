@@ -48,6 +48,7 @@ Templates, bundled content        → packages/backend/src/template/
 Workshops and join codes          → packages/backend/src/workshop/
 Workshop preflight / readiness    → packages/backend/src/workshop/workshop-readiness.service.ts
 Run records, submission history   → packages/backend/src/run/, packages/lib/src/nodes/ReviewFlagNode.ts
+Result cards, output display types→ packages/lib/src/nodes/OutputNode.ts, src/nodes/utils/outputPresentation.ts, packages/frontend/src/components/ResultCard.tsx
 Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/

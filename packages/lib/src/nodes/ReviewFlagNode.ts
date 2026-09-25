@@ -1,7 +1,7 @@
 /* eslint-disable immutable/no-let */
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
-import type { ReviewVerdict } from '../events'
+import type { OutputAudience, ReviewVerdict } from '../events'
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
 
 /** Marker the bundled review prompts print when a human should look (SPEC-0020/FR-001). */
@@ -63,6 +63,14 @@ export class ReviewFlagNode extends LGraphNode {
     label: string
     flagPattern: string
     reasonPrefix: string
+    /**
+     * Drop the reason on a clear run. A prompt whose REASON line justifies a
+     * judgment rather than a flag reads oddly under "No issue found".
+     */
+    reasonOnlyWhenFlagged: boolean
+    /** `educator` keeps the tutor cue out of the student view. */
+    audience: OutputAudience
+    section: string
     value: string
   }
 
@@ -75,6 +83,9 @@ export class ReviewFlagNode extends LGraphNode {
       label: 'Needs a tutor?',
       flagPattern: DEFAULT_FLAG_PATTERN,
       reasonPrefix: DEFAULT_REASON_PREFIX,
+      reasonOnlyWhenFlagged: false,
+      audience: 'everyone',
+      section: '',
       value: ''
     }
     this.addWidget(
@@ -121,7 +132,9 @@ export class ReviewFlagNode extends LGraphNode {
       this.properties
     )
     const verdict: ReviewVerdict = flagged ? 'flagged' : 'clear'
-    this.properties.value = reason
+    const shownReason =
+      !flagged && this.properties.reasonOnlyWhenFlagged ? '' : reason
+    this.properties.value = shownReason
     this.setOutputData(0, flagged)
     this.emitEventCallback?.({
       eventName: 'outputSet',
@@ -130,7 +143,9 @@ export class ReviewFlagNode extends LGraphNode {
         type: 'review',
         verdict,
         label: this.properties.label,
-        value: reason
+        value: shownReason,
+        ...(this.properties.audience === 'educator' ? { audience: 'educator' } : {}),
+        ...(this.properties.section ? { section: this.properties.section } : {})
       }
     })
   }

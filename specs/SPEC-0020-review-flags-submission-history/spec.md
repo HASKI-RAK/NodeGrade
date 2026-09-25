@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-22
-updated: 2026-09-22
+updated: 2026-09-25
 depends_on:
   - SPEC-0004
   - SPEC-0006
@@ -103,15 +103,15 @@ Independent value: the inbox is a record, not a session artefact.
 
 ### FR-001 — Review flag node
 
-The shared node library SHALL provide a node type `output/review-flag`, listed in the Assessment category, with one input accepting a string or a boolean, one boolean output, and the properties `label`, `flagPattern` (default `EDUCATOR_REVIEW`) and `reasonPrefix` (default `REASON:`). WHEN the node executes with a boolean input, the boolean SHALL be the verdict and the reason SHALL be empty. WHEN it executes with text, the run SHALL be flagged if the text contains any comma-separated marker from `flagPattern`, compared case-insensitively, and the reason SHALL be the first line beginning with `reasonPrefix` without that prefix, or the whole trimmed text when no such line exists.
+The shared node library SHALL provide a node type `output/review-flag`, listed in the Assessment category, with one input accepting a string or a boolean, one boolean output, and the properties `label`, `flagPattern` (default `EDUCATOR_REVIEW`), `reasonPrefix` (default `REASON:`), `reasonOnlyWhenFlagged` (default false), `audience` (default `everyone`) and `section` (default empty). WHEN the node executes with a boolean input, the boolean SHALL be the verdict and the reason SHALL be empty. WHEN it executes with text, the run SHALL be flagged if the text contains any comma-separated marker from `flagPattern`, compared case-insensitively, and the reason SHALL be the first line beginning with `reasonPrefix` without that prefix, or the whole trimmed text when no such line exists. WHILE `reasonOnlyWhenFlagged` is on, a clear run SHALL emit an empty reason.
 
 ### FR-002 — Review output and its card
 
-WHEN a review flag node executes, the system SHALL emit an output of type `review` carrying the node's label, a verdict of `flagged` or `clear`, and the reason as its value, over the same event the other outputs use. The preview SHALL render a `review` output on its own card: a flagged one with warning styling and a "Needs review" chip, a clear one with a "No issue found" chip, the reason as the body, and a caption stating that it is a recommendation, not an approval. A flagged run SHALL NOT withhold or alter any other output.
+WHEN a review flag node executes, the system SHALL emit an output of type `review` carrying the node's label, a verdict of `flagged` or `clear`, the reason as its value, and the node's audience and section, over the same event the other outputs use. The preview SHALL render a `review` output on its own card: a flagged one with warning styling and a "Needs review" chip, a clear one with a "No issue found" chip, the reason as the body when there is one, and a caption stating that it is a recommendation, not an approval. An educator-only review card follows SPEC-0007/FR-011: shown with a chip to educators, hidden from students. A flagged run SHALL NOT withhold or alter any other output.
 
 ### FR-003 — Bundled graphs carry the flag
 
-Each of the three bundled workshop templates and the validation-review block SHALL contain exactly one review flag node fed by a language-model node. The words-versus-understanding template SHALL flag on `JUDGMENT: UNCLEAR`; the water-cycle template SHALL gain a review stage that checks the criterion reports and the draft feedback against the answer and prints the same `RECOMMENDATION:` / `REASON:` contract the pizza template uses.
+Each of the three bundled workshop templates and the validation-review block SHALL contain exactly one review flag node fed by a language-model node. The words-versus-understanding template SHALL flag on `JUDGMENT: UNCLEAR` and show its reason only when flagged, because that reason justifies the judgment, not the flag; the water-cycle template SHALL gain a review stage that checks the criterion reports and the draft feedback against the answer and prints the same `RECOMMENDATION:` / `REASON:` contract the pizza template uses. In all three workshop templates the flag is the only card the review stage produces, and it is educator-only.
 
 ### FR-004 — A run becomes a record
 
@@ -365,3 +365,4 @@ Then the list has one more row
 | 2026-09-22 | Initial specification created (draft). FR-001 to FR-003 land with the review flag node.      |
 | 2026-09-22 | FR-004 to FR-008, NFR-001 and NFR-002 implemented: `Run` model and migration, `packages/backend/src/run/`, record written by the run handler before the terminal event (ADR-0009). |
 | 2026-09-22 | FR-009 to FR-012 implemented: Submissions tab in the preview rail (`SubmissionsView`, `useSubmissions`), mark reviewed / reopen, run again; browser check `e2e/submissions.spec.ts`. Status: implemented. |
+| 2026-09-25 | FR-001 to FR-003 extended: the flag node gains `reasonOnlyWhenFlagged`, `audience` and `section`; the review output carries them; workshop templates make the flag educator-only and drop the duplicate "Review recommendation" text card (SPEC-0007/FR-011). |

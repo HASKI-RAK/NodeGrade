@@ -43,6 +43,21 @@ const ANSWER_LABEL =
 const REPORTS_LABEL = '\n\nCRITERION REPORTS (one per rubric criterion):\n';
 const DRAFT_LABEL = '\n\nDRAFT FEEDBACK:\n';
 
+/** Result headings: the rubric first, the numbers, then the feedback and the tutor cue. */
+const SECTION_CRITERIA = 'Rubric criteria';
+const SECTION_SCORE = 'Score';
+const SECTION_FEEDBACK = 'Feedback';
+const SECTION_REVIEW = 'Tutor review';
+
+/** Points per criterion; also the top of each criterion card's points chip. */
+const POINTS_PER_CRITERION = 2;
+
+/** Shown under the percentage card so the conversion from points is not a mystery. */
+const SCORE_NOTE = [
+  'Total points divided by the maximum points and shown as a percentage. The pass',
+  'mark is 60 percent. Change "Maximum points" when you change the weighting.',
+].join(' ');
+
 const GRADER_PREAMBLE = [
   'Assess only the criterion defined below in the STUDENT ANSWER.',
   'Use the reference answer to interpret the criterion, not as evidence of what the',
@@ -244,7 +259,12 @@ const build = () => {
       [2210, y],
       grader,
     );
-    g.output(`Criterion report: ${criterion.title}`, [2210, y + 120], grader);
+    // The grader's reply is a `report`: the first-line integer becomes the points
+    // chip, EVIDENCE the quotation and GAP the callout (SPEC-0007/FR-004).
+    g.output(`${criterion.title}`, [2210, y + 120], grader, 0, 'report', {
+      max: POINTS_PER_CRITERION,
+      section: SECTION_CRITERIA,
+    });
     reports.push(grader);
     points.push(awarded);
   });
@@ -276,7 +296,13 @@ const build = () => {
     collection,
   );
   const total = g.math('Total points', [3280, 1260], '+', sum1, sum2);
-  g.output('Proposed points / 8', [3780, 1260], total);
+  // Eight rubric points on a scale of eight: a score card with the rubric's own
+  // maximum and no pass mark, so the bar reads in points and awards no chip.
+  g.output('Proposed points', [3780, 1260], total, 0, 'score', {
+    max: 8,
+    passMark: 0,
+    section: SECTION_SCORE,
+  });
   g.group(
     'Add the scores without another model',
     [2740, 820, 1530, 930],
@@ -306,7 +332,16 @@ const build = () => {
     percentScale,
   );
   const rounded = g.precision('Rounded score', [5390, 1260], percent, 1);
-  g.output('Score', [5730, 1260], rounded, 0, 'score');
+  const scoreNote = g.textfield(
+    'What the score shows',
+    [5390, 1400],
+    SCORE_NOTE,
+    [340, 110],
+  );
+  g.output('Score', [5730, 1260], rounded, 0, 'score', {
+    detail: { source: scoreNote },
+    section: SECTION_SCORE,
+  });
   g.group('Show the points as a score', [4350, 820, 1830, 930], '#6f621f');
 
   // Formative feedback from the criterion reports ---------------------------------------
@@ -330,7 +365,9 @@ const build = () => {
     JOIN_ROW_HEIGHT,
   );
   const feedback = g.llmStage('Feedback', [1740, feedbackTop], feedbackPrompt);
-  g.output('What to improve next', [2600, feedbackTop], feedback);
+  g.output('What to improve next', [2600, feedbackTop], feedback, 0, 'text', {
+    section: SECTION_FEEDBACK,
+  });
   g.group(
     'Feedback from the missing criterion',
     [500, 2150, 2550, 500],
@@ -361,8 +398,12 @@ const build = () => {
     JOIN_ROW_HEIGHT,
   );
   const review = g.llmStage('Review', [1740, reviewTop], reviewPrompt);
-  g.output('Review recommendation', [2600, reviewTop], review);
-  g.reviewFlag('Needs a tutor?', [2600, reviewTop + 120], review);
+  // The flag card carries the reviewer's REASON line, so a separate text card would
+  // say the same thing twice. Tutors see it; the student view does not.
+  g.reviewFlag('Needs a tutor?', [2600, reviewTop], review, {
+    audience: 'educator',
+    section: SECTION_REVIEW,
+  });
   g.group(
     'Review (recommendation, not approval)',
     [500, 2730, 2550, 950],
@@ -377,7 +418,7 @@ export const workshopSameScoreDifferentGapsTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 2 · The water cycle: the same score can mean different learning needs',
   description:
-    'The water cycle — the same score can mean different learning needs. Rubric-based scoring of a water-cycle description against four rubric criteria (evaporation, condensation, rain, collection), 0–2 points each.\n\nMethods: (1) One LLM grader per criterion returning points on the first line plus evidence and gap; (2) Deterministic point aggregation — extract-number plus math nodes sum the four awards to a total / 8, the model never adds; (3) Formative feedback from the criterion reports, not the total, so equal scores get different next steps; (4) A review stage that checks the reports and the draft against the answer and flags the run for a tutor when something does not hold; (5) A score card for the learner — total ÷ maximum × 100, shown as a percentage with the pass mark at 60 — next to the raw points, so you see both the rubric’s unit and the grade a student would get.\n\nUse the live weighting activity (double cloud formation with a ×2 math node, then raise Maximum points to 10) to see how the total changes while the feedback still follows the missing stage.',
+    'The water cycle — the same score can mean different learning needs. Rubric-based scoring of a water-cycle description against four rubric criteria (evaporation, condensation, rain, collection), 0–2 points each.\n\nMethods: (1) One LLM grader per criterion returning points on the first line plus evidence and gap, shown as a report card per criterion with a points chip, the evidence as a quotation and the gap as a callout; (2) Deterministic point aggregation — extract-number plus math nodes sum the four awards to a total out of 8, the model never adds; (3) Formative feedback from the criterion reports, not the total, so equal scores get different next steps; (4) A review stage that checks the reports and the draft against the answer and flags the run for a tutor when something does not hold — an educator-only card, hidden in the student view; (5) Two score cards for the learner — the raw points out of 8 without a pass mark, and total ÷ maximum × 100 as a percentage with the pass mark at 60 — so you see both the rubric’s unit and the grade a student would get.\n\nUse the live weighting activity (double cloud formation with a ×2 math node, then raise Maximum points to 10) to see how the total changes while the feedback still follows the missing stage.',
   category: 'Workshop',
   tags: ['tutorial', 'workshop', 'rubric', 'scoring', 'feedback', 'katalyst'],
   content: build(),

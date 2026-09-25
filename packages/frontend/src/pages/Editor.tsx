@@ -686,6 +686,7 @@ export const Editor = () => {
               onSelectTraceNode={selectTraceNode}
               onSelectOutputNode={student ? undefined : selectTraceNode}
               submissions={student ? undefined : submissionsProps}
+              viewer={student ? 'student' : 'educator'}
             />
           ) : (
             <NodeInspector

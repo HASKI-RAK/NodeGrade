@@ -123,8 +123,27 @@ export {
 export {
   DEFAULT_HIGH_THRESHOLD,
   DEFAULT_LOW_THRESHOLD,
+  explainEquivalence,
   type EquivalenceReason
 } from './SemanticEquivalenceNode'
+export {
+  DEFAULT_PASS_MARK,
+  OUTPUT_AUDIENCES,
+  OUTPUT_TYPES,
+  type OutputNodeProperties
+} from './OutputNode'
+export {
+  DEFAULT_TONE_MAP,
+  isChecklist,
+  OUTPUT_TONES,
+  parseReport,
+  parseToneMap,
+  reportHeadline,
+  toneFor,
+  toneKey,
+  type ParsedReport,
+  type ReportEntry
+} from './utils/outputPresentation'
 export { DEFAULT_KEYWORD_THRESHOLD } from './KeywordCheckNode'
 export {
   DEFAULT_FLAG_PATTERN,

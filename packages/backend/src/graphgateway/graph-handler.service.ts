@@ -10,6 +10,7 @@ import {
   ImageNode,
   LLMNode,
   OutputNode,
+  type OutputPresentation,
   QuestionNode,
 } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
@@ -128,12 +129,21 @@ export class GraphHandlerService {
 
       node.emitEventCallback = (event) => {
         if (event.eventName !== 'outputSet') return;
-        const payload = event.payload as {
+        const payload = event.payload as OutputPresentation & {
           uniqueId: string;
           type: string;
           label: string;
           value: unknown;
           verdict?: 'flagged' | 'clear';
+        };
+        const presentation: OutputPresentation = {
+          detail: payload.detail,
+          section: payload.section,
+          audience: payload.audience,
+          toneMap: payload.toneMap,
+          statusKey: payload.statusKey,
+          max: payload.max,
+          passMark: payload.passMark,
         };
         const output = sanitizeTraceOutputs(
           [
@@ -162,6 +172,7 @@ export class GraphHandlerService {
           label: payload.label,
           value: output.value,
           verdict: payload.verdict,
+          ...presentation,
           wrapperId,
           sourceId,
           truncated: output.truncated,
@@ -613,7 +624,11 @@ export class GraphHandlerService {
       // Textual feedback of the first type text output:
       const feedback = lgraph
         .findNodesByClass<OutputNode>(OutputNode)
-        .filter((node) => node.properties.type === 'text')
+        .filter(
+          (node) =>
+            node.properties.type === 'text' ||
+            node.properties.type === 'report',
+        )
         .map((node) => node.properties.value)[0] as string;
       this.logger.debug(`Feedback: ${feedback}`);
       // Send completed xAPI statement after graph execution

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { OutputPresentation } from '@haski/ta-lib';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma.service.js';
 
@@ -24,7 +25,7 @@ export type RunFilter = (typeof RUN_FILTERS)[number];
 export type RunOutcome = 'COMPLETED' | 'FAILED';
 
 /** One output as the run emitted it, minus the run correlation. */
-export type RecordedOutput = {
+export type RecordedOutput = OutputPresentation & {
   uniqueId: string;
   type: string;
   label: string;
