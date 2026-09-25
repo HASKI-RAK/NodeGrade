@@ -330,7 +330,13 @@ export const ResultCard = ({
             icon={toneIcon(tone)}
             color={chipColor(tone)}
             label={label}
-            sx={{ fontWeight: 600, fontSize: '1rem', height: 36, px: 0.5 }}
+            sx={{
+              fontWeight: 600,
+              fontSize: '1rem',
+              height: 36,
+              px: 0.5,
+              alignSelf: 'flex-start'
+            }}
           />
         )
       }
