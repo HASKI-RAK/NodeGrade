@@ -24,6 +24,7 @@ Specifications                 specs/SPEC-00xx-*/spec.md
 Architecture decisions         docs/adr/
 Debug stack (Docker Compose)   tools/debug/, docker-compose.debug.yml
 Real stack (Docker Compose)    tools/stack.mjs, docker-compose.yml
+Production stack (Portainer)   docker-compose.prod.yml, stack.env.example, .github/workflows/deploy.yml
 Browser e2e                    e2e/
 ```
 
@@ -53,6 +54,7 @@ Providers, models, credentials    → packages/backend/src/provider/
 LTI launch and registration       → packages/backend/src/lti/, packages/lti/
 Specification consistency rules   → tools/spec-lint/
 Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
+Deployment, images, Portainer     → docker-compose.prod.yml, .github/workflows/deploy.yml, README "Deploying with Portainer"
 Schema change                     → packages/backend/prisma/schema.prisma + migrations/
 Content schema backfill           → packages/backend/src/migration/
 ```

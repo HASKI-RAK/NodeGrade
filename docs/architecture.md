@@ -202,6 +202,17 @@ frontend's public origin. The production runtime config therefore uses the relat
 `/api` URL. `tools/stack.mjs` (`yarn dev:up`) drives that file, so a developer runs the
 deployed topology with the real models by the same verbs as the debug stack.
 
+`docker-compose.prod.yml` is that topology as deployed: the same four services, but the
+backend, frontend and worker come as prebuilt images from GHCR
+(`.github/workflows/deploy.yml` builds and pushes them on every push to `main`, then
+calls the Portainer stack webhook), Traefik terminates TLS in front of the frontend's
+nginx, and nothing else publishes a port. Configuration arrives from the Portainer stack
+environment twice over: `${VAR}` substitution for what the compose file composes
+(hostname, image tag, Traefik names, database URL) and a Portainer-written `stack.env`
+that the backend loads whole, so a new backend variable needs no compose change. With
+two proxies in the path the backend runs with `TRUST_PROXY=2` so throttles still see the
+client address.
+
 `docker-compose.debug.yml` plus `tools/debug/stack.mjs` reproduce the whole stack
 deterministically on the 15xxx/18000 port range with a fake model worker, a seeded demo
 graph, a published workshop code and an exposed Node inspector; Playwright drives it. See

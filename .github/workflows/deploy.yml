@@ -1,0 +1,115 @@
+name: Deploy
+
+# Every push to `main` becomes a deployment: the three images that
+# docker-compose.prod.yml runs are built and pushed to GHCR, and then the
+# Portainer stack webhook is called so Portainer re-pulls the repository and
+# the images and redeploys. `main` only moves by an explicit merge from `dev`
+# behind the PR checks (AGENTS.md), so nothing here repeats them.
+#
+# One-time setup: README.md, "Deploying with Portainer".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A second push while a deploy runs queues behind it instead of cancelling it:
+# a build stopped halfway leaves `latest` pointing at images from two commits
+# until the next run, and the webhook would deploy exactly that mix.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Lower-cased in the job: GHCR rejects upper-case repository paths and
+  # `github.repository_owner` keeps the owner's spelling (HASKI-RAK).
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/nodegrade
+
+jobs:
+  build:
+    name: Build and push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: backend
+            context: .
+            dockerfile: packages/backend/Dockerfile
+          - image: frontend
+            context: .
+            dockerfile: packages/frontend/Dockerfile
+          - image: models
+            context: models
+            dockerfile: models/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image name
+        id: name
+        run: echo "image=${IMAGE_PREFIX,,}-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      # `latest` is what docker-compose.prod.yml pulls by default; the sha tag
+      # lets a stack pin or roll back to an exact build through
+      # NODEGRADE_IMAGE_TAG.
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          # The stack runs on an x86-64 Portainer host; an arm64 build of the
+          # torch image alone would take longer than the rest of the job.
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  deploy:
+    name: Trigger the Portainer redeploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Portainer answers 204 as soon as it has queued the redeploy; the pull
+      # and restart happen on the host afterwards, so a green job means "asked",
+      # not "running". The stack's log in Portainer shows the rest.
+      - name: Call the stack webhook
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$PORTAINER_WEBHOOK_URL" ]; then
+            echo "::warning::PORTAINER_WEBHOOK_URL is not set; images were pushed but no redeploy was triggered."
+            exit 0
+          fi
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST --retry 3 --retry-delay 5 "$PORTAINER_WEBHOOK_URL")
+          echo "Portainer answered HTTP $status"
+          case "$status" in
+            2*) ;;
+            *) echo "::error::The Portainer webhook did not accept the redeploy (HTTP $status)."; exit 1 ;;
+          esac
