@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-18
+updated: 2026-09-25
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -129,12 +129,51 @@ runtime input in the Test tab.
 ### FR-004 — Results display
 
 WHEN a test run completes,
-the system SHALL display the resulting score, classification, and feedback in the
-results area, each output on its own card titled by the output node's label.
+the system SHALL display every output in the results area, each on its own card titled
+by the output node's label and rendered according to the node's display type:
+
+- `text`: the value as prose; an empty value shows a placeholder, never a blank card.
+- `score`: the number on a bar against the node's scale maximum (default 100), shown as
+  `value / maximum` when the maximum is not 100, with a "Passed" chip at or above the
+  node's pass mark (default 60) and a "Not passed" chip below it; a pass mark of zero or
+  less shows no chip.
+- `classifications`: each label as a chip, coloured by the node's tone map.
+- `verdict`: one decision as a chip with an icon — a boolean as "Yes"/"No", a token such
+  as `CORRECT` in readable case — coloured by the tone map, and the card carries the
+  tone as an accent.
+- `report`: a model reply in `KEY: value` lines. The line named by the node's headline
+  key (or the first line) becomes a coloured headline chip, a leading bare number becomes
+  a points chip out of the scale maximum, `EVIDENCE` renders as a quotation, `REASON` as
+  the body, `NEXT STEP`/`GAP`/`HINT` as a callout, and other keys as labelled rows. Raw
+  `KEY:` prefixes never reach the reader; text without keys renders as prose.
+- `checklist`: one chip per item, ticked when met and crossed when not.
+- `measure`: the number on a bar against the scale maximum (default 1) with a caption
+  stating that it is evidence, not a grade, and never a pass chip.
+
+WHEN an output node's `detail` input carries text,
+the card SHALL show it as a secondary line under the body.
+
+WHEN output nodes carry a section heading,
+the results area SHALL group their cards under that heading, sections ordered by first
+appearance, cards without a section first.
 
 WHILE the preview is open in the editor (not the student view),
 each result card SHALL offer an action that selects and centers the node that produced
 the output on the canvas, including a node inside a block.
+
+### FR-011 — Educator-only cards and the student view
+
+An output node and a review flag node SHALL carry an audience of `everyone` (default) or
+`educator`, stored with the output so a recorded run renders as the live one did.
+
+WHILE the preview is open in the editor,
+an educator-only card SHALL be shown with an "Educator only" chip, and the results area
+SHALL offer a "View as student" switch that hides educator-only cards, the locate
+affordance and the chips, and states how many cards are hidden.
+
+WHILE the preview is open in the student view,
+educator-only cards SHALL NOT be rendered and no switch SHALL be offered. The
+Submissions inbox (SPEC-0020) is the educator's and shows every card.
 
 ### FR-005 — Trace tab
 
@@ -209,6 +248,44 @@ Given the WAIE workflow is open in the editor
 When the user enters a student answer and runs the assessment
 Then the results area shows a score, a classification, and feedback as separate cards
 And each card offers to locate its output node on the canvas
+```
+
+### AC-009 — Each display type has its own card
+
+Traces to: FR-004
+
+```gherkin
+Given a run emits a verdict output with the boolean false and a detail line
+When the results render
+Then the card shows a "No" chip and the detail line, never the word "false"
+And given a report output "JUDGMENT: INCOMPLETE / EVIDENCE: … / REASON: … / NEXT STEP: …" with headline key JUDGMENT
+Then the card shows an "Incomplete" chip, the evidence as a quotation, the reason as body and the next step as a callout, without any "KEY:" prefix
+And given a report output whose first line is "1" on a node with maximum 2
+Then the card shows a "1 / 2" chip
+And given a checklist output with one met and one unmet item
+Then the met item shows a tick and the unmet one a cross
+And given a measure output of 0.669
+Then the card shows the number, a bar and the caption "Evidence, not a grade." and no pass chip
+And given a score output of 6 on a node with maximum 8 and pass mark 0
+Then the card shows "6 / 8" and no pass chip
+And given a score output of 40 on a node with the default pass mark
+Then the card shows a "Not passed" chip
+And given a text output that is blank
+Then the card shows a placeholder instead of an empty body
+```
+
+### AC-010 — Educator-only cards and the student view
+
+Traces to: FR-011
+
+```gherkin
+Given a run with two educator-only cards and two cards for everyone
+When an educator looks at the results in the editor
+Then every card renders and the educator-only ones carry an "Educator only" chip
+When the educator switches "View as student" on
+Then only the two cards for everyone remain, without chips or locate buttons, and a line says two cards are hidden
+And given the same run in the student view
+Then only the two cards for everyone render and no switch is offered
 ```
 
 ### AC-003 — Question edited in inspector only
@@ -310,8 +387,9 @@ Then all preflight checks are displayed with pass/fail state
 
 ## Assumptions
 
-- The existing TaskView result rendering (text outputs, scores, classifications) can
-  be reused for the results area.
+- The result rendering lives in one card component (`ResultCard`) that the Test tab and
+  the Submissions inbox share; the parsing behind the `report` and tone-map rules lives
+  in the shared library so the node and the card agree.
 - The WAIE template references a model by provider id + model id (composite
   reference, SPEC-0010); the workshop preflight verifies that model is allowed and
   its provider reachable before participants start.
@@ -335,3 +413,4 @@ Then all preflight checks are displayed with pass/fail state
 | 2026-09-15 | Review revision 2: maximum answer length added as workflow configuration (FR-008a/FR-008b, AC-006a, US-004); preflight wording unified — provider/model health check explicit in FR-009; dependencies re-pointed from the SPEC-0009 epic to SPEC-0010 and SPEC-0012 (composite references and allowed models) in prose and frontmatter |
 | 2026-09-17 | Implemented: canonical WAIE template shipped, preview Test/Trace tabs in English with workflow-configured answer bounds, workshop preflight and facilitator readiness view |
 | 2026-09-18 | FR-004/AC-002 refined: each result on its own card; editor-only jump from a card to its output node (`outputSet` now carries editor `sourceId`/`wrapperId`) |
+| 2026-09-25 | FR-004 rewritten around display types: `verdict`, `report`, `checklist` and `measure` cards added, `score` gains a scale maximum and a pass mark, cards carry a detail line and section headings (AC-009). FR-011/AC-010 added: educator-only cards, the "View as student" switch and the student view (`outputSet` carries `OutputPresentation`). The three workshop templates use the new cards. |

@@ -53,6 +53,47 @@ export type EquivalenceReason =
   | 'empty-input'
 
 /**
+ * The verdict's reason as a sentence a learner can read. The reason code stays
+ * on its own port for facilitators and the trace; this is what a result card's
+ * detail line shows next to the yes or no.
+ */
+export const explainEquivalence = (
+  reason: EquivalenceReason,
+  equivalent: boolean
+): string => {
+  switch (reason) {
+    case 'exact':
+      return 'The answer matches the reference word for word.'
+    case 'number-match':
+      return 'The numbers in the answer match the reference.'
+    case 'number-mismatch':
+      return 'The answer states a different number than the reference.'
+    case 'polarity-match':
+      return 'The answer gives the same yes or no as the reference.'
+    case 'polarity-mismatch':
+      return 'The answer says the opposite of the reference: yes against no.'
+    case 'cosine-low':
+      return 'The answer is too far from the reference in meaning to say the same thing.'
+    case 'cosine-only':
+      return equivalent
+        ? 'The wording is near-identical to the reference. No entailment check was run.'
+        : 'The wording is not close enough to the reference. No entailment check was run.'
+    case 'nli-entailment':
+      return 'The entailment model confirmed that the answer and the reference imply each other.'
+    case 'nli-contradiction':
+      return 'The entailment model found that the answer contradicts the reference.'
+    case 'nli-neutral':
+      return equivalent
+        ? 'The entailment model could not decide, but the wording is near-identical to the reference.'
+        : 'The entailment model could not confirm that the answer says what the reference says.'
+    case 'nli-unavailable':
+      return 'No entailment model was available, so wording similarity alone decided.'
+    case 'empty-input':
+      return 'The answer or the reference was empty.'
+  }
+}
+
+/**
  * Thresholds calibrated on a labelled set of short-answer pairs (see
  * `docs/semantic-equivalence-calibration.md`). Both ends are editable per node,
  * because a task with a narrow answer space wants a narrower band than an open
@@ -86,6 +127,7 @@ export class SemanticEquivalenceNode extends LGraphNode {
     this.addOut('boolean', 'equivalent')
     this.addOut('number', 'similarity')
     this.addOut('string', 'verdict')
+    this.addOut('string', 'explanation')
     this.addWidget(
       'slider',
       'low threshold',
@@ -132,12 +174,19 @@ export class SemanticEquivalenceNode extends LGraphNode {
     return SemanticEquivalenceNode.path
   }
 
+  /** Graphs saved before the explanation output existed come back with three slots. */
+  onConfigure(serialized: unknown): void {
+    super.onConfigure(serialized)
+    if ((this.outputs?.length ?? 0) < 4) this.addOut('string', 'explanation')
+  }
+
   private publish(equivalent: boolean, similarity: number, reason: EquivalenceReason) {
     this.properties.similarity = similarity
     this.properties.verdict = reason
     this.setOutputData(0, equivalent)
     this.setOutputData(1, similarity)
     this.setOutputData(2, reason)
+    this.setOutputData(3, explainEquivalence(reason, equivalent))
     // The stage that decided is not an output anyone would wire, but it is the
     // only thing that explains a verdict, so the trace carries it as detail.
     this.executionDetails = [

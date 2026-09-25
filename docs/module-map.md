@@ -196,6 +196,11 @@ Responsibilities:
   flag (`nodes/ReviewFlagNode.ts`, `output/review-flag`) that turns a reviewer's
   recommendation into the structured `review` output the preview marks and the
   Submissions inbox counts (SPEC-0020)
+- the output card contract: `nodes/OutputNode.ts` picks a display type (`text`, `score`,
+  `classifications`, `verdict`, `report`, `checklist`, `measure`), an audience, a
+  section and a tone map, and `nodes/utils/outputPresentation.ts` holds the tone-map and
+  `KEY: value` report parsing the frontend `ResultCard` renders (SPEC-0007/FR-004,
+  FR-011)
 - node metadata used by palette and inspector (`nodes/NodeDefinition.ts`,
   `nodes/NodeDefinitionRegistry.ts`, `nodes/LGraphRegisterCustomNodes.ts`)
 - client/server event contracts and trace payloads (`events/ServerEvents.ts`)

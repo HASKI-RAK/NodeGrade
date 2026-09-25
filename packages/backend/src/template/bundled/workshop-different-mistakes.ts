@@ -38,6 +38,11 @@ const DIAGNOSIS_LABEL =
   '\n\nDIAGNOSIS (AI-generated; verify it against the student answer before relying on it):\n';
 const DRAFT_LABEL = '\n\nDRAFT FEEDBACK:\n';
 
+/** Result headings: what the model diagnosed, what the student gets, what a tutor sees. */
+const SECTION_DIAGNOSIS = 'Diagnosis';
+const SECTION_FEEDBACK = 'Feedback';
+const SECTION_REVIEW = 'Tutor review';
+
 const CLASSIFICATION_INSTRUCTIONS = [
   'Classify the student answer using the question and reference answer below.',
   'Assess the original answer, not vocabulary alone.',
@@ -235,8 +240,22 @@ const build = () => {
     categoryList,
     0,
     'classifications',
+    { section: SECTION_DIAGNOSIS },
   );
-  g.output('Diagnosis', [2230, classificationTop + 140], diagnosis);
+  // The full four-line diagnosis is the evidence an educator checks; students get the
+  // chip above and the feedback below, so this card is educator-only.
+  g.output(
+    'Diagnosis',
+    [2230, classificationTop + 140],
+    diagnosis,
+    0,
+    'report',
+    {
+      statusKey: 'CATEGORY',
+      audience: 'educator',
+      section: SECTION_DIAGNOSIS,
+    },
+  );
   g.group('Classification', [500, 730, 2880, 420], '#405775');
 
   // Educator-owned policy and shared blocks --------------------------------------------
@@ -280,7 +299,9 @@ const build = () => {
     JOIN_ROW_HEIGHT,
   );
   const feedback = g.llmStage('Feedback', [1370, feedbackTop], feedbackPrompt);
-  g.output('Draft student feedback', [2230, feedbackTop], feedback);
+  g.output('Draft student feedback', [2230, feedbackTop], feedback, 0, 'text', {
+    section: SECTION_FEEDBACK,
+  });
   g.group('Feedback drafting', [500, 1750, 2880, 400], '#5b3d6e');
 
   // Review -----------------------------------------------------------------------------
@@ -304,8 +325,12 @@ const build = () => {
     JOIN_ROW_HEIGHT,
   );
   const review = g.llmStage('Review', [1370, reviewTop], reviewPrompt);
-  g.output('Review recommendation', [2230, reviewTop], review);
-  g.reviewFlag('Needs a tutor?', [2230, reviewTop + 120], review);
+  // The flag card carries the reviewer's REASON line, so a separate text card would
+  // say the same thing twice. Tutors see it; the student view does not.
+  g.reviewFlag('Needs a tutor?', [2230, reviewTop], review, {
+    audience: 'educator',
+    section: SECTION_REVIEW,
+  });
   g.group(
     'Review (recommendation, not approval)',
     [500, 2230, 2880, 650],
@@ -320,7 +345,7 @@ export const workshopDifferentMistakesTemplate: BundledTemplate = {
   kind: 'WORKFLOW',
   name: 'Workshop 3 · Sharing a pizza: different mistakes need different help',
   description:
-    'Sharing a pizza — different mistakes need different help. Classifies an explanation of why one half is larger than one quarter, then follows a classify → feedback → review chain.\n\nMethods: (1) LLM classification into five answer types (CORRECT, INCOMPLETE, MISCONCEPTION, TOO_VAGUE_OR_IRRELEVANT, CONTRADICTORY) with evidence, the category shown as a chip next to the full diagnosis; (2) Educator-owned feedback policy — one response rule per answer type kept in its own text node; (3) LLM feedback draft that drafts feedback following the policy, plus a review stage with an LLM review recommending EDUCATOR_REVIEW or KEEP_AS_DRAFT.\n\nNothing here auto-releases: every output is a visible draft. Change only the policy (guiding question vs. direct explanation) and watch the diagnosis stay fixed while the feedback changes.',
+    'Sharing a pizza — different mistakes need different help. Classifies an explanation of why one half is larger than one quarter, then follows a classify → feedback → review chain.\n\nMethods: (1) LLM classification into five answer types (CORRECT, INCOMPLETE, MISCONCEPTION, TOO_VAGUE_OR_IRRELEVANT, CONTRADICTORY) with evidence, the category shown as a coloured chip and the full diagnosis as an educator-only report card; (2) Educator-owned feedback policy — one response rule per answer type kept in its own text node; (3) LLM feedback draft that drafts feedback following the policy, plus a review stage with an LLM review recommending EDUCATOR_REVIEW or KEEP_AS_DRAFT, shown as an educator-only tutor card.\n\nNothing here auto-releases: every output is a visible draft. Flip "View as student" above the results to see what a learner would get. Change only the policy (guiding question vs. direct explanation) and watch the diagnosis stay fixed while the feedback changes.',
   category: 'Workshop',
   tags: [
     'tutorial',

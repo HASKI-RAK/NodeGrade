@@ -19,6 +19,12 @@ paths:
   port types are restored by `LGraphNode.onConfigure`, so a node that overrides
   `onConfigure` must call `super.onConfigure(info)` or stored graphs load with the slot
   types they were saved with.
+- A port added to an existing node type is missing from graphs saved before it existed,
+  because LiteGraph restores the serialized slot arrays. Re-add it in `onConfigure` when
+  the array is short (see `OutputNode`, `KeywordCheckNode`, `SemanticEquivalenceNode`),
+  add it to the `NODE_SLOTS` table in the backend `graph-builder.ts`, and keep it optional
+  in the template spec's "feeds every consumer input" check if a template may leave it
+  unwired.
 - A node that wants trace detail beyond its output slots sets `executionDetails` during
   `onExecute`. It is transient, cleared by the runner, and sanitized like an output.
 - Property metadata belongs in the registry entry (`NodePropertyDefinition` controls), not

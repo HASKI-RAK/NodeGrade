@@ -9,7 +9,9 @@ import {
   Box,
   Button,
   FormControl,
+  FormControlLabel,
   Stack,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -62,41 +64,114 @@ export type SelectGraphNode = (
 
 type Output = ServerEventPayload['outputSet']
 
+/** Who is looking at the preview; decides which cards show (SPEC-0007/FR-011). */
+export type ResultsViewer = 'educator' | 'student'
+
+const MODEL_TEXT_TYPES = new Set<Output['type']>(['text', 'review', 'report'])
+
+/**
+ * Cards in emit order, grouped under their section headings. Cards without a section
+ * come first under no heading; a section keeps the position of its first card.
+ */
+const groupBySection = (outputs: Output[]): { section: string; outputs: Output[] }[] => {
+  const groups: { section: string; outputs: Output[] }[] = []
+  outputs.forEach((out) => {
+    const section = out.section?.trim() ?? ''
+    const existing = groups.find((group) => group.section === section)
+    if (existing) existing.outputs.push(out)
+    else if (section === '') groups.unshift({ section, outputs: [out] })
+    else groups.push({ section, outputs: [out] })
+  })
+  return groups
+}
+
 const Results = ({
   outputs,
   messages,
-  onSelectOutputNode
+  onSelectOutputNode,
+  viewer
 }: {
   outputs?: Record<string, Output>
   messages: PreviewMessages
   onSelectOutputNode?: SelectGraphNode
+  viewer: ResultsViewer
 }) => {
-  const values = Object.values(outputs ?? {})
-  const hasModelText = values.some((out) => out.type === 'text' || out.type === 'review')
+  const [viewAsStudent, setViewAsStudent] = useState(false)
+  const asStudent = viewer === 'student' || viewAsStudent
+  const all = Object.values(outputs ?? {})
+  const values = asStudent ? all.filter((out) => out.audience !== 'educator') : all
+  const hasModelText = values.some((out) => MODEL_TEXT_TYPES.has(out.type))
+  const hidden = all.length - values.length
   return (
     <Stack spacing={1.5} aria-label={messages.resultsHeading}>
-      <Typography variant="h6">{messages.resultsHeading}</Typography>
-      {values.length === 0 && (
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {messages.resultsHeading}
+        </Typography>
+        {viewer === 'educator' && all.length > 0 && (
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={viewAsStudent}
+                onChange={(_, checked) => setViewAsStudent(checked)}
+                inputProps={{ 'aria-label': messages.viewAsStudent }}
+              />
+            }
+            label={
+              <Typography variant="body2" color="text.secondary">
+                {messages.viewAsStudent}
+              </Typography>
+            }
+            sx={{ mr: 0 }}
+          />
+        )}
+      </Stack>
+      {all.length === 0 && (
         <Typography color="text.secondary">{messages.resultsEmpty}</Typography>
       )}
-      {values.map((out) => (
-        <ResultCard
-          key={out.uniqueId}
-          output={out}
-          messages={messages}
-          onLocate={
-            onSelectOutputNode &&
-            (() =>
-              onSelectOutputNode(Number(out.uniqueId), {
-                wrapperId: out.wrapperId ?? null,
-                sourceId: out.sourceId ?? null
-              }))
-          }
-        />
+      {all.length > 0 && values.length === 0 && (
+        <Typography color="text.secondary">{messages.studentViewEmpty}</Typography>
+      )}
+      {groupBySection(values).map((group) => (
+        <Stack key={group.section || '__none'} spacing={1.5}>
+          {group.section && (
+            <Typography
+              variant="overline"
+              component="h3"
+              color="text.secondary"
+              sx={{ lineHeight: 1.5, pt: 0.5 }}
+            >
+              {group.section}
+            </Typography>
+          )}
+          {group.outputs.map((out) => (
+            <ResultCard
+              key={out.uniqueId}
+              output={out}
+              messages={messages}
+              viewer={asStudent ? 'student' : 'educator'}
+              onLocate={
+                !asStudent && onSelectOutputNode
+                  ? () =>
+                      onSelectOutputNode(Number(out.uniqueId), {
+                        wrapperId: out.wrapperId ?? null,
+                        sourceId: out.sourceId ?? null
+                      })
+                  : undefined
+              }
+            />
+          ))}
+        </Stack>
       ))}
       {hasModelText && (
         <Typography variant="caption" color="text.secondary">
           {messages.aiDisclaimer}
+        </Typography>
+      )}
+      {viewAsStudent && hidden > 0 && (
+        <Typography variant="caption" color="text.secondary">
+          {messages.hiddenFromStudents(hidden)}
         </Typography>
       )}
     </Stack>
@@ -142,6 +217,11 @@ const TaskView = forwardRef<
      * students, who share a workspace and must not see each other's runs (FR-007).
      */
     submissions?: TaskViewSubmissions
+    /**
+     * `student` hides educator-only cards outright; `educator` shows them with a chip
+     * and offers a "View as student" switch (SPEC-0007/FR-011).
+     */
+    viewer?: ResultsViewer
   }
 >(
   (
@@ -162,7 +242,8 @@ const TaskView = forwardRef<
       onCancel = () => undefined,
       onSelectTraceNode = () => undefined,
       onSelectOutputNode,
-      submissions
+      submissions,
+      viewer = 'educator'
     },
     ref
   ) => {
@@ -347,6 +428,7 @@ const TaskView = forwardRef<
                   outputs={outputs}
                   messages={messages}
                   onSelectOutputNode={onSelectOutputNode}
+                  viewer={viewer}
                 />
               </Stack>
             </FormControl>

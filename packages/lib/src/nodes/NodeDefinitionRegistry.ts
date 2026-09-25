@@ -27,7 +27,7 @@ import {
   wrappedTextMinHeight
 } from './widgets/WrappedTextPreview'
 import { NumberNode } from './NumberNode'
-import { OutputNode } from './OutputNode'
+import { OUTPUT_AUDIENCES, OUTPUT_TYPES, OutputNode } from './OutputNode'
 import { Precision } from './Precision'
 import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
@@ -123,16 +123,41 @@ const entries: readonly Entry[] = [
   {
     node: OutputNode,
     category: 'Assessment',
-    description: 'Show workflow output to the learner.',
+    description:
+      'Show a result as a card. Wire a sentence to "detail" to explain the card.',
     properties: [
       text('label', 'Label', true),
       {
         key: 'type',
         label: 'Display',
-        control: { type: 'select', options: ['text', 'score', 'classifications'] },
+        control: { type: 'select', options: OUTPUT_TYPES },
         advanced: false,
         required: true
-      }
+      },
+      {
+        key: 'audience',
+        label: 'Shown to',
+        control: { type: 'select', options: OUTPUT_AUDIENCES },
+        advanced: false,
+        required: false
+      },
+      text('section', 'Section heading'),
+      {
+        key: 'statusKey',
+        label: 'Headline line (report)',
+        control: { type: 'text', placeholder: 'JUDGMENT' },
+        advanced: true,
+        required: false
+      },
+      {
+        key: 'toneMap',
+        label: 'Tone map (TOKEN=success|warning|error|info|neutral)',
+        control: { type: 'textarea', rows: 3 },
+        advanced: true,
+        required: false
+      },
+      number('max', 'Scale maximum (0 = default)', true),
+      number('passMark', 'Pass mark (0 = no pass chip)', true)
     ]
   },
   {
@@ -143,7 +168,16 @@ const entries: readonly Entry[] = [
     properties: [
       text('label', 'Label', true),
       text('flagPattern', 'Flag markers'),
-      text('reasonPrefix', 'Reason prefix')
+      text('reasonPrefix', 'Reason prefix'),
+      toggle('reasonOnlyWhenFlagged', 'Reason only when flagged'),
+      {
+        key: 'audience',
+        label: 'Shown to',
+        control: { type: 'select', options: OUTPUT_AUDIENCES },
+        advanced: false,
+        required: false
+      },
+      text('section', 'Section heading')
     ]
   },
   {

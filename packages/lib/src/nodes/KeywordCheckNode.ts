@@ -1,6 +1,7 @@
 /* eslint-disable immutable/no-let */
 /* eslint-disable immutable/no-mutation */
 /* eslint-disable immutable/no-this */
+import type { ChecklistItem } from '../events'
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
 import { normalizeAnswer, splitIntoSpans } from './utils/semanticEquivalence'
 import { fetchSimilarities, resolveSimilarityWorkerUrl } from './utils/similarityWorker'
@@ -15,7 +16,9 @@ export const DEFAULT_KEYWORD_THRESHOLD = 0.6
 /**
  * KeywordCheckNode
  * Inputs: keywords (comma-separated string), text (string)
- * Outputs: presentKeywords (comma-separated string), missingKeywords (comma-separated string)
+ * Outputs: presentKeywords (comma-separated string), missingKeywords (comma-separated string),
+ *          checklist (one `{ label, ok }` per keyword, in the given order — feeds a
+ *          `checklist` output card)
  * Properties: useSemantic (boolean toggle), threshold (similarity cutoff)
  */
 export class KeywordCheckNode extends LGraphNode {
@@ -31,6 +34,7 @@ export class KeywordCheckNode extends LGraphNode {
     this.addIn('string', 'text')
     this.addOut('string', 'present keywords')
     this.addOut('string', 'missing keywords')
+    this.addOut('*', 'checklist')
     this.addWidget('toggle', 'use semantic similarity', false, (v) => {
       this.properties.useSemantic = v
     })
@@ -59,6 +63,12 @@ export class KeywordCheckNode extends LGraphNode {
     return KeywordCheckNode.path
   }
 
+  /** Graphs saved before the checklist output existed come back with two slots. */
+  onConfigure(serialized: unknown): void {
+    super.onConfigure(serialized)
+    if ((this.outputs?.length ?? 0) < 3) this.addOut('*', 'checklist')
+  }
+
   /**
    * Both lists keep the order the keywords were given in. The semantic pass
    * settles them out of order — literal matches first, then whatever the worker
@@ -70,8 +80,13 @@ export class KeywordCheckNode extends LGraphNode {
       keywords.filter((keyword) => present.has(keyword) === wanted).join(', ')
     const found = inOrder(true)
     const absent = inOrder(false)
+    const checklist: ChecklistItem[] = keywords.map((keyword) => ({
+      label: keyword,
+      ok: present.has(keyword)
+    }))
     this.setOutputData(0, found)
     this.setOutputData(1, absent)
+    this.setOutputData(2, checklist)
     this.properties.presentKeywords = found
     this.properties.missingKeywords = absent
   }
