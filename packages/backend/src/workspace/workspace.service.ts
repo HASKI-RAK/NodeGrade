@@ -77,18 +77,9 @@ export class WorkspaceService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Establishes the ephemeral workspace an anonymous participant gets on first use
-   * (SPEC-0004/FR-003). The token is the only way back into it: nothing else identifies
-   * the caller, and only its hash is stored.
+   * The workspace a workshop join mints (SPEC-0014/FR-004). The token is the only way back
+   * into it: nothing else identifies the caller, and only its hash is stored.
    */
-  async createBrowser(label?: string): Promise<CreatedWorkspace> {
-    const issued = issueWorkspaceToken();
-    const workspace = await this.create('BROWSER', issued, { label });
-
-    this.logger.log(`Created BROWSER workspace ${workspace.id}`);
-    return { ...workspace, token: issued.token };
-  }
-
   async createWorkshop(
     workshopId: string,
     label?: string,
@@ -172,7 +163,9 @@ export class WorkspaceService {
         workshop: { select: WORKSHOP_STATE_SELECT },
       },
     });
-    if (!workspace) return null;
+    // Anonymous browser workspaces are withdrawn (SPEC-0022/FR-013): a token issued for one
+    // before that no longer opens anything, and retention removes the rows.
+    if (!workspace || workspace.type === 'BROWSER') return null;
 
     await this.touch(workspace.id, workspace.lastActiveAt, now);
 

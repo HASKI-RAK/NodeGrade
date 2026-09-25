@@ -201,15 +201,6 @@ export type RunReview = { reviewed: boolean; note?: string }
 
 export const api = {
   models: async () => (await apiRequest<ModelCatalog>('/models')).data,
-  createWorkspace: async () => {
-    const { data } = await apiRequest<{ workspace: WorkspaceSession; token: string }>(
-      '/workspaces',
-      { method: 'POST', body: {} }
-    )
-    // The token is a sibling of the workspace, not a field on it, and is never returned
-    // again. Folding it in here is the only chance to keep it.
-    return { ...data.workspace, token: data.token }
-  },
   workspace: async (token: string) =>
     (await apiRequest<WorkspaceSession>('/workspaces/me', { token })).data,
   workflows: async (token?: string | null) =>
@@ -286,25 +277,19 @@ export const api = {
         body: {}
       })
     ).data,
-  templates: async (kind?: TemplateKind) =>
-    (
-      await apiRequest<{ templates: WorkflowTemplate[] }>(
-        `/templates${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`
-      )
-    ).data.templates,
-  template: async (slug: string) =>
+  /**
+   * The block library (SPEC-0022/FR-014). Workspace-scoped: a participant sends their
+   * token, an LTI editor is recognised by its launch cookie.
+   */
+  templates: async (token?: string | null) =>
+    (await apiRequest<{ templates: WorkflowTemplate[] }>('/templates', { token })).data
+      .templates,
+  template: async (slug: string, token?: string | null) =>
     (
       await apiRequest<{ template: WorkflowTemplate; revision: TemplateRevision }>(
-        `/templates/${encodeURIComponent(slug)}`
+        `/templates/${encodeURIComponent(slug)}`,
+        { token }
       )
-    ).data,
-  fromTemplate: async (token: string, templateSlug: string) =>
-    (
-      await apiRequest<Workflow>('/workflows/from-template', {
-        method: 'POST',
-        token,
-        body: { templateSlug }
-      })
     ).data,
   workshop: async (code: string) =>
     (

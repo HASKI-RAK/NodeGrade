@@ -4,7 +4,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentWorkshop, WorkshopEntry, WorkshopReadiness } from '@/api/http'
-import { resetWorkspaceSession } from '@/store/workspaceSession'
 import { workspaceStore } from '@/store/workspaceStore'
 import { authorizationOf, jsonResponse, stubApi } from '@/test/apiStub'
 
@@ -112,7 +111,6 @@ const renderJoin = (path: string) => {
 describe('workshop deep link', () => {
   beforeEach(() => {
     localStorage.clear()
-    resetWorkspaceSession()
   })
 
   afterEach(() => {

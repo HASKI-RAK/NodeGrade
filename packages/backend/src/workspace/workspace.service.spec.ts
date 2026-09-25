@@ -33,25 +33,25 @@ describe('WorkspaceService', () => {
     service = module.get(WorkspaceService);
   });
 
-  describe('createBrowser', () => {
+  describe('createWorkshop', () => {
     it('stores only the hash and returns the token once', async () => {
       workspace.create.mockImplementation(({ data }) =>
         Promise.resolve({
           id: 'ws1',
           type: data.type,
           label: data.label,
-          workshopId: null,
+          workshopId: data.workshopId,
           createdAt: new Date(),
         }),
       );
 
-      const created = await service.createBrowser('My workspace');
+      const created = await service.createWorkshop('wk1', 'Workshop');
 
       const stored = workspace.create.mock.calls[0][0].data;
-      expect(stored.type).toBe('BROWSER');
+      expect(stored.type).toBe('WORKSHOP');
+      expect(stored.workshopId).toBe('wk1');
       expect(stored.tokenHash).toBe(hashWorkspaceToken(created.token));
       expect(JSON.stringify(stored)).not.toContain(created.token);
-      expect(created.label).toBe('My workspace');
     });
   });
 
@@ -78,6 +78,20 @@ describe('WorkspaceService', () => {
           where: { tokenHash: hashWorkspaceToken(VALID_TOKEN) },
         }),
       );
+    });
+
+    it('rejects a browser workspace token (SPEC-0022/FR-013)', async () => {
+      workspace.findUnique.mockResolvedValue({
+        id: 'ws1',
+        type: 'BROWSER',
+        label: null,
+        workshopId: null,
+        lastActiveAt: new Date(),
+        workshop: null,
+      });
+
+      await expect(service.resolveByToken(VALID_TOKEN)).resolves.toBeNull();
+      expect(workspace.updateMany).not.toHaveBeenCalled();
     });
 
     it('returns null for an unknown token', async () => {

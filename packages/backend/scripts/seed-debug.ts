@@ -13,8 +13,6 @@ const graph = await readFile(
   new URL('../../../tools/debug/demo-graph.json', import.meta.url),
   'utf8',
 );
-const token = `ngw_${Buffer.alloc(32, 1).toString('base64url')}`;
-const tokenHash = createHash('sha256').update(token).digest('hex');
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: databaseUrl }),
 });
@@ -79,27 +77,6 @@ try {
     },
   });
   await pinOnlyEntry(workshop.id, template.id, revision.id);
-  const browser = await prisma.workspace.upsert({
-    where: { tokenHash },
-    update: { label: 'Debug browser workspace' },
-    create: {
-      type: 'BROWSER',
-      label: 'Debug browser workspace',
-      tokenHash,
-    },
-  });
-  await prisma.workflow.upsert({
-    where: { workspaceId_slug: { workspaceId: browser.id, slug: 'demo' } },
-    update: { content: graph },
-    create: {
-      workspaceId: browser.id,
-      slug: 'demo',
-      name: 'Demo',
-      content: graph,
-      sourceTemplateId: template.id,
-      sourceTemplateRevisionId: revision.id,
-    },
-  });
   const lti = await prisma.workspace.upsert({
     where: { ltiKey: 'debug|demo|1' },
     update: { label: 'Debug LTI workspace' },
@@ -212,7 +189,7 @@ try {
   });
 
   console.log(
-    `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}; browser workspace token ${token}`,
+    `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}`,
   );
 } finally {
   await prisma.$disconnect();

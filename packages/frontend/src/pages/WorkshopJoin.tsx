@@ -32,7 +32,6 @@ import {
   TemplateStructure,
   TemplateTags
 } from '@/components/TemplateCard'
-import { resetWorkspaceSession } from '@/store/workspaceSession'
 import { workspaceStore } from '@/store/workspaceStore'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
@@ -88,7 +87,6 @@ export const WorkshopJoin = () => {
         if (stored?.token) {
           try {
             workspaceStore.saveWorkshop(normalized, stored)
-            resetWorkspaceSession()
             await showOverview(stored.token)
             return
           } catch (storedError) {
@@ -114,9 +112,6 @@ export const WorkshopJoin = () => {
           ...result.workspace,
           token: result.token
         })
-        // The workshop workspace is now the active one; a memoized bootstrap would
-        // otherwise keep answering for the rest of the page view.
-        resetWorkspaceSession()
         if (result.workflow) {
           navigate(`/editor/${result.workflow.id}`, { replace: true })
           return

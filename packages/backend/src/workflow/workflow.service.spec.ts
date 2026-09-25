@@ -352,11 +352,21 @@ describe('WorkflowService', () => {
     });
   });
 
-  describe('createFromTemplateSlug', () => {
+  describe('createFromTemplate', () => {
+    const source = (overrides: Partial<{ contentSchema: number }> = {}) => ({
+      templateId: 'tpl-1',
+      revisionId: 'rev-1',
+      revision: 1,
+      name: 'Demo workflow',
+      content: '{"nodes":[{"id":1,"type":"input/answer"}]}',
+      contentSchema: 2,
+      ...overrides,
+    });
+
     it('records the source template and revision (AC-001, FR-018)', async () => {
       const { service, workflow } = build();
 
-      await service.createFromTemplateSlug(workspaceA, 'demo-workflow');
+      await service.createFromTemplate(workspaceA, source());
 
       expect(workflow.create.mock.calls[0][0].data).toMatchObject({
         workspaceId: 'ws-a',
@@ -367,45 +377,23 @@ describe('WorkflowService', () => {
       });
     });
 
-    it('only resolves published templates (FR-017)', async () => {
-      const { service, templates } = build();
-
-      await service.createFromTemplateSlug(workspaceA, 'demo-workflow');
-
-      expect(templates.findBySlug).toHaveBeenCalledWith('demo-workflow', true);
-    });
-
     it('lets the caller name their copy', async () => {
       const { service, workflow } = build();
 
-      await service.createFromTemplateSlug(workspaceA, 'demo', 'My attempt');
+      await service.createFromTemplate(workspaceA, source(), 'My attempt');
 
       expect(workflow.create.mock.calls[0][0].data.name).toBe('My attempt');
     });
 
     it('carries the revision’s content schema so migrations still see it', async () => {
-      const { service, workflow, templates } = build();
-      templates.getCurrentRevision.mockResolvedValue(
-        revision({ contentSchema: 1 }),
+      const { service, workflow } = build();
+
+      await service.createFromTemplate(
+        workspaceA,
+        source({ contentSchema: 1 }),
       );
 
-      await service.createFromTemplateSlug(workspaceA, 'demo');
-
       expect(workflow.create.mock.calls[0][0].data.contentSchema).toBe(1);
-    });
-
-    it('never writes to the template (FR-007)', async () => {
-      const { service, templates } = build();
-
-      await service.createFromTemplateSlug(workspaceA, 'demo');
-
-      // The service is read-only against templates by construction: it holds no write
-      // method for them at all.
-      expect(Object.keys(templates)).toEqual([
-        'findBySlug',
-        'getCurrentRevision',
-        'getRevision',
-      ]);
     });
 
     it('is still subject to the workspace cap', async () => {
@@ -413,7 +401,7 @@ describe('WorkflowService', () => {
       workflow.count.mockResolvedValue(50);
 
       await expect(
-        service.createFromTemplateSlug(workspaceA, 'demo'),
+        service.createFromTemplate(workspaceA, source()),
       ).rejects.toMatchObject({ status: 403 });
     });
   });

@@ -3,17 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resetWorkspaceSession } from '@/store/workspaceSession'
-import { authorizationOf, jsonResponse, stubApi } from '@/test/apiStub'
+import { workspaceStore } from '@/store/workspaceStore'
+import { stubApi } from '@/test/apiStub'
 
 import { StartPage } from './StartPage'
-
-const workspace = {
-  id: 'ws-1',
-  type: 'BROWSER' as const,
-  label: null,
-  workshopId: null
-}
 
 const probe = <div data-testid="probe" />
 
@@ -21,8 +14,7 @@ const renderStart = () => {
   const router = createMemoryRouter(
     [
       { path: '/', element: <StartPage /> },
-      { path: '/workshop/:code', element: probe },
-      { path: '/editor/:workflowId', element: probe }
+      { path: '/workshop/:code', element: probe }
     ],
     { initialEntries: ['/'] }
   )
@@ -31,33 +23,34 @@ const renderStart = () => {
 }
 
 describe('start page', () => {
+  let fetchMock: ReturnType<typeof stubApi>
+
   beforeEach(() => {
     localStorage.clear()
-    resetWorkspaceSession()
+    fetchMock = stubApi(() => {
+      throw new Error('the start page makes no request')
+    })
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('offers all four entry actions (AC-001)', async () => {
-    stubApi(() => jsonResponse({ workspace, token: 'tok' }))
+  it('offers only the workshop code and the facilitator entry (SPEC-0022/FR-013)', async () => {
     renderStart()
 
     expect(await screen.findByRole('heading', { name: 'Start workshop' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'New workflow' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Open workflow' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Facilitator' })).toHaveAttribute(
       'href',
-      '/workflows'
+      '/admin'
     )
-    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
-      'href',
-      '/templates'
-    )
+    expect(screen.queryByRole('button', { name: 'New workflow' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Templates' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Open workflow' })).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('sends an entered code to the join flow in normalized form (AC-006)', async () => {
-    stubApi(() => jsonResponse({ workspace, token: 'tok' }))
     const router = renderStart()
 
     await userEvent.type(screen.getByLabelText('Workshop code'), 'abcd-efgh')
@@ -67,7 +60,6 @@ describe('start page', () => {
   })
 
   it('refuses a code with nothing in it and stays put (AC-006)', async () => {
-    stubApi(() => jsonResponse({ workspace, token: 'tok' }))
     const router = renderStart()
 
     await userEvent.type(screen.getByLabelText('Workshop code'), '--')
@@ -79,54 +71,38 @@ describe('start page', () => {
     expect(router.state.location.pathname).toBe('/')
   })
 
-  it('creates a workflow in the established workspace and opens it (AC-003)', async () => {
-    const fetchMock = stubApi((url, init) => {
-      if (url.endsWith('/api/workspaces') && init.method === 'POST')
-        return jsonResponse({ workspace, token: 'tok' })
-      if (url.endsWith('/api/workflows') && init.method === 'POST')
-        return jsonResponse({
-          id: 'wf-1',
-          name: 'Untitled workflow',
-          slug: 'untitled-workflow',
-          version: 1
-        })
-      throw new Error(`unexpected request: ${init.method ?? 'GET'} ${url}`)
-    })
-    const router = renderStart()
-
-    await userEvent.click(screen.getByRole('button', { name: 'New workflow' }))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/editor/wf-1'))
-    const [, createInit] = fetchMock.mock.calls.find(
-      ([url, init]) => String(url).endsWith('/api/workflows') && init?.method === 'POST'
-    ) as [string, RequestInit]
-    expect(authorizationOf(createInit)).toBe('Bearer tok')
-  })
-
-  it('surfaces a failed workspace bootstrap and recovers on retry', async () => {
-    let attempts = 0
-    stubApi(() => {
-      attempts += 1
-      return attempts === 1
-        ? jsonResponse(
-            { code: 'server_error', message: 'Workspace store unavailable.' },
-            { status: 500 }
-          )
-        : jsonResponse({ workspace, token: 'tok' })
+  it('offers the way back to a workshop joined in this browser', async () => {
+    workspaceStore.saveWorkshop('ABCDEFGH', {
+      id: 'ws-1',
+      type: 'WORKSHOP',
+      label: 'Three exercises',
+      workshopId: 'shop-1',
+      workshop: { code: 'ABCD-EFGH', title: 'Three exercises', readOnly: false },
+      token: 'tok'
     })
     renderStart()
 
-    expect(await screen.findByText('Workspace store unavailable.')).toBeVisible()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
-
-    await waitFor(() =>
-      expect(screen.queryByText('Workspace store unavailable.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Three exercises' })).toHaveAttribute(
+      'href',
+      '/workshop/ABCDEFGH'
     )
   })
 
+  it('forgets a browser workspace stored before workshops were the only way in', async () => {
+    localStorage.setItem(
+      'nodegrade.active-workspace',
+      JSON.stringify({ id: 'ws-old', type: 'BROWSER', token: 'old' })
+    )
+    localStorage.setItem('nodegrade.browser-workspace', JSON.stringify({ id: 'ws-old' }))
+    renderStart()
+
+    await screen.findByRole('heading', { name: 'Start workshop' })
+    expect(screen.queryByText('Continue where you left off')).toBeNull()
+    expect(localStorage.getItem('nodegrade.active-workspace')).toBeNull()
+    expect(localStorage.getItem('nodegrade.browser-workspace')).toBeNull()
+  })
+
   it('offers the appearance picker without a provider', async () => {
-    stubApi(() => jsonResponse({ workspace, token: 'tok' }))
     renderStart()
 
     await screen.findByRole('heading', { name: 'Start workshop' })

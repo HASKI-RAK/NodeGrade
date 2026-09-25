@@ -18,6 +18,7 @@ import {
 import type { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Navigate,
   useBlocker,
   useLocation,
   useNavigate,
@@ -177,10 +178,10 @@ export const Editor = () => {
   useEffect(() => {
     if (!student)
       void api
-        .templates('BLOCK')
+        .templates(token)
         .then(setBlocks)
         .catch(() => setBlocks([]))
-  }, [student])
+  }, [student, token])
 
   const autosave = useAutosave({
     graph: lgraph,
@@ -518,7 +519,7 @@ export const Editor = () => {
     async (block: WorkflowTemplate) => {
       if (!canvas) return
       try {
-        const detail = await api.template(block.slug)
+        const detail = await api.template(block.slug, token)
         let suggestions: ConnectionSuggestion[] = []
         history.transact(() => {
           suggestions = insertBlock({
@@ -548,9 +549,12 @@ export const Editor = () => {
         setNotice(error instanceof Error ? error.message : 'Block could not be inserted.')
       }
     },
-    [canvas, history, lgraph]
+    [canvas, history, lgraph, token]
   )
 
+  // A participant reaches the editor through their workshop; without its session there is
+  // nothing this browser may open (SPEC-0022/FR-013).
+  if (!ltiMode && !session) return <Navigate to="/" replace />
   if (loadError)
     return (
       <Box p={4}>
@@ -620,7 +624,7 @@ export const Editor = () => {
         connectionInfo={{
           apiOrigin,
           wsOrigin,
-          workspaceType: session?.type ?? (ltiMode ? 'LTI' : 'Browser'),
+          workspaceType: session?.type ?? 'LTI',
           workflowId
         }}
       />

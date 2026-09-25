@@ -3,7 +3,7 @@ import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
 type StoredSession = WorkspaceSession & { token: string }
 
-const BROWSER_KEY = 'nodegrade.browser-workspace'
+const LEGACY_BROWSER_KEY = 'nodegrade.browser-workspace'
 const ACTIVE_KEY = 'nodegrade.active-workspace'
 const workshopKey = (code: string) =>
   `nodegrade.workshop-workspace.${normalizeWorkshopCode(code)}`
@@ -17,6 +17,14 @@ const read = (key: string): StoredSession | null => {
   }
 }
 
+const remove = (key: string): void => {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Same reasoning as write().
+  }
+}
+
 const write = (key: string, session: StoredSession): void => {
   try {
     localStorage.setItem(key, JSON.stringify(session))
@@ -26,34 +34,29 @@ const write = (key: string, session: StoredSession): void => {
   }
 }
 
+/**
+ * Participant identity kept in the browser: one token per joined workshop, plus the one
+ * the editor currently uses (SPEC-0004/NFR-001, SPEC-0022).
+ *
+ * Only workshop sessions are kept. A browser workspace stored before SPEC-0022 withdrew
+ * them is dropped on first read: the server no longer honours its token.
+ */
 export const workspaceStore = {
-  browser: () => read(BROWSER_KEY),
   workshop: (code: string) => read(workshopKey(code)),
-  active: () => read(ACTIVE_KEY),
-  saveBrowser(session: StoredSession) {
-    write(BROWSER_KEY, session)
-    write(ACTIVE_KEY, session)
+  active: (): StoredSession | null => {
+    remove(LEGACY_BROWSER_KEY)
+    const session = read(ACTIVE_KEY)
+    if (session && session.type !== 'WORKSHOP') {
+      remove(ACTIVE_KEY)
+      return null
+    }
+    return session
   },
   saveWorkshop(code: string, session: StoredSession) {
     write(workshopKey(code), session)
     write(ACTIVE_KEY, session)
   },
-  activate(session: StoredSession) {
-    write(ACTIVE_KEY, session)
-  },
   clearActive() {
-    try {
-      localStorage.removeItem(ACTIVE_KEY)
-    } catch {
-      // Same reasoning as write().
-    }
-  },
-  clearBrowser() {
-    try {
-      localStorage.removeItem(BROWSER_KEY)
-      localStorage.removeItem(ACTIVE_KEY)
-    } catch {
-      // Same reasoning as write().
-    }
+    remove(ACTIVE_KEY)
   }
 }
