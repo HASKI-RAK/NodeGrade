@@ -76,6 +76,7 @@ export class WorkspaceController {
       type: workspace.type,
       label: workspace.label,
       workshopId: workspace.workshopId,
+      workshop: workspace.workshop ?? null,
     };
   }
 }

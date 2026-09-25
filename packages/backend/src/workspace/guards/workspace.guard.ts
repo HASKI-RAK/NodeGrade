@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -14,6 +15,8 @@ export type RequestWithWorkspace = Request & {
   workspace?: ResolvedWorkspace;
 };
 
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 /**
  * Resolves the caller's workspace from their access token (SPEC-0004/FR-004, AC-007).
  *
@@ -23,6 +26,10 @@ export type RequestWithWorkspace = Request & {
  *
  * Bearer transport rather than a cookie, which is what keeps CSRF out of the whole
  * participant surface — a cross-site form post cannot set an Authorization header.
+ *
+ * A workspace whose workshop has closed or expired keeps its reads and loses every write
+ * (SPEC-0022/FR-011). Enforcing that here rather than per handler means a new write route
+ * cannot forget it.
  */
 @Injectable()
 export class WorkspaceGuard implements CanActivate {
@@ -53,6 +60,14 @@ export class WorkspaceGuard implements CanActivate {
       throw new UnauthorizedException({
         code: 'workspace_token_invalid',
         message: 'The workspace access token is not valid.',
+      });
+    }
+
+    if (workspace.workshop?.readOnly && !READ_METHODS.has(request.method)) {
+      throw new ForbiddenException({
+        code: 'workshop_closed',
+        message:
+          'This workshop has ended. Your work can be read but not changed.',
       });
     }
 

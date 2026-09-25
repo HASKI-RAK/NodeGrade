@@ -47,13 +47,28 @@ export async function apiRequest<T>(
   return { data, response }
 }
 
+/** The workshop a participant workspace belongs to (SPEC-0022). */
+export type WorkspaceWorkshop = {
+  code: string
+  title: string
+  /** Closed or expired: the server serves reads only (SPEC-0022/FR-011). */
+  readOnly: boolean
+}
+
 export type WorkspaceSession = {
   id: string
   type: 'BROWSER' | 'WORKSHOP' | 'LTI'
   label: string | null
   workshopId: string | null
+  workshop?: WorkspaceWorkshop | null
   token?: string
 }
+
+/** The server refused a write because the participant's workshop has ended. */
+export const isWorkshopClosedError = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  error.status === 403 &&
+  error.body.code === 'workshop_closed'
 
 export type Workflow = {
   id: string

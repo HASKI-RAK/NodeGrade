@@ -101,7 +101,70 @@ describe('WorkspaceService', () => {
         type: 'WORKSHOP',
         label: null,
         workshopId: 'wk1',
+        workshop: null,
       });
+    });
+
+    it.each([
+      ['a published workshop', 'PUBLISHED', null, false],
+      ['a closed workshop', 'CLOSED', null, true],
+      [
+        'an expired workshop',
+        'PUBLISHED',
+        new Date('2026-09-25T09:00:00.000Z'),
+        true,
+      ],
+    ])(
+      'describes %s to its participant (SPEC-0022/FR-011)',
+      async (_label, status, expiresAt, readOnly) => {
+        workspace.findUnique.mockResolvedValue({
+          id: 'ws1',
+          type: 'WORKSHOP',
+          label: 'Workshop',
+          workshopId: 'wk1',
+          lastActiveAt: new Date('2026-09-25T09:59:00.000Z'),
+          workshop: { code: 'ABCDEFGH', title: 'Workshop', status, expiresAt },
+        });
+
+        const resolved = await service.resolveByToken(
+          VALID_TOKEN,
+          new Date('2026-09-25T10:00:00.000Z'),
+        );
+
+        expect(resolved?.workshop).toEqual({
+          code: 'ABCD-EFGH',
+          title: 'Workshop',
+          readOnly,
+        });
+      },
+    );
+  });
+
+  describe('workshopState', () => {
+    it('reads the workshop fresh for a workspace id', async () => {
+      workspace.findUnique.mockResolvedValue({
+        workshop: {
+          code: 'ABCDEFGH',
+          title: 'Workshop',
+          status: 'CLOSED',
+          expiresAt: null,
+        },
+      });
+
+      await expect(service.workshopState('ws1')).resolves.toEqual({
+        code: 'ABCD-EFGH',
+        title: 'Workshop',
+        readOnly: true,
+      });
+      expect(workspace.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'ws1' } }),
+      );
+    });
+
+    it('has no workshop state for a workspace outside a workshop', async () => {
+      workspace.findUnique.mockResolvedValue({ workshop: null });
+
+      await expect(service.workshopState('ws1')).resolves.toBeNull();
     });
   });
 

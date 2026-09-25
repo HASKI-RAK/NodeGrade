@@ -190,4 +190,50 @@ describe('EditorToolbar', () => {
       expect(screen.getByText(category, { exact: false })).toBeVisible()
     expect(screen.getByText('Adding nodes')).toBeVisible()
   })
+
+  it('offers nothing that changes or runs the workflow once the workshop ended', async () => {
+    const user = userEvent.setup()
+    const action = vi.fn()
+    render(
+      <EditorToolbar
+        workflowName="Demo"
+        status="readonly"
+        student={false}
+        readOnly
+        canSaveAs
+        canReset
+        ltiInstructor={false}
+        developerTools={false}
+        connectionStatus="Connected"
+        onAdd={action}
+        onTemplates={action}
+        onRun={action}
+        onPreview={action}
+        onSaveAs={async () => undefined}
+        onHistory={action}
+        onImport={async () => undefined}
+        onExport={action}
+        onReset={async () => undefined}
+        onDeveloperTools={action}
+        onPublish={async () => undefined}
+        onRetry={action}
+        onReloadLatest={action}
+        connectionInfo={{
+          apiOrigin: 'http://api',
+          wsOrigin: 'ws://api',
+          workspaceType: 'WORKSHOP',
+          workflowId: 'wf-1'
+        }}
+      />
+    )
+    expect(screen.getByText('Read-only')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Add' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'More editor actions' }))
+    expect(screen.queryByText('Save as…')).toBeNull()
+    expect(screen.queryByText('Version history…')).toBeNull()
+    expect(screen.queryByText('Import workflow…')).toBeNull()
+    expect(screen.queryByText('Reset to source template…')).toBeNull()
+    expect(screen.getByText('Export workflow')).toBeVisible()
+  })
 })
