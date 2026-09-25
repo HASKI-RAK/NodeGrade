@@ -313,9 +313,22 @@ export class TemplateService {
   async deleteRevision(templateId: string, revision: number) {
     const row = await this.prisma.templateRevision.findFirst({
       where: { templateId, revision },
-      select: { id: true },
+      select: { id: true, template: { select: { currentRevision: true } } },
     });
     if (!row) throw this.revisionNotFound();
+
+    // A workshop entry that follows the newest revision reads currentRevision; deleting
+    // that revision would leave the entry pointing at nothing (SPEC-0022/FR-018).
+    if (row.template.currentRevision === revision) {
+      const followers = await this.prisma.workshopTemplate.count({
+        where: { templateId, templateRevisionId: null },
+      });
+      if (followers > 0)
+        throw new ConflictException({
+          code: 'revision_current_in_use',
+          message: `Revision ${revision} is the current revision, and ${followers} workshop(s) follow it.`,
+        });
+    }
 
     const references = await this.countReferences(row.id);
     if (references > 0) throw this.revisionReferenced(references);
@@ -329,13 +342,18 @@ export class TemplateService {
   }
 
   private async countReferences(revisionId: string): Promise<number> {
-    const [workflows, workshops] = await Promise.all([
+    const [workflows, entries, legacyWorkshops] = await Promise.all([
       this.prisma.workflow.count({
         where: { sourceTemplateRevisionId: revisionId },
       }),
+      this.prisma.workshopTemplate.count({
+        where: { templateRevisionId: revisionId },
+      }),
+      // The legacy single-template column still carries a restrictive foreign key until
+      // it is dropped (SPEC-0022 constraints).
       this.prisma.workshop.count({ where: { templateRevisionId: revisionId } }),
     ]);
-    return workflows + workshops;
+    return workflows + entries + legacyWorkshops;
   }
 
   // --- helpers -----------------------------------------------------------------

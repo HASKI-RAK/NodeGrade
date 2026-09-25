@@ -1,4 +1,8 @@
-import { getNodeDefinition, isModelRef } from '@haski/ta-lib';
+import {
+  getNodeDefinition,
+  isModelRef,
+  type ModelCatalog,
+} from '@haski/ta-lib';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
@@ -8,9 +12,11 @@ import {
   parseGraphContent,
   TemplateContentError,
 } from '../template/template-content.js';
+import { ENTRY_SELECT, type EntryRow } from './workshop-entries.js';
 import { WorkshopService } from './workshop.service.js';
 
-export type ReadinessCheckId = 'backend' | 'template' | 'node_types' | 'models';
+export type ReadinessCheckId =
+  'backend' | 'templates' | 'template' | 'node_types' | 'models';
 
 export type ReadinessCheck = {
   id: ReadinessCheckId;
@@ -19,9 +25,23 @@ export type ReadinessCheck = {
   detail: string;
 };
 
+/** The checks for one workshop entry (SPEC-0022/FR-016). */
+export type EntryReadiness = {
+  entryId: string;
+  templateName: string;
+  status: 'PASS' | 'FAIL';
+  checks: ReadinessCheck[];
+};
+
+/**
+ * `checks` holds the workshop-level verdicts — the backend and whether any entry is
+ * ready — so a client that predates entries still reads a meaningful list; `entries`
+ * breaks the template checks down per entry.
+ */
 export type WorkshopReadiness = {
   status: 'PASS' | 'FAIL';
   checks: ReadinessCheck[];
+  entries: EntryReadiness[];
 };
 
 const pass = (
@@ -36,28 +56,24 @@ const fail = (
   detail: string,
 ): ReadinessCheck => ({ id, label, status: 'FAIL', detail });
 
+const statusOf = (checks: ReadinessCheck[]): 'PASS' | 'FAIL' =>
+  checks.some((check) => check.status === 'FAIL') ? 'FAIL' : 'PASS';
+
 const workshopSelect = {
   id: true,
-  status: true,
-  template: { select: { published: true, deletedAt: true } },
-  templateRevision: { select: { id: true, name: true, content: true } },
+  templates: { select: ENTRY_SELECT, orderBy: { position: 'asc' } },
 } as const;
-
-type WorkshopRow = {
-  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED';
-  template: { published: boolean; deletedAt: Date | null };
-  templateRevision: { id: string; name: string; content: string } | null;
-};
 
 /**
  * The preflight behind workshop entry and the facilitator readiness view
- * (SPEC-0007/FR-009, FR-010).
+ * (SPEC-0007/FR-009, FR-010; SPEC-0022/FR-016).
  *
  * Every check answers one question a facilitator would otherwise only get answered by a
- * room full of participants failing at once: is the server up, does the workshop still
- * have content, can this build load that content, and is there a model anyone is allowed
- * to run. They are reported together rather than as a single boolean so a failure names
- * what to fix.
+ * room full of participants failing at once: is the server up, does each workshop entry
+ * still have content, can this build load that content, and is there a model anyone is
+ * allowed to run. They are reported together rather than as a single boolean so a failure
+ * names what to fix. One broken entry does not fail the workshop: participants can still
+ * start the others, and see the broken one as unavailable.
  */
 @Injectable()
 export class WorkshopReadinessService {
@@ -82,40 +98,72 @@ export class WorkshopReadinessService {
       select: workshopSelect,
     });
     if (!workshop) throw this.unavailable();
-    return this.evaluate(workshop);
+    return this.evaluate(workshop.templates);
   }
 
-  private async evaluate(workshop: WorkshopRow): Promise<WorkshopReadiness> {
-    const checks: ReadinessCheck[] = [
-      pass('backend', 'Backend', 'The backend answered this request.'),
-      this.templateCheck(workshop),
-    ];
-    checks.push(this.nodeTypeCheck(workshop.templateRevision?.content));
-    checks.push(await this.modelCheck(workshop.templateRevision?.content));
+  /** Readiness of each entry, for callers that only need per-entry availability. */
+  async entries(entries: EntryRow[]): Promise<EntryReadiness[]> {
+    const catalog = await this.runtime.catalog();
+    return Promise.all(entries.map((entry) => this.entry(entry, catalog)));
+  }
 
+  private async evaluate(rows: EntryRow[]): Promise<WorkshopReadiness> {
+    const entries = await this.entries(rows);
+    const ready = entries.filter((entry) => entry.status === 'PASS');
+    const label = 'Workshop templates';
+    const templates =
+      entries.length === 0
+        ? fail('templates', label, 'The workshop offers no template.')
+        : ready.length === 0
+          ? fail(
+              'templates',
+              label,
+              `No template is ready: ${entries
+                .map(
+                  (entry) =>
+                    `${entry.templateName} (${entry.checks
+                      .filter((check) => check.status === 'FAIL')
+                      .map((check) => check.detail)
+                      .join(' ')})`,
+                )
+                .join('; ')}`,
+            )
+          : pass(
+              'templates',
+              label,
+              `${ready.length} of ${entries.length} template(s) ready.`,
+            );
+    const checks = [
+      pass('backend', 'Backend', 'The backend answered this request.'),
+      templates,
+    ];
+    return { status: statusOf(checks), checks, entries };
+  }
+
+  private async entry(
+    entry: EntryRow,
+    catalog: ModelCatalog,
+  ): Promise<EntryReadiness> {
+    const resolution = await this.workshops.resolveEntryRevision(entry);
+    const label = 'Template';
+    const content = resolution.ok ? resolution.revision.content : undefined;
+    const checks = [
+      resolution.ok
+        ? pass(
+            'template',
+            label,
+            `Handing out “${resolution.revision.name}” (r${resolution.revision.revision}).`,
+          )
+        : fail('template', label, resolution.reason),
+      this.nodeTypeCheck(content),
+      this.modelCheck(content, catalog),
+    ];
     return {
-      status: checks.some((check) => check.status === 'FAIL') ? 'FAIL' : 'PASS',
+      entryId: entry.id,
+      templateName: entry.template.name,
+      status: statusOf(checks),
       checks,
     };
-  }
-
-  private templateCheck(workshop: WorkshopRow): ReadinessCheck {
-    const label = 'Workshop template';
-    if (!workshop.templateRevision)
-      return fail(
-        'template',
-        label,
-        'The workshop has no template revision to hand out.',
-      );
-    if (workshop.template.deletedAt !== null)
-      return fail('template', label, 'The template has been deleted.');
-    if (!workshop.template.published)
-      return fail('template', label, 'The template is not published.');
-    return pass(
-      'template',
-      label,
-      `Handing out “${workshop.templateRevision.name}”.`,
-    );
   }
 
   /**
@@ -163,14 +211,14 @@ export class WorkshopReadinessService {
    * without an explicit selection pass when the facilitator's deployment default is
    * available, since execution substitutes it at run time (SPEC-0016).
    */
-  private async modelCheck(
+  private modelCheck(
     content: string | undefined,
-  ): Promise<ReadinessCheck> {
+    catalog: ModelCatalog,
+  ): ReadinessCheck {
     const label = 'Provider and models';
     if (content === undefined)
       return fail('models', label, 'There is no template content to check.');
 
-    const catalog = await this.runtime.catalog();
     let modelRefs: { providerKey: string; modelId: string }[];
     let defaultedCount = 0;
     try {

@@ -55,12 +55,14 @@ const build = () => {
   };
   const workflow = { count: jest.fn().mockResolvedValue(0) };
   const workshop = { count: jest.fn().mockResolvedValue(0) };
+  const workshopTemplate = { count: jest.fn().mockResolvedValue(0) };
 
   const prisma = {
     template,
     templateRevision,
     workflow,
     workshop,
+    workshopTemplate,
     // The transaction callback runs against the same mocks, which is what lets these
     // tests assert the ordering inside it.
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
@@ -76,6 +78,7 @@ const build = () => {
     templateRevision,
     workflow,
     workshop,
+    workshopTemplate,
     prisma,
   };
 };
@@ -333,8 +336,18 @@ describe('TemplateService', () => {
   });
 
   describe('deleteRevision', () => {
+    /** Revision 1 of a template whose current revision is `current`. */
+    const buildDeleting = (current = 3) => {
+      const built = build();
+      built.templateRevision.findFirst.mockResolvedValue({
+        ...revisionRow(),
+        template: { currentRevision: current },
+      });
+      return built;
+    };
+
     it('refuses while a workflow references it (FR-003b)', async () => {
-      const { service, workflow, templateRevision } = build();
+      const { service, workflow, templateRevision } = buildDeleting();
       workflow.count.mockResolvedValue(1);
 
       await expect(service.deleteRevision('tpl-1', 1)).rejects.toMatchObject({
@@ -344,8 +357,8 @@ describe('TemplateService', () => {
       expect(templateRevision.delete).not.toHaveBeenCalled();
     });
 
-    it('refuses while a workshop references it', async () => {
-      const { service, workshop, templateRevision } = build();
+    it('refuses while a legacy workshop column references it', async () => {
+      const { service, workshop, templateRevision } = buildDeleting();
       workshop.count.mockResolvedValue(1);
 
       await expect(service.deleteRevision('tpl-1', 1)).rejects.toMatchObject({
@@ -354,8 +367,46 @@ describe('TemplateService', () => {
       expect(templateRevision.delete).not.toHaveBeenCalled();
     });
 
+    it('refuses while a workshop entry pins it (SPEC-0022)', async () => {
+      const { service, workshopTemplate, templateRevision } = buildDeleting();
+      workshopTemplate.count.mockResolvedValue(1);
+
+      await expect(service.deleteRevision('tpl-1', 1)).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'revision_referenced' },
+      });
+      expect(workshopTemplate.count).toHaveBeenCalledWith({
+        where: { templateRevisionId: 'rev-1' },
+      });
+      expect(templateRevision.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses the current revision while a workshop follows it (SPEC-0022/AC-014)', async () => {
+      const { service, workshopTemplate, templateRevision } = buildDeleting(1);
+      workshopTemplate.count.mockImplementation(
+        ({ where }: { where: { templateRevisionId: string | null } }) =>
+          Promise.resolve(where.templateRevisionId === null ? 2 : 0),
+      );
+
+      await expect(service.deleteRevision('tpl-1', 1)).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'revision_current_in_use' },
+      });
+      expect(templateRevision.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes the current revision when no workshop follows it', async () => {
+      const { service, templateRevision } = buildDeleting(1);
+
+      await service.deleteRevision('tpl-1', 1);
+
+      expect(templateRevision.delete).toHaveBeenCalledWith({
+        where: { id: 'rev-1' },
+      });
+    });
+
     it('treats the foreign key as the authority, not the pre-check', async () => {
-      const { service, templateRevision } = build();
+      const { service, templateRevision } = buildDeleting();
       // The pre-check passes and a reference appears before the delete lands.
       templateRevision.delete.mockRejectedValue(
         Object.assign(new Error('fk'), { code: 'P2003' }),
@@ -368,7 +419,7 @@ describe('TemplateService', () => {
     });
 
     it('deletes an unreferenced revision', async () => {
-      const { service, templateRevision } = build();
+      const { service, templateRevision } = buildDeleting();
 
       await service.deleteRevision('tpl-1', 1);
 

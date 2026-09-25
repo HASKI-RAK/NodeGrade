@@ -12,6 +12,12 @@ import {
 import { slugify } from '../workflow/workflow-slug.js';
 import type { CreateWorkshopDto } from './dto/workshop.dto.js';
 import {
+  ENTRY_SELECT,
+  entryUnavailableReason,
+  serializeEntry,
+  type EntryRow,
+} from './workshop-entries.js';
+import {
   displayWorkshopCode,
   generateWorkshopCode,
   normalizeWorkshopCode,
@@ -22,13 +28,34 @@ const WORKSHOP_SELECT = {
   code: true,
   title: true,
   status: true,
-  templateId: true,
-  templateRevisionId: true,
   expiresAt: true,
   publishedAt: true,
   closedAt: true,
   createdAt: true,
   updatedAt: true,
+  templates: { select: ENTRY_SELECT, orderBy: { position: 'asc' } },
+} as const;
+
+/** The revision an entry hands out, with what a copy of it needs. */
+export type EntryRevision = {
+  id: string;
+  templateId: string;
+  revision: number;
+  name: string;
+  content: string;
+  contentSchema: number;
+};
+
+export type EntryResolution =
+  { ok: true; revision: EntryRevision } | { ok: false; reason: string };
+
+const ENTRY_REVISION_SELECT = {
+  id: true,
+  templateId: true,
+  revision: true,
+  name: true,
+  content: true,
+  contentSchema: true,
 } as const;
 
 const isUniqueViolation = (error: unknown): boolean =>
@@ -70,8 +97,15 @@ export class WorkshopService {
           data: {
             title: dto.title,
             code: generateWorkshopCode(),
-            templateId: revision.templateId,
-            templateRevisionId: revision.id,
+            templates: {
+              create: [
+                {
+                  templateId: revision.templateId,
+                  templateRevisionId: revision.id,
+                  position: 0,
+                },
+              ],
+            },
             expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
           },
           select: WORKSHOP_SELECT,
@@ -101,25 +135,49 @@ export class WorkshopService {
     });
   }
 
+  /**
+   * A code a participant may join: PUBLISHED and not expired (SPEC-0014/FR-003).
+   *
+   * Template visibility is not consulted here. A pinned entry keeps working after its
+   * template is unpublished (SPEC-0022/FR-002); whether any entry can be started is the
+   * readiness check's question, not the code's.
+   */
   async resolve(code: string, now: Date = new Date()) {
     const workshop = await this.prisma.workshop.findUnique({
       where: { code: normalizeWorkshopCode(code) },
-      select: {
-        ...WORKSHOP_SELECT,
-        template: { select: { deletedAt: true, published: true } },
-        templateRevision: { select: { id: true } },
-      },
+      select: WORKSHOP_SELECT,
     });
     if (
       !workshop ||
       workshop.status !== 'PUBLISHED' ||
-      (workshop.expiresAt !== null && workshop.expiresAt <= now) ||
-      workshop.template.deletedAt !== null ||
-      !workshop.template.published
+      (workshop.expiresAt !== null && workshop.expiresAt <= now)
     ) {
       throw this.unavailable();
     }
     return workshop;
+  }
+
+  /**
+   * The revision a participant starting this entry receives now: the pinned one, or the
+   * template's current revision (SPEC-0022/FR-002, FR-003).
+   */
+  async resolveEntryRevision(entry: EntryRow): Promise<EntryResolution> {
+    const reason = entryUnavailableReason(entry);
+    if (reason !== null) return { ok: false, reason };
+
+    const revision = await this.prisma.templateRevision.findFirst({
+      where:
+        entry.templateRevisionId !== null
+          ? { id: entry.templateRevisionId }
+          : {
+              templateId: entry.templateId,
+              revision: entry.template.currentRevision,
+            },
+      select: ENTRY_REVISION_SELECT,
+    });
+    return revision
+      ? { ok: true, revision }
+      : { ok: false, reason: 'The template revision no longer exists.' };
   }
 
   async join(
@@ -162,17 +220,11 @@ export class WorkshopService {
       }
     }
 
-    const revision = await this.prisma.templateRevision.findUnique({
-      where: { id: workshop.templateRevisionId },
-      select: {
-        id: true,
-        templateId: true,
-        name: true,
-        content: true,
-        contentSchema: true,
-      },
-    });
-    if (!revision) throw this.unavailable();
+    const [first] = workshop.templates;
+    if (!first) throw this.unavailable();
+    const resolution = await this.resolveEntryRevision(first);
+    if (!resolution.ok) throw this.unavailable();
+    const { revision } = resolution;
 
     const issued = issueWorkspaceToken();
     const created = await this.prisma.$transaction(async (tx) => {
@@ -211,6 +263,7 @@ export class WorkshopService {
   serialize(workshop: Awaited<ReturnType<WorkshopService['create']>>) {
     return {
       ...workshop,
+      templates: workshop.templates.map(serializeEntry),
       code: displayWorkshopCode(workshop.code),
       expiresAt: workshop.expiresAt?.toISOString() ?? null,
       publishedAt: workshop.publishedAt?.toISOString() ?? null,
