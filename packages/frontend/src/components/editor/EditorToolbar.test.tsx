@@ -26,7 +26,7 @@ describe('EditorToolbar', () => {
         developerTools={false}
         connectionStatus="Connected"
         onAdd={action}
-        onTemplates={action}
+        onWorkshop={action}
         onRun={action}
         onPreview={action}
         onSaveAs={async () => undefined}
@@ -72,7 +72,7 @@ describe('EditorToolbar', () => {
         developerTools={false}
         connectionStatus="Connected"
         onAdd={vi.fn()}
-        onTemplates={vi.fn()}
+        onWorkshop={vi.fn()}
         onRun={vi.fn()}
         onPreview={vi.fn()}
         onSaveAs={async () => undefined}
@@ -119,7 +119,7 @@ describe('EditorToolbar', () => {
           developerTools={false}
           connectionStatus="Connected"
           onAdd={action}
-          onTemplates={action}
+          onWorkshop={action}
           onRun={action}
           onPreview={action}
           onSaveAs={async () => undefined}
@@ -161,7 +161,7 @@ describe('EditorToolbar', () => {
         developerTools={false}
         connectionStatus="Connected"
         onAdd={action}
-        onTemplates={action}
+        onWorkshop={action}
         onRun={action}
         onPreview={action}
         onSaveAs={async () => undefined}
@@ -206,7 +206,7 @@ describe('EditorToolbar', () => {
         developerTools={false}
         connectionStatus="Connected"
         onAdd={action}
-        onTemplates={action}
+        onWorkshop={action}
         onRun={action}
         onPreview={action}
         onSaveAs={async () => undefined}

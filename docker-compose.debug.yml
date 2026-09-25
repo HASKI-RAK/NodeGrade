@@ -83,6 +83,9 @@ services:
       ADMIN_PASSWORD: debug-password
       # The stack serves plain HTTP on localhost, where a Secure cookie is discarded.
       COOKIE_INSECURE: 'true'
+      # Playwright joins workshops from one address across two browsers; the per-address
+      # join limit (SPEC-0022/FR-015) is for rooms, not for test runs.
+      WORKSPACE_CREATE_MAX: '100000'
     ports:
       - '${NODEGRADE_DEBUG_BACKEND_PORT:-15000}:5000'
       - '${NODEGRADE_DEBUG_INSPECTOR_PORT:-19229}:9229'

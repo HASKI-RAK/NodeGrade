@@ -219,7 +219,9 @@ the system SHALL refuse further workspace-creating joins from that address with
 WHEN readiness is checked for a workshop,
 the system SHALL report template, node-type and model checks for each entry, SHALL report
 the workshop as failing only when the backend check fails or no entry passes, and SHALL
-mark failing entries unavailable to participants.
+mark entries whose template or node-type check fails unavailable to participants. Model
+availability does not make an entry unavailable: the participant can still open and edit
+it, and a run reports the provider problem.
 
 ### FR-017 — Returning to a closed workshop
 
@@ -381,6 +383,7 @@ Given a workshop whose second entry references an unregistered node type
 When the facilitator checks readiness
 Then the second entry fails its node-type check, the workshop passes
 And participants see the second entry as unavailable
+And an entry failing only its model check stays available to participants
 ```
 
 ### AC-014 — The followed revision cannot be deleted

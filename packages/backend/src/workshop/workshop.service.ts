@@ -4,12 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import {
-  hashWorkspaceToken,
-  isWorkspaceTokenShape,
-  issueWorkspaceToken,
-} from '../workspace/workspace-token.js';
-import { slugify } from '../workflow/workflow-slug.js';
 import type { CreateWorkshopDto } from './dto/workshop.dto.js';
 import {
   ENTRY_SELECT,
@@ -178,86 +172,6 @@ export class WorkshopService {
     return revision
       ? { ok: true, revision }
       : { ok: false, reason: 'The template revision no longer exists.' };
-  }
-
-  async join(
-    code: string,
-    presentedToken: string | undefined,
-    now: Date = new Date(),
-  ) {
-    const workshop = await this.resolve(code, now);
-
-    if (isWorkspaceTokenShape(presentedToken)) {
-      const existing = await this.prisma.workspace.findFirst({
-        where: {
-          tokenHash: hashWorkspaceToken(presentedToken as string),
-          workshopId: workshop.id,
-          type: 'WORKSHOP',
-        },
-        select: {
-          id: true,
-          type: true,
-          label: true,
-          workshopId: true,
-          workflows: {
-            take: 1,
-            orderBy: { createdAt: 'asc' },
-            select: { id: true, name: true, slug: true, version: true },
-          },
-        },
-      });
-      if (existing?.workflows[0]) {
-        return {
-          workspace: {
-            id: existing.id,
-            type: existing.type,
-            label: existing.label,
-            workshopId: existing.workshopId,
-          },
-          token: presentedToken,
-          workflow: existing.workflows[0],
-        };
-      }
-    }
-
-    const [first] = workshop.templates;
-    if (!first) throw this.unavailable();
-    const resolution = await this.resolveEntryRevision(first);
-    if (!resolution.ok) throw this.unavailable();
-    const { revision } = resolution;
-
-    const issued = issueWorkspaceToken();
-    const created = await this.prisma.$transaction(async (tx) => {
-      const workspace = await tx.workspace.create({
-        data: {
-          type: 'WORKSHOP',
-          label: workshop.title,
-          workshopId: workshop.id,
-          tokenHash: issued.tokenHash,
-        },
-        select: {
-          id: true,
-          type: true,
-          label: true,
-          workshopId: true,
-        },
-      });
-      const workflow = await tx.workflow.create({
-        data: {
-          workspaceId: workspace.id,
-          name: revision.name,
-          slug: slugify(revision.name),
-          content: revision.content,
-          contentSchema: revision.contentSchema,
-          sourceTemplateId: revision.templateId,
-          sourceTemplateRevisionId: revision.id,
-        },
-        select: { id: true, name: true, slug: true, version: true },
-      });
-      return { workspace, workflow };
-    });
-
-    return { ...created, token: issued.token };
   }
 
   serialize(workshop: Awaited<ReturnType<WorkshopService['create']>>) {

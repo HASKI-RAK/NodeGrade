@@ -38,6 +38,10 @@ export type EntryReadiness = {
  * ready — so a client that predates entries still reads a meaningful list; `entries`
  * breaks the template checks down per entry.
  */
+/** Whether a participant may start an entry now, and which revision it would copy. */
+export type EntryAvailability =
+  { ok: true; revision: number } | { ok: false; reason: string };
+
 export type WorkshopReadiness = {
   status: 'PASS' | 'FAIL';
   checks: ReadinessCheck[];
@@ -105,6 +109,32 @@ export class WorkshopReadinessService {
   async entries(entries: EntryRow[]): Promise<EntryReadiness[]> {
     const catalog = await this.runtime.catalog();
     return Promise.all(entries.map((entry) => this.entry(entry, catalog)));
+  }
+
+  /**
+   * Whether a participant may start each entry now (SPEC-0022/FR-016): its revision
+   * resolves and this build can load it. Model availability is left out on purpose — a
+   * provider outage should not stop a participant from opening and editing an exercise,
+   * and the run itself reports it.
+   */
+  async startable(
+    entries: EntryRow[],
+  ): Promise<Map<string, EntryAvailability>> {
+    const results = await Promise.all(
+      entries.map(async (entry): Promise<[string, EntryAvailability]> => {
+        const resolution = await this.workshops.resolveEntryRevision(entry);
+        if (!resolution.ok)
+          return [entry.id, { ok: false, reason: resolution.reason }];
+        const nodeTypes = this.nodeTypeCheck(resolution.revision.content);
+        return [
+          entry.id,
+          nodeTypes.status === 'PASS'
+            ? { ok: true, revision: resolution.revision.revision }
+            : { ok: false, reason: nodeTypes.detail },
+        ];
+      }),
+    );
+    return new Map(results);
   }
 
   private async evaluate(rows: EntryRow[]): Promise<WorkshopReadiness> {

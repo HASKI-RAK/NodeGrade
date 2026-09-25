@@ -594,10 +594,10 @@ export const Editor = () => {
           setPaletteOpen((open) => !open)
           if (mobile && !paletteOpen) setRailOpen(false)
         }}
-        onTemplates={() =>
-          navigate(
-            `/templates?returnTo=${encodeURIComponent(location.pathname + location.search)}`
-          )
+        onWorkshop={
+          session?.workshop
+            ? () => navigate(`/workshop/${session.workshop?.code ?? ''}`)
+            : undefined
         }
         onRun={run}
         onPreview={showPreview}

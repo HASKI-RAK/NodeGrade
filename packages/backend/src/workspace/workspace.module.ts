@@ -14,7 +14,7 @@ import { WorkspaceService } from './workspace.service.js';
     RetentionService,
   ],
   // Exported so the workflow, workshop and LTI modules can apply @WorkspaceScoped()
-  // without re-declaring the guard's dependencies.
-  exports: [WorkspaceService, WorkspaceGuard],
+  // without re-declaring the guard's dependencies; the throttle guards the workshop join.
+  exports: [WorkspaceService, WorkspaceGuard, WorkspaceCreationThrottle],
 })
 export class WorkspaceModule {}

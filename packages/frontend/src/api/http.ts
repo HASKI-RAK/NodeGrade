@@ -120,15 +120,46 @@ export type TemplateRevision = {
 
 /** Workshop preflight and facilitator readiness results (SPEC-0007/FR-009, FR-010). */
 export type ReadinessCheck = {
-  id: 'backend' | 'template' | 'node_types' | 'models'
+  id: 'backend' | 'templates' | 'template' | 'node_types' | 'models'
   label: string
   status: 'PASS' | 'FAIL'
   detail: string
 }
-export type WorkshopReadiness = {
+/** The checks of one workshop template entry (SPEC-0022/FR-016). */
+export type EntryReadiness = {
+  entryId: string
+  templateName: string
   status: 'PASS' | 'FAIL'
   checks: ReadinessCheck[]
 }
+export type WorkshopReadiness = {
+  status: 'PASS' | 'FAIL'
+  checks: ReadinessCheck[]
+  entries?: EntryReadiness[]
+}
+
+/** How a workshop entry picks its revision (SPEC-0022/FR-001). */
+export type WorkshopEntryMode = 'PINNED' | 'LATEST'
+
+/** One template of the participant's workshop, as the overview shows it (FR-008). */
+export type WorkshopEntry = {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+  tags: string[]
+  mode: WorkshopEntryMode
+  revision: number | null
+  available: boolean
+  unavailableReason: string | null
+  /** The participant's copy of this entry, if they started it (FR-009). */
+  myWorkflowId: string | null
+}
+export type CurrentWorkshop = {
+  workshop: WorkspaceWorkshop
+  entries: WorkshopEntry[]
+}
+export type WorkflowRef = { id: string; name: string; slug: string; version: number }
 
 /** Run records behind the Submissions inbox (SPEC-0020/FR-006). */
 export type RunFilter = 'all' | 'needs-review' | 'reviewed' | 'failed'
@@ -287,17 +318,40 @@ export const api = {
         `/workshops/by-code/${encodeURIComponent(code)}/preflight`
       )
     ).data,
+  /**
+   * `workflow` is what to open instead of the overview — a single-entry workshop's copy,
+   * just created when `autoStarted` (SPEC-0022/FR-007).
+   */
   joinWorkshop: async (code: string, token?: string) =>
     (
       await apiRequest<{
         workspace: WorkspaceSession
         token: string
-        workflow: Workflow
+        workflow: WorkflowRef | null
+        autoStarted: boolean
       }>(`/workshops/by-code/${encodeURIComponent(code)}/join`, {
         method: 'POST',
         token,
         body: {}
       })
+    ).data,
+  currentWorkshop: async (token: string) =>
+    (await apiRequest<CurrentWorkshop>('/workshops/current', { token })).data,
+  workshopEntryStructure: async (token: string, entryId: string) =>
+    (
+      await apiRequest<{
+        entryId: string
+        name: string
+        revision: number
+        content: string
+      }>(`/workshops/current/entries/${encodeURIComponent(entryId)}/structure`, { token })
+    ).data,
+  startWorkshopEntry: async (token: string, entryId: string) =>
+    (
+      await apiRequest<{ workflow: WorkflowRef; created: boolean }>(
+        `/workshops/current/entries/${encodeURIComponent(entryId)}/start`,
+        { method: 'POST', token, body: {} }
+      )
     ).data,
   runs: async (id: string, token?: string | null, filter: RunFilter = 'all') =>
     (

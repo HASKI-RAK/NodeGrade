@@ -52,7 +52,7 @@ export const EditorToolbar = ({
   developerTools,
   connectionStatus,
   onAdd,
-  onTemplates,
+  onWorkshop,
   onRun,
   onPreview,
   onSaveAs,
@@ -77,7 +77,8 @@ export const EditorToolbar = ({
   developerTools: boolean
   connectionStatus: string
   onAdd: () => void
-  onTemplates: () => void
+  /** Back to the participant's workshop overview; absent outside a workshop. */
+  onWorkshop?: () => void
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
@@ -120,12 +121,12 @@ export const EditorToolbar = ({
               Add
             </Button>
           )}
-          {!student && (
+          {!student && onWorkshop && (
             <Button
-              onClick={onTemplates}
+              onClick={onWorkshop}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
-              Templates
+              Workshop
             </Button>
           )}
           {!readOnly && (
