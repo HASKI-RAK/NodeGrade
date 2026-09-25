@@ -49,12 +49,25 @@ and delegate to a service, which is the only layer that touches Prisma.
 
 | Surface | Caller | Credential | Guard |
 |---|---|---|---|
-| Participant (`/api/workspaces`, `/api/workflows`, `/api/workshops/by-code/**`, Socket.IO) | browser, LTI launch | `Authorization: Bearer <workspace token>`, or the LTI launch cookie | `WorkspaceGuard` |
+| Participant (`/api/workspaces/me`, `/api/workflows/**`, `/api/templates` (blocks only), `/api/workshops/current/**`, Socket.IO) | workshop participant, LTI launch | `Authorization: Bearer <workspace token>`, or the LTI launch cookie | `WorkspaceGuard` |
+| Workshop entry (`/api/workshops/by-code/:code`, `.../preflight`, `.../join`) | anyone holding a code | none; `join` accepts the workshop's bearer token for a re-join | none — `join` is rate-limited per address |
 | Facilitator (`/api/admin/**`, `/api/providers`, `/api/benchmark/run`) | admin UI | session cookie + `X-CSRF-Token` | `AdminSessionGuard` |
 
 A bearer token cannot be set by a cross-site form post, which keeps CSRF handling off the
 participant surface entirely. Workspace ids appear in URLs and are never credentials
 (ADR-0001).
+
+Participant workspaces come from exactly two places: a workshop join (`WORKSHOP`) and an
+LTI launch (`LTI`). There is no anonymous workspace; `BROWSER` tokens issued before
+SPEC-0022 are rejected (ADR-0010). Workflow templates reach a participant only as entries
+of their own workshop; `/api/templates` serves the block library the editor palette
+inserts from.
+
+A workshop that is CLOSED or past its expiry is read-only for its participants.
+`WorkspaceService.resolveByToken` carries the workshop's `readOnly` state, `WorkspaceGuard`
+rejects every non-GET/HEAD request with 403 `workshop_closed`, and
+`GraphHandlerService.handleRunGraph` re-reads the workshop state on every run, so a socket
+opened before the close cannot keep running graphs.
 
 ## Two transports
 
@@ -122,25 +135,37 @@ re-read per request, so a facilitator change applies without a restart.
 
 ```mermaid
 flowchart LR
-    Start["/ or /workshop/CODE"] --> Preflight["GET /api/workshops/by-code/:code/preflight"]
+    Start["/ (code entry) → /workshop/CODE"] --> Stored{"token stored for CODE?"}
+    Stored -->|yes| Overview["overview: GET /api/workshops/current + /api/workflows"]
+    Stored -->|"no, or rejected with 401"| Preflight["GET /api/workshops/by-code/:code/preflight"]
     Preflight -->|fails| Blocked["failing checks shown, no workspace minted"]
-    Preflight -->|passes| Ensure["ensureWorkspaceSession()"]
-    Ensure -->|no stored token| Create["POST /api/workspaces, or POST /api/workshops/by-code/:code/join"]
-    Create --> Token["token + workspace stored in localStorage"]
-    Ensure -->|stored token| Verify["GET /api/workspaces/me"]
-    Token --> Copy["workflow copied from the workshop's template revision"]
-    Copy --> Editor["/editor/:workflowId"]
+    Preflight -->|passes| Join["POST /api/workshops/by-code/:code/join"]
+    Join --> Token["token + workspace stored in localStorage"]
+    Token -->|single entry| Editor["/editor/:workflowId"]
+    Token -->|several entries| Overview
+    Overview --> StartEntry["POST /api/workshops/current/entries/:entryId/start"]
+    StartEntry --> Editor
 ```
 
 Workshop entry is preflighted before anyone is started into it: `WorkshopReadinessService`
-checks the backend, the workshop's template revision, whether this build registers the node
-types that revision needs, and whether a reachable provider offers a model the policy
-permits. Facilitators run the same checks from the admin workshop list.
+checks the backend and then each entry — whether its template revision loads, whether this
+build registers the node types it needs, and whether a reachable provider offers a model
+the policy permits. The workshop fails only when the backend fails or no entry passes; an
+entry failing its template or node-type check is shown unavailable, while a model problem
+leaves it startable and surfaces at run time. Facilitators run the same checks from the
+admin workshop list.
 
-Joining a published workshop code mints a `WORKSHOP` workspace and copies the workshop's
-template revision into a fresh workflow, so participants never share state. A token the
-server no longer honours (retention sweep, reset database) is discarded and replaced
-instead of stranding the participant.
+Joining a published workshop code mints a `WORKSHOP` workspace (rate-limited per address
+by `WorkspaceCreationThrottle`); a re-join with the workshop's token returns the same
+workspace. A single-entry workshop starts its entry at once and opens the copy in the
+editor; otherwise the participant lands on the workshop overview (`WorkshopJoin.tsx`),
+which lists the entries and the participant's own workflows. Starting an entry copies the
+pinned revision, or the template's current revision for an entry that follows the newest
+one, into a fresh workflow; starting it again opens the existing copy. Participants never
+share state. A participant with a stored token goes straight to the overview, which still
+answers read-only once the workshop has closed; a token the server no longer honours
+(retention sweep, reset database) falls through to a fresh join instead of stranding the
+participant.
 
 ## Persistence
 
@@ -153,6 +178,10 @@ PostgreSQL through Prisma 7; the client is generated into
   `publishedContent` is the student-visible projection (ADR-0007).
 - `TemplateRevision` rows are immutable; `Template.currentRevision` is a number, not a
   foreign key, so creating revision N+1 inside a transaction is race-free (ADR-0003).
+- `WorkshopTemplate` holds a workshop's ordered entries, one per template: a null
+  `templateRevisionId` follows the template's newest revision, a set one pins that
+  revision. The legacy `Workshop.templateId`/`templateRevisionId` columns were backfilled
+  into it, are nullable and unused, and are dropped by a later migration (SPEC-0022).
 - Only SHA-256 hashes of workspace tokens, admin session cookies and CSRF tokens are
   stored. Provider API keys are AES-256-GCM ciphertext in `Provider.apiKeyEnc`.
 - `LegacyGraph` and `Workflow.legacyPath` remain until the pre-workspace rows are retired

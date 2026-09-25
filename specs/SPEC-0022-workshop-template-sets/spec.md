@@ -2,7 +2,7 @@
 id: SPEC-0022
 type: feature
 title: Workshop template sets and workshop-scoped participant access
-status: draft
+status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-25
@@ -450,3 +450,4 @@ Then the deletion is rejected with revision_current_in_use
 | Date       | Change                                                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-25 | Initial specification: workshop template sets, workshop overview, read-only closed workshops, no anonymous workspaces. |
+| 2026-09-25 | Implemented: `WorkshopTemplate` model and migration `20260925100000_workshop_template_entries` (legacy `Workshop.templateId`/`templateRevisionId` backfilled, nullable, unused); backend `workshop/workshop-entries.ts`, `workshop.service.ts` (entries on create, `PUT /api/admin/workshops/:id/templates`), `workshop-participant.service.ts` and `WorkshopParticipantController` (join, overview, structure, idempotent start), per-entry `workshop-readiness.service.ts`, read-only enforcement in `WorkspaceGuard` and `GraphHandlerService`, blocks-only workspace-scoped `template.controller.ts`, `revision_current_in_use` in `TemplateService`; `POST /api/workspaces`, `POST /api/workflows/from-template` and `GET /api/templates/revisions/:id` removed; frontend `WorkshopJoin.tsx` overview, `TemplateCard.tsx`, `admin/WorkshopAdmin.tsx`, code-only `StartPage.tsx`, `TemplatesPage`/`WorkflowListPage`/`workspaceSession` removed; tests `workshop-templates.int-spec.ts` and `e2e/workshop-templates.spec.ts`. |

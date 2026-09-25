@@ -46,7 +46,10 @@ yarn debug:reset
 ```
 
 `debug:reset` recreates the database volume, reapplies Prisma migrations, and seeds the
-stable editor and student workflows.
+two published single-entry workshops (`WAVE-2026` on the demo graph, `WAIE-2026` on the
+bundled WAIE template) and the LTI demo workflow. There is no seeded participant
+workspace: enter a workshop code to get one. The stack raises `WORKSPACE_CREATE_MAX` so
+repeated joins from localhost are never throttled.
 
 ## Browser control
 

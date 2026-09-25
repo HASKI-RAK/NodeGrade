@@ -6,7 +6,7 @@ status: draft
 parent: null
 priority: P0
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-25
 depends_on:
   - SPEC-0013
 related:
@@ -20,6 +20,7 @@ related:
   - SPEC-0009
   - SPEC-0013
   - SPEC-0014
+  - SPEC-0022
 ---
 
 # NodeGrade workshop readiness
@@ -120,8 +121,9 @@ epics and remains a top-level feature; this epic depends on it rather than ownin
 - The workshop scenario involves 20–50 concurrent anonymous participants.
 - LTI-launched usage remains a supported workflow identity source during migration.
 - Existing stored graphs can be migrated into a default/personal workspace.
-- Anonymous (BROWSER-type) workspaces auto-delete after 60 days of inactivity
-  (decided in SPEC-0004/FR-009).
+- Participant workspaces are created only by a workshop join (SPEC-0022/FR-013); the
+  former anonymous BROWSER-type workspaces are no longer issued, and legacy rows
+  auto-delete after 60 days of inactivity (SPEC-0004/FR-009).
 - Templates are persisted server-side entities; bundled templates are seed data
   (decided in SPEC-0003/FR-002).
 - Facilitator role is established via env-configured admin username/password with a
@@ -148,3 +150,4 @@ epics and remains a top-level feature; this epic depends on it rather than ownin
 | 2026-09-15 | Noted SPEC-0009 (LLM provider management) as a separate epic outside this epic's scope |
 | 2026-09-15 | Review revision: added SPEC-0013 (facilitator auth foundation) and SPEC-0014 (Workshop entity and join flow) as children; updated business rules (token-based workspace authorization, admin session), P0 set, and assumptions (seeded templates, 60-day inactivity retention, Vercel AI SDK) |
 | 2026-09-15 | Review revision 2: SPEC-0013 removed from Child Features (shared foundation, parent null); epic depends_on SPEC-0013; out-of-scope wording narrowed to general end-user accounts; P0 group renamed to "foundational implementation tranche" with SPEC-0006/0007/0008 promoted to P0 for the conference milestone |
+| 2026-09-25 | Assumption on BROWSER-type workspace retention amended for SPEC-0022: participant workspaces come only from a workshop join; legacy browser rows are only swept. |

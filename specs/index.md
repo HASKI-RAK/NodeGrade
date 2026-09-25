@@ -24,7 +24,7 @@ is included in a release.
 | 10 — Recoverable editing     | SPEC-0021                       | SPEC-0004 and SPEC-0005 are accepted.                                                                                            | An edit can be undone after the tab that made it is gone.                                                                                        |
 | 11 — Workshop-scoped access  | SPEC-0022                       | SPEC-0003, SPEC-0004, SPEC-0013, and SPEC-0014 are accepted.                                                                   | A workshop offers several templates and is the only participant entry; closing it makes it read-only. |
 
-Waves 1–10 are implemented; wave 11 is in progress. The Status
+Every wave is implemented. The Status
 column of the specification table below is authoritative and must match each
 specification's frontmatter `status`.
 
@@ -54,4 +54,4 @@ the required provider-management capabilities from SPEC-0009 are available.
 | SPEC-0019 | Feature | Language model node accepts a plain string prompt    | SPEC-0001 | Implemented |
 | SPEC-0020 | Feature | Review flags and submission history                  | SPEC-0001 | Implemented |
 | SPEC-0021 | Feature | Workflow version history                             | SPEC-0001 | Implemented |
-| SPEC-0022 | Feature | Workshop template sets and workshop-scoped participant access | SPEC-0001 | Draft |
+| SPEC-0022 | Feature | Workshop template sets and workshop-scoped participant access | SPEC-0001 | Implemented |

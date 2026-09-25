@@ -3,9 +3,10 @@
 ## Overview
 
 NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
-`/admin`, create a workshop from a published template revision, and hand out an
-eight-character code; each participant browser gets an isolated workspace with its own
-workflow copy, edits it in a LiteGraph editor, and runs it against LLM and NLP providers.
+`/admin`, compose a workshop from one or more workflow templates, and hand out an
+eight-character code. The code is the participants' only way in: each participant browser
+gets an isolated workshop workspace, starts the workshop's templates into its own workflow
+copies, edits them in a LiteGraph editor, and runs them against LLM and NLP providers.
 
 Following articles have been published concerning this project:
 
@@ -24,10 +25,14 @@ Created and maintained by David Fischer.
 ## Features
 
 - **Workshops:** `DRAFT` / `PUBLISHED` / `CLOSED` lifecycle, eight-character join codes,
-  per-browser isolated workspaces, entry preflight and facilitator readiness panel
-  (backend, template, node types, models).
-- **Templates:** `WORKFLOW` and `BLOCK` kinds, immutable revisions, gallery at
-  `/templates`, block insertion with boundary ports and provenance, bundled seeding.
+  one or more template entries per workshop (each pinned to a revision or following the
+  newest one), a participant overview with the workshop's templates and the participant's
+  own workflows, isolated workspaces per browser, entry preflight and a per-entry
+  readiness panel (backend, template, node types, models). A closed or expired workshop
+  stays readable but no longer saves or runs.
+- **Templates:** `WORKFLOW` and `BLOCK` kinds, immutable revisions, workflow templates
+  offered to participants only through workshops, block insertion with boundary ports and
+  provenance, bundled seeding.
 - **Editor:** node palette, inspector, autosave with `Saved` indicator, optimistic
   `ETag` / `If-Match` saves, Preview + Run assessment, per-node Trace.
 - **Providers:** `local` / `OpenAI` / `OpenRouter` / OpenAI-compatible endpoints,
@@ -43,7 +48,7 @@ start at [Getting Started](#getting-started) and [Deployment](#deployment).
 
 How it fits together: `docs/architecture.md` (runtime, transports, execution flow),
 `docs/module-map.md` (where code lives), `specs/index.md` (all waves implemented),
-`docs/adr/` (decisions ADR-0001 through ADR-0008).
+`docs/adr/` (decisions ADR-0001 through ADR-0010).
 
 ## Getting Started
 
@@ -107,11 +112,20 @@ model loads on the first `/entailment` request, not at startup. Then set
 ### Workshop flow
 
 Workshops move `DRAFT` → `PUBLISHED` → `CLOSED`. Facilitators sign in at `/admin`,
-create a workshop from a published template revision, and publish its eight-character
-code. Participants enter the code at `/` or open `/workshop/<code>`; entry runs a
-preflight (backend, template, node types, models) and only then mints an isolated
-workspace with its own workflow copy. Closing stops new joins; handed-out workspaces
-keep their content until retention removes them.
+create a workshop from one or more workflow templates — each pinned to one revision or
+following the template's newest revision — and publish its eight-character code.
+Participants enter the code at `/` or open `/workshop/<code>`; entry runs a preflight
+(backend, then template, node types and models per entry) and only then mints an isolated
+workspace. A workshop with a single template opens its copy in the editor straight away;
+otherwise the participant lands on the workshop overview, starts a template there and
+finds their own workflows. Closing, or passing the expiry, stops new joins and makes the
+workshop read-only: participants can still open their work but no longer save or run it.
+Workspaces keep their content until retention removes them.
+
+There is no participant entry without a workshop: nothing outside a workshop creates a
+workspace or lists workflow templates, so a fresh deployment offers participants nothing
+until a facilitator publishes a workshop. For a standing public demo, publish a
+long-running demo workshop and share its code.
 
 Workflow persistence uses REST with `If-Match` / `ETag` optimistic versions. Graph
 execution uses Socket.IO (`runGraph` / `cancelRun`, `runStateChanged` /
@@ -152,8 +166,9 @@ NestJS 12 + Prisma 7 + PostgreSQL in `packages/backend/src/` (`main.ts`,
 versions; Socket.IO (`graphgateway/`, `core/Graph.ts`) runs graphs and streams trace
 events typed in `@haski/ta-lib`. Modules: `auth/` (facilitator sessions + CSRF),
 `workspace/` (tokens, guards, retention), `workflow/` (CRUD, slugs, draft vs published
-projection), `template/` (immutable revisions, gallery, bundled seeding), `workshop/`
-(lifecycle, join codes, readiness), `provider/` (credentials, catalog, model policy,
+projection), `template/` (immutable revisions, block library, bundled seeding),
+`workshop/` (lifecycle, template entries, join codes, participant overview, readiness),
+`provider/` (credentials, catalog, model policy,
 execution limits), `migration/` (content backfills), `lti/`, `benchmark/`.
 Backend is ESM: relative imports carry a `.js` extension. Never edit
 `src/generated/prisma` or `dist/` by hand.
@@ -161,13 +176,14 @@ Backend is ESM: relative imports carry a `.js` extension. Never edit
 ### Frontend PWA
 
 React 19 + Vite 8 + MUI 7 + litegraph.js in `packages/frontend/src/` (`main.tsx`,
-`routes.tsx`). Routes: `/` code entry, `/workshop/:code` join, `/templates` gallery,
-`/workflows` list, `/editor/:workflowId` and `/student/:workflowId` editor,
-`/admin/workshops|providers|templates`, `/lti/register`. The editor
+`routes.tsx`). Routes: `/` code entry, `/workshop/:code` join and workshop overview,
+`/editor/:workflowId` and `/student/:workflowId` editor,
+`/admin/workshops|providers|templates`, `/lti/register`; the former `/templates` and
+`/workflows` redirect to the active workshop's overview. The editor
 (`pages/Editor.tsx`, `components/editor/`) offers palette, inspector, rail, and toolbar
 with autosave; Preview runs an assessment and Trace shows per-node steps. Server calls go
-only through `api/http.ts` and `utils/socket.ts`; sessions live in
-`store/workspaceSession.ts` and `store/workspaceStore.ts`.
+only through `api/http.ts` and `utils/socket.ts`; workshop sessions live in
+`store/workspaceStore.ts`.
 
 ### Shared libraries and workers
 
@@ -246,19 +262,24 @@ change applies without a restart.
 
 ## LTI, xAPI, retention, and limits
 
-- **Workspaces:** `BROWSER`, `WORKSHOP`, and `LTI` kinds. Participant authorization comes
-  from the bearer access token only (`WorkspaceGuard` + `@CurrentWorkspace()`); no
-  handler takes a workspace id from path, query, or body.
+- **Workspaces:** `WORKSHOP` and `LTI` kinds, created only by a workshop join or an LTI
+  launch; the legacy `BROWSER` kind is no longer issued and its tokens are rejected.
+  Participant authorization comes from the bearer access token only (`WorkspaceGuard` +
+  `@CurrentWorkspace()`); no handler takes a workspace id from path, query, or body. The
+  workspace of a closed or expired workshop is read-only: writes answer `workshop_closed`
+  and runs are refused.
 - **LTI:** a basic launch maps to an `LTI` workspace (editor or published projection via
   the launch cookie) and registration lives at `/lti/register`.
 - **xAPI:** graph runs emit initial + completed statements when `XAPI_ENDPOINT`,
   `XAPI_USERNAME`, and `XAPI_PASSWORD` are set.
-- **Retention:** idle browser workspaces and ended workshop workspaces are deleted after
-  60 days (sweep every 6h; `RETENTION_ENABLED=false` keeps everything). `LTI` workspaces
-  are never swept.
+- **Retention:** ended workshop workspaces (and any legacy browser workspaces) are
+  deleted after 60 days of inactivity (sweep every 6h; `RETENTION_ENABLED=false` keeps
+  everything). `LTI` workspaces are never swept.
 - **Abuse guards:** one workspace holds at most `WORKSPACE_MAX_WORKFLOWS` workflows
-  (default 50, `LTI` exempt); one address may create `WORKSPACE_CREATE_MAX` workspaces
-  per `WORKSPACE_CREATE_WINDOW_MS`, sized so a whole room arriving at once still joins.
+  (default 50, `LTI` exempt); workshop joins from one address may create at most
+  `WORKSPACE_CREATE_MAX` workspaces (default 100) per `WORKSPACE_CREATE_WINDOW_MS`
+  (default one hour), sized so a whole room arriving at once still joins. Re-joins with a
+  stored token are not counted.
 
 ## Deployment
 
@@ -322,10 +343,10 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
 | `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
 | `TRUST_PROXY` | Reverse proxies in front of the backend (default 1: the frontend's nginx). `docker-compose.prod.yml` sets 2 for Traefik ahead of nginx. Login throttling and the join throttle key on the client address this resolves. |
-| `RETENTION_ENABLED` | Delete idle browser and ended workshop workspaces after 60 days (default true). |
+| `RETENTION_ENABLED` | Delete ended workshop workspaces (and legacy browser workspaces) after 60 days of inactivity (default true). |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
 | `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
-| `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window (room-tolerant join throttle). |
+| `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create through workshop joins per window (default 100 per hour; re-joins are not counted). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
 
@@ -477,25 +498,34 @@ Release checklist:
 2. **Open a provider.** In **Providers**, enable the provider you intend to use and set its
    model policy — *allow all*, or an *allowlist* of the model ids participants may run. A
    provider with no policy mode offers participants nothing, by design.
-3. **Create the workshop.** In **Workshops**, give it a title, pick a published template
-   and one of its revisions, and press **Create workshop**. The revision is frozen: later
-   edits to the template never change a running workshop.
-4. **Check readiness.** Each workshop shows a readiness panel covering the backend, the
-   template, the node types this build registers, and whether any model is available. Fix
-   anything red before the room arrives; participants hit the same checks on entry.
+3. **Create the workshop.** In **Workshops**, give it a title, add one or more workflow
+   templates in the order participants should see them, and press **Create workshop**.
+   For each template choose *Newest revision* — participants get whatever revision is
+   current when they start it, so you can still fix the template during the session — or
+   pin one revision, which later edits never change. A newest-revision entry needs a
+   published template; a pinned one keeps working after the template is unpublished.
+   **Edit templates** changes the entries until the workshop is closed. Copies
+   participants already made are never rewritten.
+4. **Check readiness.** Each workshop shows a readiness panel covering the backend and,
+   per template, the template itself, the node types this build registers, and whether
+   any model is available. Fix anything red before the room arrives; participants hit the
+   same checks on entry, and a template failing its template or node-type check is shown
+   to them as unavailable.
 5. **Publish.** Press **Publish** to hand out the eight-character code. Participants can
    only join a published workshop.
-6. **Close.** Press **Close** when the session ends. The code stops working; workspaces
-   already handed out keep their content until retention removes them.
+6. **Close.** Press **Close** when the session ends. The code stops working and the
+   workshop becomes read-only: participants can still open their work, but nothing saves
+   or runs any more. Workspaces keep their content until retention removes them.
 
 ## Authoring a template
 
 Template revisions are immutable (ADR-0003): new content is always a new revision, never an
 edit of an existing one. Templates come in two kinds: `WORKFLOW` (a whole assessment) and
-`BLOCK` (a reusable capability with declared inputs/outputs). The gallery at `/templates`
-lists published templates with node/link previews; inserting a block remaps identities,
-places content near the viewport, suggests connections, records provenance, and undoes in
-one step. Subgraph-wrapper blocks are an expansion track; see
+`BLOCK` (a reusable capability with declared inputs/outputs). Participants never browse
+templates: a workflow template reaches them only as an entry of their workshop, where the
+overview shows its description and a structure preview, and published blocks appear in
+the editor's palette. Inserting a block remaps identities, places content near the
+viewport, suggests connections, records provenance, and undoes in one step. Subgraph-wrapper blocks are an expansion track; see
 `docs/subgraph-template-block-plan.md`. There are two ways in.
 
 **Ship it with the deployment.** Add a module to
@@ -523,8 +553,11 @@ curl -b jar.txt -X POST http://localhost:5000/api/admin/templates \
 ```
 
 A later revision of the same template is `POST /api/admin/templates/<id>/revisions` with
-the same body shape. `POST /api/admin/templates/<id>/published` controls whether it appears
-in the gallery at `/templates`.
+the same body shape. `POST /api/admin/templates/<id>/published` controls availability:
+workshop entries that follow a workflow template's newest revision become unavailable
+while it is unpublished (pinned entries keep working), and an unpublished block leaves
+the editor palette. The current revision of a template that a newest-revision entry
+follows cannot be deleted (`revision_current_in_use`).
 
 Two rules are worth knowing before you author:
 
@@ -541,15 +574,17 @@ Hand out the code and these five lines:
 
 1. Open **<https://your-deployment.example>** and type the code **`ABCD-EFGH`** into
    *Workshop code*, then press **Join**. The dashes are optional.
-2. You now have your own private copy of the workflow. Nobody else sees your edits, and
-   nothing you do affects anyone else in the room.
+2. If the workshop has several exercises, press **Start** on one; **Continue** returns
+   to one you already started. You now have your own private copy of the workflow.
+   Nobody else sees your edits, and nothing you do affects anyone else in the room.
 3. Click a node to edit it in the panel on the right. The editor saves by itself; the
    toolbar says `Saved` when your work is stored.
 4. Press **Preview**, write an answer the way a student would, and press
    **Run assessment**. An assessment can take up to two minutes — do not reload the page.
    The **Trace** tab shows what each node did.
-5. If you close the tab, open the same link in the *same browser* to get your work back. A
-   different browser, a different device, or a private window gets a fresh copy.
+5. If you close the tab, open the same link in the *same browser* to get your work back;
+   the **Workshop** button in the editor leads back to the overview. A different
+   browser, a different device, or a private window gets a fresh copy.
 
 ## Scripts
 

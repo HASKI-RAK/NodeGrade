@@ -9,9 +9,11 @@ paths:
   and `@/utils/socket`. No component calls `fetch` directly.
 - Never hardcode the API base or read it from `import.meta.env`: `getConfig()` in
   `@/utils/config` reads `public/config/env.<mode>.json` at runtime.
-- Participant identity lives in `@/store/workspaceSession` (`ensureWorkspaceSession`, one
-  bootstrap per page view) and `@/store/workspaceStore` (localStorage). `store/Zustand/Store.ts`
-  is an unused scaffold — do not put session or editor state there.
+- Participant identity lives in `@/store/workspaceStore` (localStorage): one token per
+  joined workshop plus the active one, workshop sessions only. Nothing bootstraps a
+  workspace; a participant gets one only by joining a workshop in `pages/WorkshopJoin.tsx`
+  (LTI launches use the cookie instead). `store/Zustand/Store.ts` is an unused scaffold —
+  do not put session or editor state there.
 - Import with the `@/` alias, not deep relative paths. Shared graph types come from
   `@haski/ta-lib`.
 - UI is MUI 7 with the Emotion `css` prop (`jsxImportSource` is configured); use MUI
@@ -19,8 +21,8 @@ paths:
 - Routes are declared in `src/routes.tsx`. A route that needs a workflow takes it from the
   path; the editor must not invent one when the segment is missing.
 - Editor state flows through the existing hooks — `useSocket`, `useServerEvents`,
-  `useAutosave`, `useGraphHistory`, `useGraphOperations`, `useWorkspaceSession` — rather
-  than new ad-hoc effects around the LiteGraph instance.
+  `useAutosave`, `useGraphHistory`, `useGraphOperations` — rather than new ad-hoc effects
+  around the LiteGraph instance.
 - The LiteGraph canvas renders at device pixel ratio (`@/utils/canvasPixelRatio`), so
   `canvas.canvas.width/height` are backing pixels while LiteGraph's screen space
   (`convertOffsetToCanvas`, mouse events) stays in CSS pixels. Viewport maths goes through
