@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Req,
   Res,
 } from '@nestjs/common';
@@ -19,7 +20,7 @@ import {
 import { WorkspaceCreationThrottle } from '../workspace/workspace-creation-throttle.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
 import { parseBearerToken } from '../workspace/workspace-token.js';
-import { CreateWorkshopDto } from './dto/workshop.dto.js';
+import { CreateWorkshopDto, WorkshopTemplatesDto } from './dto/workshop.dto.js';
 import { WorkshopParticipantService } from './workshop-participant.service.js';
 import { WorkshopReadinessService } from './workshop-readiness.service.js';
 import { WorkshopService } from './workshop.service.js';
@@ -136,6 +137,19 @@ export class AdminWorkshopController {
   async create(@Body() body: CreateWorkshopDto) {
     return {
       workshop: this.workshops.serialize(await this.workshops.create(body)),
+    };
+  }
+
+  /** Replaces the templates a workshop offers (SPEC-0022/FR-005). */
+  @Put(':id/templates')
+  async replaceTemplates(
+    @Param('id') id: string,
+    @Body() body: WorkshopTemplatesDto,
+  ) {
+    return {
+      workshop: this.workshops.serialize(
+        await this.workshops.replaceTemplates(id, body.templates),
+      ),
     };
   }
 

@@ -73,6 +73,7 @@ export const serializeEntry = (entry: EntryRow) => ({
   templateSlug: entry.template.slug,
   templateName: entry.template.name,
   mode: entryMode(entry),
+  templateRevisionId: entry.templateRevisionId,
   revision: entry.templateRevision?.revision ?? null,
   currentRevision: entry.template.currentRevision,
   published: entry.template.published,
