@@ -25,6 +25,15 @@ export type SelectControl = {
 }
 export type FileControl = { type: 'file'; accept?: string }
 export type ModelControl = { type: 'model' }
+/**
+ * A `KEY=value, KEY=value` string edited as chips: one group per allowed value,
+ * each holding the keys mapped to it, with a field to add a key.
+ */
+export type ChipMapControl = {
+  type: 'chipMap'
+  groups: readonly { value: string; label: string; hint?: string }[]
+  placeholder?: string
+}
 
 export type NodePropertyControl =
   | TextControl
@@ -35,6 +44,7 @@ export type NodePropertyControl =
   | SelectControl
   | FileControl
   | ModelControl
+  | ChipMapControl
 
 export interface NodePropertyDefinition {
   key: string
@@ -44,6 +54,8 @@ export interface NodePropertyDefinition {
   required: boolean
   validation?: PropertyValidation
   keyValue?: boolean
+  /** Shown behind a "?" next to the control; paragraphs separated by blank lines. */
+  help?: string
 }
 
 export interface NodeDefinition {
@@ -53,4 +65,6 @@ export interface NodeDefinition {
   description: string
   tags?: readonly string[]
   properties: readonly NodePropertyDefinition[]
+  /** Shown behind a "?" next to the node title; paragraphs separated by blank lines. */
+  help?: string
 }

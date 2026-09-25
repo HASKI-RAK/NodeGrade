@@ -133,16 +133,23 @@ export {
   type OutputNodeProperties
 } from './OutputNode'
 export {
+  DEFAULT_REPORT_ROLES,
   DEFAULT_TONE_MAP,
+  formatKeyMap,
   isChecklist,
   OUTPUT_TONES,
+  parseKeyMap,
   parseReport,
+  parseRoleMap,
   parseToneMap,
+  REPORT_ROLES,
   reportHeadline,
+  roleFor,
   toneFor,
   toneKey,
   type ParsedReport,
-  type ReportEntry
+  type ReportEntry,
+  type ReportRole
 } from './utils/outputPresentation'
 export { DEFAULT_KEYWORD_THRESHOLD } from './KeywordCheckNode'
 export {

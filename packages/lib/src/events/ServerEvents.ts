@@ -59,7 +59,9 @@ export type OutputPresentation = {
   audience?: OutputAudience
   /** `TOKEN=tone, …` giving verdicts, headlines and chips their colour. */
   toneMap?: string
-  /** `report` only: the `KEY:` line that becomes the headline chip. */
+  /** `report` only: `KEY=role, …` deciding how each line is drawn. */
+  roles?: string
+  /** `report` only, pre-roles: the `KEY:` line that becomes the headline chip. */
   statusKey?: string
   /** `score` and `measure`: the top of the scale; unset means 100 or 1. */
   max?: number

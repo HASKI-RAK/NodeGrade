@@ -93,12 +93,34 @@ const toggle = (key: string, label: string): NodePropertyDefinition => ({
   required: false
 })
 
+const OUTPUT_NODE_HELP = [
+  'An output node turns the value on its first input into one card in the results. "Display" picks the card; "detail" (the second input) adds a sentence under it; "Section heading" groups cards; "Shown to" hides a card from students.',
+  'For a report card the model must answer in "KEY: value" lines, for example "JUDGMENT: CORRECT". Ask for exactly that in the prompt. "Report lines" decides how each key is drawn and "Tone map" which colour a headline value gets. Keys the model wraps in markdown or writes in title case are read as well; lines without a key are shown as plain text.',
+  'A score card shows a number on a bar against "Scale maximum" (100 unless set) and awards "Passed" from "Pass mark" (60 unless set; 0 turns the chip off). A measure card shows a number on a scale and says it is evidence, not a grade.'
+].join('\n\n')
+
+const DISPLAY_HELP = [
+  'text: the value as it is. score: a number on a bar with a pass chip. classifications: a list of labels as chips. verdict: one decision (a yes/no or a token such as CORRECT) as a coloured chip. report: "KEY: value" lines from a model, drawn by their role. checklist: items that are met or not, ticked or crossed. measure: a number on a scale that is evidence, not a grade.'
+].join('\n\n')
+
+const ROLES_HELP = [
+  'Each chip is a key the model prints at the start of a line, such as EVIDENCE for "EVIDENCE: …". The group it sits in decides how that line is drawn: the headline chip, an italic quotation, body text, a highlighted callout, or hidden.',
+  'Type a key and press Enter to add it, click the cross to remove it. Keys not listed here are shown as a labelled row. Matching ignores case, spaces and underscores, so "Next step" and NEXT_STEP are the same key.',
+  'Only the first line whose key is a headline becomes the chip. Add your own keys when a prompt uses other words or another language, for example BEGRÜNDUNG as body text.'
+].join('\n\n')
+
+const TONE_HELP = [
+  'Each chip is a value the model may print in the headline line, such as CORRECT or INCOMPLETE, and the group gives that value its colour. Verdict cards and classification chips use the same map. TRUE and FALSE colour a yes/no verdict.',
+  'Type a value and press Enter to add it, click the cross to remove it. Values not listed stay grey.'
+].join('\n\n')
+
 type Entry = {
   node: Omit<DefinedNodeConstructor, 'definition'> & { definition?: NodeDefinition }
   category: NodeCategory
   description: string
   tags?: readonly string[]
   properties?: readonly NodePropertyDefinition[]
+  help?: string
 }
 
 const entries: readonly Entry[] = [
@@ -125,6 +147,7 @@ const entries: readonly Entry[] = [
     category: 'Assessment',
     description:
       'Show a result as a card. Wire a sentence to "detail" to explain the card.',
+    help: OUTPUT_NODE_HELP,
     properties: [
       text('label', 'Label', true),
       {
@@ -132,29 +155,53 @@ const entries: readonly Entry[] = [
         label: 'Display',
         control: { type: 'select', options: OUTPUT_TYPES },
         advanced: false,
-        required: true
+        required: true,
+        help: DISPLAY_HELP
       },
       {
         key: 'audience',
         label: 'Shown to',
         control: { type: 'select', options: OUTPUT_AUDIENCES },
         advanced: false,
-        required: false
+        required: false,
+        help: 'Everyone: learners and educators see the card. Educator: the card is hidden in the student view and marked "Educator only" in the editor.'
       },
       text('section', 'Section heading'),
       {
-        key: 'statusKey',
-        label: 'Headline line (report)',
-        control: { type: 'text', placeholder: 'JUDGMENT' },
+        key: 'roles',
+        label: 'Report lines',
+        control: {
+          type: 'chipMap',
+          placeholder: 'Add a key, e.g. EVIDENCE',
+          groups: [
+            { value: 'headline', label: 'Headline chip', hint: 'Coloured by the tone map' },
+            { value: 'quote', label: 'Quotation', hint: 'Italic, indented' },
+            { value: 'body', label: 'Body text' },
+            { value: 'callout', label: 'Callout box', hint: 'Highlighted with its own title' },
+            { value: 'hidden', label: 'Hidden', hint: 'Parsed but not shown' }
+          ]
+        },
         advanced: true,
-        required: false
+        required: false,
+        help: ROLES_HELP
       },
       {
         key: 'toneMap',
-        label: 'Tone map (TOKEN=success|warning|error|info|neutral)',
-        control: { type: 'textarea', rows: 3 },
+        label: 'Tone map',
+        control: {
+          type: 'chipMap',
+          placeholder: 'Add a value, e.g. CORRECT',
+          groups: [
+            { value: 'success', label: 'Green' },
+            { value: 'warning', label: 'Orange' },
+            { value: 'error', label: 'Red' },
+            { value: 'info', label: 'Blue' },
+            { value: 'neutral', label: 'Grey' }
+          ]
+        },
         advanced: true,
-        required: false
+        required: false,
+        help: TONE_HELP
       },
       number('max', 'Scale maximum (0 = default)', true),
       number('passMark', 'Pass mark (0 = no pass chip)', true)
@@ -414,14 +461,15 @@ const entries: readonly Entry[] = [
 ]
 
 const definitions = entries.map(
-  ({ node, category, description, tags, properties = [] }) => {
+  ({ node, category, description, tags, properties = [], help }) => {
     const definition: NodeDefinition = {
       type: node.getPath(),
       title: node.title ?? node.getPath().split('/').pop() ?? node.getPath(),
       category,
       description,
       tags,
-      properties
+      properties,
+      help
     }
     return {
       node: Object.assign(node, { definition }) as DefinedNodeConstructor,

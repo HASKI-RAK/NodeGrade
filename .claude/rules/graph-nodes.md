@@ -28,7 +28,9 @@ paths:
 - A node that wants trace detail beyond its output slots sets `executionDetails` during
   `onExecute`. It is transient, cleared by the runner, and sanitized like an output.
 - Property metadata belongs in the registry entry (`NodePropertyDefinition` controls), not
-  in ad-hoc inspector code. Widget-backed legacy properties must be listed in
+  in ad-hoc inspector code. A `KEY=value, …` property gets a `chipMap` control with its
+  allowed values as groups; explanations go in the entry's `help` (node level) or the
+  property's `help`, which the inspector shows behind a "?". Widget-backed legacy properties must be listed in
   `legacyWidgetKeys` so old saved graphs still load.
 - Socket payload and trace types in `events/ServerEvents.ts` are a contract shared with the
   backend gateway and the frontend hooks. Changing a payload means changing all three, and

@@ -204,7 +204,10 @@ describe('workshop templates', () => {
       expect(byLabel['Expected words']?.type).toBe('checklist');
       expect(byLabel['Similarity to the reference']?.type).toBe('measure');
       expect(byLabel['Conceptual assessment']).toEqual(
-        expect.objectContaining({ type: 'report', statusKey: 'JUDGMENT' }),
+        expect.objectContaining({
+          type: 'report',
+          roles: expect.stringContaining('JUDGMENT=headline'),
+        }),
       );
       expect(byLabel['Means the same as the reference']?.type).toBe('verdict');
       // The stage code is for facilitators; learners get the explanation instead.
@@ -381,7 +384,11 @@ describe('workshop templates', () => {
       ]);
       for (const report of reports)
         expect(report.properties).toEqual(
-          expect.objectContaining({ type: 'report', max: 2 }),
+          expect.objectContaining({
+            type: 'report',
+            max: 2,
+            roles: expect.stringContaining('CRITERION=hidden'),
+          }),
         );
     });
 
@@ -472,7 +479,10 @@ describe('workshop templates', () => {
       ]);
       // The diagnosis is the educator's evidence; the student gets chip and feedback.
       expect(outputs[1]?.properties).toEqual(
-        expect.objectContaining({ statusKey: 'CATEGORY', audience: 'educator' }),
+        expect.objectContaining({
+          roles: expect.stringContaining('CATEGORY=headline'),
+          audience: 'educator',
+        }),
       );
       expect(outputs[2]?.properties?.audience).toBe('everyone');
       const [flag] = nodesOfType(template, 'output/review-flag');

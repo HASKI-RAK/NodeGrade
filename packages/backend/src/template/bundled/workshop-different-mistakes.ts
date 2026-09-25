@@ -251,7 +251,6 @@ const build = () => {
     0,
     'report',
     {
-      statusKey: 'CATEGORY',
       audience: 'educator',
       section: SECTION_DIAGNOSIS,
     },

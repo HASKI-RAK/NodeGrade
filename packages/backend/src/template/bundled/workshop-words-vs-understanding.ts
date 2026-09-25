@@ -150,10 +150,10 @@ const build = () => {
     context,
   );
   const assessment = g.llmStage('Assessment', [1320, 440], prompt);
-  // The four-line reply is a `report`: the JUDGMENT line becomes the headline chip,
-  // EVIDENCE the quotation, REASON the body and NEXT STEP the callout.
+  // The four-line reply is a `report`: with the default report lines the JUDGMENT
+  // line becomes the headline chip, EVIDENCE the quotation, REASON the body and
+  // NEXT STEP the callout.
   g.output('Conceptual assessment', [2180, 440], assessment, 0, 'report', {
-    statusKey: 'JUDGMENT',
     section: SECTION_C,
   });
   // UNCLEAR is the one judgment the prompt reserves for "cannot tell": that is the

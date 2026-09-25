@@ -8,7 +8,7 @@ import type {
   OutputValue
 } from '../events'
 import { LGraphNode, LiteGraph } from './litegraph-extensions'
-import { DEFAULT_TONE_MAP } from './utils/outputPresentation'
+import { DEFAULT_REPORT_ROLES, DEFAULT_TONE_MAP } from './utils/outputPresentation'
 
 /** Types a facilitator picks for an output node; `review` belongs to the flag node. */
 export const OUTPUT_TYPES: readonly OutputType[] = [
@@ -35,6 +35,9 @@ export type OutputNodeProperties = {
   section: string
   audience: OutputAudience
   toneMap: string
+  /** `report` only: `KEY=role` pairs deciding how each line is drawn. */
+  roles: string
+  /** Pre-roles name of the headline line; still honoured for saved graphs. */
   statusKey: string
   /** Zero means the type's own default: 100 for a score, 1 for a measure. */
   max: number
@@ -71,6 +74,7 @@ export class OutputNode extends LGraphNode {
       section: '',
       audience: 'everyone',
       toneMap: DEFAULT_TONE_MAP,
+      roles: DEFAULT_REPORT_ROLES,
       statusKey: '',
       max: 0,
       passMark: DEFAULT_PASS_MARK
@@ -122,6 +126,7 @@ export class OutputNode extends LGraphNode {
     if (p.section) out.section = p.section
     if (p.audience === 'educator') out.audience = 'educator'
     if (p.toneMap) out.toneMap = p.toneMap
+    if (p.roles) out.roles = p.roles
     if (p.statusKey) out.statusKey = p.statusKey
     if (typeof p.max === 'number' && p.max > 0) out.max = p.max
     if (typeof p.passMark === 'number') out.passMark = p.passMark

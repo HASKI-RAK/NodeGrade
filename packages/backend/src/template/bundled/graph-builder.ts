@@ -5,6 +5,7 @@ import {
   DEFAULT_LOW_THRESHOLD as EQUIVALENCE_LOW_THRESHOLD,
   DEFAULT_PASS_MARK,
   DEFAULT_REASON_PREFIX,
+  DEFAULT_REPORT_ROLES,
   DEFAULT_TONE_MAP,
   KATALYST_MODEL_QWEN_FLASH,
   type OutputAudience,
@@ -20,6 +21,8 @@ export type OutputOptions = {
   section?: string;
   audience?: OutputAudience;
   toneMap?: string;
+  /** `report` only: `KEY=role` pairs; defaults to the bundled prompts' keys. */
+  roles?: string;
   statusKey?: string;
   /** Top of a score or measure scale; 0 keeps the type's default (100 or 1). */
   max?: number;
@@ -731,6 +734,7 @@ export class GraphBuilder {
       section = '',
       audience = 'everyone',
       toneMap = DEFAULT_TONE_MAP,
+      roles = DEFAULT_REPORT_ROLES,
       statusKey = '',
       max = 0,
       passMark = DEFAULT_PASS_MARK,
@@ -749,6 +753,7 @@ export class GraphBuilder {
         section,
         audience,
         toneMap,
+        roles,
         statusKey,
         max,
         passMark,

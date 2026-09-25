@@ -47,26 +47,40 @@ export const toneKey = (value: unknown): string =>
     .replace(/[\s-]+/g, '_')
 
 /**
- * Parses `TOKEN=tone, TOKEN=tone` into a lookup. Entries that name no known
- * tone are dropped rather than rejected: a typo in one entry must not blank the
- * whole card.
+ * Parses `KEY=value, KEY=value` into a lookup, keeping only values from
+ * `allowed`. Entries with an unknown value are dropped rather than rejected: a
+ * typo in one entry must not blank the whole card. Keys keep insertion order,
+ * which is what the inspector's chip editor writes back.
  */
-export const parseToneMap = (text: string | undefined): Record<string, OutputTone> => {
-  const map: Record<string, OutputTone> = {}
+export const parseKeyMap = <T extends string>(
+  text: string | undefined,
+  allowed: readonly T[]
+): Record<string, T> => {
+  const map: Record<string, T> = {}
   String(text ?? '')
     .split(/[,\n]/)
     .map((entry) => entry.trim())
     .filter(Boolean)
     .forEach((entry) => {
-      const [rawKey, rawTone] = entry.split('=')
+      const [rawKey, rawValue] = entry.split('=')
       const key = toneKey(rawKey)
-      const tone = String(rawTone ?? '')
+      const value = String(rawValue ?? '')
         .trim()
         .toLowerCase()
-      if (key && isTone(tone)) map[key] = tone
+      if (key && (allowed as readonly string[]).includes(value)) map[key] = value as T
     })
   return map
 }
+
+/** The inverse of `parseKeyMap`: the text form a node property stores. */
+export const formatKeyMap = (map: Record<string, string>): string =>
+  Object.entries(map)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ')
+
+/** Parses `TOKEN=tone, TOKEN=tone` into a lookup of known tones. */
+export const parseToneMap = (text: string | undefined): Record<string, OutputTone> =>
+  parseKeyMap(text, OUTPUT_TONES)
 
 /**
  * The tone for a verdict or chip value. Booleans look up `TRUE`/`FALSE`; strings
@@ -80,6 +94,65 @@ export const toneFor = (
   const map = parseToneMap(toneMap)
   if (typeof value === 'boolean') return map[value ? 'TRUE' : 'FALSE']
   return map[toneKey(value)]
+}
+
+/**
+ * How a `report` card draws one `KEY: value` line: the headline chip, an
+ * italic quotation, plain body text, a highlighted callout, a labelled row, or
+ * not at all.
+ */
+export type ReportRole = 'headline' | 'quote' | 'body' | 'callout' | 'row' | 'hidden'
+
+export const REPORT_ROLES: readonly ReportRole[] = [
+  'headline',
+  'quote',
+  'body',
+  'callout',
+  'row',
+  'hidden'
+]
+
+/**
+ * The roles the bundled prompts' keys get out of the box. An output node ships
+ * with this map; a facilitator edits it in the inspector when a prompt uses
+ * other words or another language.
+ */
+export const DEFAULT_REPORT_ROLES = [
+  'JUDGMENT=headline',
+  'CATEGORY=headline',
+  'RECOMMENDATION=headline',
+  'VERDICT=headline',
+  'EVIDENCE=quote',
+  'QUOTE=quote',
+  'REASON=body',
+  'REASONING=body',
+  'EXPLANATION=body',
+  'NEXT STEP=callout',
+  'NEXT STEPS=callout',
+  'GAP=callout',
+  'HINT=callout',
+  'SUGGESTION=callout',
+  'REVISION=callout',
+  'TIP=callout'
+].join(', ')
+
+/** Parses `KEY=role, KEY=role` into a lookup of known roles. */
+export const parseRoleMap = (text: string | undefined): Record<string, ReportRole> =>
+  parseKeyMap(text, REPORT_ROLES)
+
+/**
+ * The role a report line plays. `statusKey` is the pre-roles way of naming the
+ * headline line and still counts, so graphs saved with it render unchanged.
+ * A key nobody mapped is a labelled row.
+ */
+export const roleFor = (
+  key: string,
+  roles: string | undefined,
+  statusKey?: string
+): ReportRole => {
+  const wanted = toneKey(key)
+  if (statusKey && toneKey(statusKey.replace(/:$/, '')) === wanted) return 'headline'
+  return parseRoleMap(roles)[wanted] ?? 'row'
 }
 
 export type ReportEntry = { key: string; value: string }
@@ -127,10 +200,11 @@ const KNOWN_KEYS = new Set([
 /**
  * A `KEY: value` line as models actually print it: optional list marker or
  * heading hashes, optional markdown emphasis around the key, an ASCII or
- * full-width colon, then the value.
+ * full-width colon, then the value. Keys may use any letter, so a German prompt's
+ * `BEGRÜNDUNG:` counts.
  */
 const KEY_LINE =
-  /^(?:[-*+>#]+\s*|\d+[.)]\s+)?[*_`]*([A-Za-z][A-Za-z0-9 _/-]{0,40}?)[*_`]*\s*[:：]\s*(.*)$/
+  /^(?:[-*+>#]+\s*|\d+[.)]\s+)?[*_`]*(\p{L}[\p{L}\p{N} _/-]{0,40}?)[*_`]*\s*[:：]\s*(.*)$/u
 const NUMBER_LINE = /^-?\d+(?:[.,]\d+)?$/
 const FENCE_LINE = /^`{3,}/
 
@@ -176,17 +250,22 @@ export const parseReport = (text: unknown): ParsedReport => {
 }
 
 /**
- * The entry that becomes the headline chip: the one whose key matches
- * `statusKey`, or the first entry when no key is configured. A configured key
- * that is absent yields nothing, so a card never promotes the wrong line.
+ * The entry that becomes the headline chip: the first entry whose key has the
+ * `headline` role (or matches the legacy `statusKey`). When the map names no
+ * headline key at all, the first entry is promoted; when it names keys that are
+ * absent, nothing is, so a card never promotes the wrong line.
  */
 export const reportHeadline = (
   report: ParsedReport,
-  statusKey: string | undefined
+  roles: string | undefined,
+  statusKey?: string
 ): ReportEntry | undefined => {
-  const wanted = toneKey(statusKey?.replace(/:$/, ''))
-  if (!wanted) return report.entries[0]
-  return report.entries.find((entry) => toneKey(entry.key) === wanted)
+  const map = parseRoleMap(roles)
+  const legacy = toneKey(statusKey?.replace(/:$/, ''))
+  if (legacy) map[legacy] = 'headline'
+  const namesHeadline = Object.values(map).includes('headline')
+  if (!namesHeadline) return report.entries[0]
+  return report.entries.find((entry) => map[toneKey(entry.key)] === 'headline')
 }
 
 /** True for the array shape a `checklist` output carries. */
