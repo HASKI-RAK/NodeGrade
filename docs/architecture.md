@@ -67,6 +67,10 @@ REST persists, Socket.IO executes (ADR-0002).
   workspace-scoped `workflowId`. Progress comes back as `runStateChanged`,
   `nodeExecutionChanged`, `outputSet` and `graphFinished` events typed in
   `packages/lib/src/events/ServerEvents.ts`.
+- One deliberate crossing (ADR-0009): the run handler writes a `Run` record for every
+  completed or failed execution before it emits the terminal event, and REST
+  (`GET /api/workflows/:id/runs`, `PATCH .../runs/:runId/review`) reads and marks those
+  records for the Submissions inbox. The trace is never stored.
 
 ## Execution flow
 
@@ -78,6 +82,7 @@ sequenceDiagram
     participant EX as executeLgraph (core/Graph.ts)
     participant PR as ProviderRuntimeService
     participant EXT as Provider / worker
+    participant RS as RunService (Postgres)
 
     UI->>GW: runGraph { workflowId, graph, requestId }
     GW->>GH: handleRunGraph
@@ -88,6 +93,7 @@ sequenceDiagram
     EXT-->>PR: text / embedding
     EX-->>GH: node lifecycle + trace outputs
     GH-->>UI: nodeExecutionChanged, outputSet
+    GH->>RS: record run (answer, outputs, review flag) on completed | failed
     GH-->>UI: runStateChanged(completed | failed | cancelled)
 ```
 
@@ -95,6 +101,13 @@ Credentials never reach a node: nodes hold a `ModelCompletionRuntime` reference,
 runtime resolves a `ModelRef` (`providerKey` + model id) to a provider and its decrypted
 key (ADR-0005). Trace outputs pass through `core/trace-sanitizer.ts` before leaving the
 process. A socket disconnect aborts that client's runs.
+
+Model selection falls back to the facilitator's deployment default: after the graph is
+configured, `GraphHandlerService` substitutes the effective default into every LLM node
+without an explicit `model_ref`, leaving stored workflow content untouched. The
+participant catalog (`GET /api/models`) carries that default as `defaultModel` whenever
+it is runnable, and in production the local model worker is filtered from the
+participant catalog and refused at execution — facilitator views stay unfiltered.
 
 Two server-side gates sit on that path. Each provider carries a model policy, and
 `ProviderRuntimeService` applies it twice: the catalog `GET /api/models` returns only
@@ -144,6 +157,14 @@ PostgreSQL through Prisma 7; the client is generated into
   stored. Provider API keys are AES-256-GCM ciphertext in `Provider.apiKeyEnc`.
 - `LegacyGraph` and `Workflow.legacyPath` remain until the pre-workspace rows are retired
   (ADR-0004).
+- `Run` holds one row per completed or failed execution: the answer, the sanitized
+  outputs as `jsonb` (capped per value and per run), the derived review flag and the
+  participant's review mark. Rows cascade with their workspace and workflow and are
+  trimmed to the newest 200 per workflow (ADR-0009, SPEC-0020).
+- `WorkflowVersion` holds the states a workflow has left: captured before the save that
+  replaces them (coalesced to one per two minutes) and unconditionally before a reset or
+  a restore. Rows cascade with their workflow and are trimmed to the newest 20 per
+  workflow (SPEC-0021).
 
 ## Boot lifecycle
 
@@ -173,10 +194,24 @@ development Vite proxies `/api` to `http://localhost:5000`.
 
 ## Deployment topology
 
-`docker-compose.yml` runs three services: Postgres, the backend image
-(`node dist/src/main.js` after `prisma migrate deploy`), and an nginx image serving the
-built PWA as static files with SPA fallback. The nginx layer does not proxy the API — the
-browser reaches the backend at the URL in the runtime config file.
+`docker-compose.yml` runs four services: Postgres, the sentence-transformer worker, the
+backend image (`node dist/src/main.js` after `prisma migrate deploy`), and an nginx image
+serving the built PWA as static files with SPA fallback. The nginx layer proxies `/api`,
+`/socket.io`, `/lti`, and `/health` to the backend service, keeping browser traffic on the
+frontend's public origin. The production runtime config therefore uses the relative
+`/api` URL. `tools/stack.mjs` (`yarn dev:up`) drives that file, so a developer runs the
+deployed topology with the real models by the same verbs as the debug stack.
+
+`docker-compose.prod.yml` is that topology as deployed: the same four services, but the
+backend, frontend and worker come as prebuilt images from GHCR
+(`.github/workflows/deploy.yml` builds and pushes them on every push to `main`, then
+calls the Portainer stack webhook), Traefik terminates TLS in front of the frontend's
+nginx, and nothing else publishes a port. Configuration arrives from the Portainer stack
+environment twice over: `${VAR}` substitution for what the compose file composes
+(hostname, image tag, Traefik names, database URL) and a Portainer-written `stack.env`
+that the backend loads whole, so a new backend variable needs no compose change. With
+two proxies in the path the backend runs with `TRUST_PROXY=2` so throttles still see the
+client address.
 
 `docker-compose.debug.yml` plus `tools/debug/stack.mjs` reproduce the whole stack
 deterministically on the 15xxx/18000 port range with a fake model worker, a seeded demo

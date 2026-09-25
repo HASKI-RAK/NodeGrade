@@ -6,7 +6,10 @@ services:
       POSTGRES_PASSWORD: nodegrade
       POSTGRES_DB: nodegrade
     ports:
-      - '5432:5432'
+      # Only the host mapping is configurable; services reach each other on the
+      # Compose network. 5432 is the port a developer's own PostgreSQL already
+      # holds, and a clash there stops the whole stack from starting.
+      - '${NODEGRADE_DATABASE_PORT:-5432}:5432'
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +17,43 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  models:
+    build:
+      context: ./models
+      dockerfile: Dockerfile
+    environment:
+      # Multilingual and MIT licensed, so every deployment may run the default
+      # unchanged. Point it elsewhere once you have read that model's licence:
+      # README.md, "Choosing a different embedding model". See
+      # docs/semantic-equivalence-calibration.md for why this one.
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      EMBEDDING_MAX_SEQ_LENGTH: ${EMBEDDING_MAX_SEQ_LENGTH:-512}
+      # Only for task-conditioned models, e.g. text-matching on jina-v3.
+      EMBEDDING_TASK: ${EMBEDDING_TASK:-}
+      # Executes Python from the model repository in this process. Off unless
+      # the chosen model requires it and that repository is trusted.
+      EMBEDDING_TRUST_REMOTE_CODE: ${EMBEDDING_TRUST_REMOTE_CODE:-false}
+      # Loaded on first /entailment request, not at boot. Set empty to run
+      # without the stage; text/semantic-equivalence then falls back to cosine.
+      NLI_MODEL: ${NLI_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
+    ports:
+      - '${NODEGRADE_MODELS_PORT:-8002}:8002'
+    volumes:
+      - model_cache:/models-cache
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=5)"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      # bge-m3 is 2.3 GB: the first boot downloads it before /health answers.
+      start_period: 600s
 
   backend:
     build:
@@ -23,10 +63,14 @@ services:
       NODE_ENV: production
       PORT: '5000'
       DATABASE_URL: postgresql://nodegrade:nodegrade@db:5432/nodegrade?schema=public
-      FRONTEND_URL: http://localhost:5173
-      CORS_ORIGIN: http://localhost:5173,http://localhost:8080
-      MODEL_WORKER_URL: http://models:8000
-      SIMILARITY_WORKER_URL: http://models:8002
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      COOKIE_INSECURE: ${COOKIE_INSECURE:-true}
+      # Optional external OpenAI-compatible text-generation endpoint offered as
+      # the `local` provider. Empty by default: the bundled `models` service is
+      # the sentence-transformer similarity worker on 8002, not a text model.
+      MODEL_WORKER_URL: ${MODEL_WORKER_URL:-}
+      SIMILARITY_WORKER_URL: ${SIMILARITY_WORKER_URL:-http://models:8002}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       KATALYST_API_KEY: ${KATALYST_API_KEY:-}
@@ -36,9 +80,11 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     ports:
-      - '5000:5000'
+      - '${NODEGRADE_BACKEND_PORT:-5000}:5000'
     depends_on:
       db:
+        condition: service_healthy
+      models:
         condition: service_healthy
 
   frontend:
@@ -46,9 +92,10 @@ services:
       context: .
       dockerfile: packages/frontend/Dockerfile
     ports:
-      - '8080:80'
+      - '${NODEGRADE_FRONTEND_PORT:-8080}:80'
     depends_on:
       - backend
 
 volumes:
   db_data:
+  model_cache:

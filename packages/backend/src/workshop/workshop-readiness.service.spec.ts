@@ -43,6 +43,7 @@ const catalog = (overrides: Partial<ModelCatalog> = {}): ModelCatalog => ({
       status: 'AVAILABLE',
     },
   ],
+  defaultModel: null,
   ...overrides,
 });
 
@@ -139,6 +140,65 @@ describe('WorkshopReadinessService', () => {
     expect(await detailOf('models')).toMatchObject({
       status: 'FAIL',
       detail: expect.stringContaining('1 model node'),
+    });
+  });
+
+  it('passes unconfigured model nodes when the deployment default covers them', async () => {
+    const content = JSON.parse(JSON.stringify(waieAssessmentTemplate.content));
+    for (const node of content.nodes.filter(
+      (node: { type: string }) => node.type === 'models/llm',
+    ))
+      node.properties = {
+        model_ref: null,
+        needs_model_selection: true,
+      };
+    findUnique.mockResolvedValue(
+      workshopRow({
+        templateRevision: {
+          id: 'rev-defaulted',
+          name: 'Defaulted workflow',
+          content: JSON.stringify(content),
+        },
+      }),
+    );
+    catalogOf.mockResolvedValue(
+      catalog({
+        defaultModel: { providerKey: 'openrouter', modelId: 'openrouter/free' },
+      }),
+    );
+
+    expect(await detailOf('models')).toMatchObject({
+      status: 'PASS',
+      detail: expect.stringContaining('default model'),
+    });
+  });
+
+  it('still fails unconfigured model nodes when the default is unavailable', async () => {
+    const content = JSON.parse(JSON.stringify(waieAssessmentTemplate.content));
+    content.nodes.find(
+      (node: { type: string }) => node.type === 'models/llm',
+    ).properties = {
+      model_ref: null,
+      needs_model_selection: true,
+    };
+    findUnique.mockResolvedValue(
+      workshopRow({
+        templateRevision: {
+          id: 'rev-defaulted-stale',
+          name: 'Stale default workflow',
+          content: JSON.stringify(content),
+        },
+      }),
+    );
+    catalogOf.mockResolvedValue(
+      catalog({
+        defaultModel: { providerKey: 'openrouter', modelId: 'vanished' },
+      }),
+    );
+
+    expect(await detailOf('models')).toMatchObject({
+      status: 'FAIL',
+      detail: expect.stringContaining('model node'),
     });
   });
 

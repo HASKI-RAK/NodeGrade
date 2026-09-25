@@ -10,6 +10,12 @@
   ],
   "scripts": {
     "dev": "yarn workspaces foreach -i --parallel --verbose --all run dev",
+    "dev:up": "node tools/stack.mjs up",
+    "dev:serve": "node tools/stack.mjs serve",
+    "dev:down": "node tools/stack.mjs down",
+    "dev:status": "node tools/stack.mjs status",
+    "dev:logs": "node tools/stack.mjs logs",
+    "dev:reset": "node tools/stack.mjs reset",
     "debug:up": "node tools/debug/stack.mjs up",
     "debug:serve": "node tools/debug/stack.mjs serve",
     "debug:down": "node tools/debug/stack.mjs down",

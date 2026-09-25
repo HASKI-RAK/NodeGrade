@@ -2,7 +2,8 @@ import {
   compactNodeWidgets,
   LiteGraph,
   loadLegacyWidgetProperties,
-  type ModelCatalogEntry
+  type ModelCatalogEntry,
+  type ModelRef
 } from '@haski/ta-lib'
 import {
   Alert,
@@ -30,12 +31,15 @@ import { EditorRail } from '@/components/editor/EditorRail'
 import { EditorToolbar } from '@/components/editor/EditorToolbar'
 import { NodeInspector } from '@/components/editor/NodeInspector'
 import { NodePalette } from '@/components/editor/NodePalette'
+import { WorkflowHistoryDialog } from '@/components/editor/WorkflowHistoryDialog'
 import TaskView, { type TaskViewHandle } from '@/components/TaskView'
 import { useAutosave } from '@/hooks/useAutosave'
 import { useGraphHistory } from '@/hooks/useGraphHistory'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useSocket } from '@/hooks/useSocket'
+import { useSubmissions } from '@/hooks/useSubmissions'
 import { useWorkflowForm } from '@/hooks/useWorkflowForm'
+import { DEFAULT_PREVIEW_LOCALE, previewMessages } from '@/i18n/preview'
 import { workspaceStore } from '@/store/workspaceStore'
 import { getConfig } from '@/utils/config'
 import { configureDebugSession } from '@/utils/debugBridge'
@@ -98,8 +102,10 @@ export const Editor = () => {
   )
   const [railOpen, setRailOpen] = useState(true)
   const [developerTools, setDeveloperTools] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [blocks, setBlocks] = useState<WorkflowTemplate[]>([])
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([])
+  const [defaultModel, setDefaultModel] = useState<ModelRef | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [connectionSuggestions, setConnectionSuggestions] = useState<
     ConnectionSuggestion[]
@@ -139,8 +145,14 @@ export const Editor = () => {
   useEffect(() => {
     void api
       .models()
-      .then((catalog) => setModelCatalog(catalog.models))
-      .catch(() => setModelCatalog([]))
+      .then((catalog) => {
+        setModelCatalog(catalog.models)
+        setDefaultModel(catalog.defaultModel)
+      })
+      .catch(() => {
+        setModelCatalog([])
+        setDefaultModel(null)
+      })
   }, [])
 
   useEffect(() => {
@@ -159,7 +171,7 @@ export const Editor = () => {
     enabled: workflow !== null && !student
   })
   const { history, canUndo, canRedo } = useGraphHistory(lgraph, canvas)
-  const { socket, connectionStatus, runGraph, cancelRun } = useSocket({
+  const { socket, connectionStatus, connected, runGraph, cancelRun } = useSocket({
     workflowId,
     workspaceToken: token,
     lgraph
@@ -174,8 +186,40 @@ export const Editor = () => {
     runId,
     runState,
     trace,
-    beginAttempt
+    failureMessage,
+    snackbar,
+    beginAttempt,
+    failAttempt,
+    cancelAttempt,
+    cancelledRunId,
+    acknowledgeCancelledRun,
+    handleSnackbarClose
   } = useServerEvents({ socket, lgraph })
+  const runMessages = previewMessages[DEFAULT_PREVIEW_LOCALE]
+
+  // The Submissions inbox is the editor's; a student launch shares the workspace with
+  // every other launch of the same resource link and must not list them (SPEC-0020/FR-007).
+  const submissions = useSubmissions({
+    workflowId,
+    token,
+    enabled: workflow !== null && !student,
+    runId,
+    runState
+  })
+  const submissionsProps = useMemo(
+    () => ({
+      runs: submissions.runs,
+      summary: submissions.summary,
+      filter: submissions.filter,
+      loading: submissions.loading,
+      error: submissions.error,
+      onFilterChange: submissions.setFilter,
+      onRefresh: submissions.refresh,
+      onLoadDetail: submissions.loadDetail,
+      onSetReview: submissions.setReview
+    }),
+    [submissions]
+  )
 
   // The preview poses the question the graph currently holds, so an inspector edit shows
   // up in the Test tab without a run in between (SPEC-0007/FR-003).
@@ -286,6 +330,33 @@ export const Editor = () => {
     })
   }, [showPreview])
 
+  // A submit with a dead socket throws synchronously: report it as a failed
+  // attempt so the Test tab shows the error instead of dropping it.
+  const handleSubmit = useCallback(
+    (answer: string) => {
+      try {
+        beginAttempt(runGraph({ answer }))
+      } catch {
+        failAttempt(runMessages.runDisconnected)
+      }
+    },
+    [beginAttempt, failAttempt, runGraph, runMessages]
+  )
+
+  // Cancelling a queued attempt has no run id yet; the attempt is abandoned
+  // locally and a belatedly assigned run id is cancelled through the effect below.
+  const handleCancel = useCallback(() => {
+    cancelAttempt(runMessages.runCancelled)
+    if (runId) cancelRun(runId)
+  }, [cancelAttempt, cancelRun, runId])
+
+  useEffect(() => {
+    if (cancelledRunId) {
+      cancelRun(cancelledRunId)
+      acknowledgeCancelledRun()
+    }
+  }, [acknowledgeCancelledRun, cancelRun, cancelledRunId])
+
   const selectTraceNode = useCallback(
     (
       nodeId: number,
@@ -337,6 +408,30 @@ export const Editor = () => {
     setSelection([])
     setWorkflow(latest)
   }, [autosave, history, lgraph, token, workflowId])
+
+  /**
+   * Loads a stored version back into the editor (SPEC-0021/FR-003).
+   *
+   * The pending edits are saved first so they become a history entry of their own:
+   * the server snapshots what it holds, and what it holds should be what the user
+   * sees. A save that conflicts is ignored — the restore overwrites either way.
+   */
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      await autosave.saveNow()
+      const restored = await api.restoreWorkflowVersion(token, workflowId, versionId)
+      const content = restored.content ?? '{"nodes":[]}'
+      const parsed = parseWorkflow(content)
+      autosave.replaceWithLatest(content, restored.version)
+      prepareGraph(lgraph, parsed)
+      history.clear()
+      setSelection([])
+      setWorkflow(restored)
+      setHistoryOpen(false)
+      setNotice('Earlier version restored.')
+    },
+    [autosave, history, lgraph, token, workflowId]
+  )
 
   const resetToTemplate = useCallback(async () => {
     await api.resetWorkflow(token, workflowId)
@@ -454,8 +549,10 @@ export const Editor = () => {
       sx={{
         height: '100dvh',
         display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr)',
         gridTemplateRows: 'auto minmax(0, 1fr)',
-        bgcolor: '#f6f7fb'
+        bgcolor: 'background.default',
+        overflow: 'hidden'
       }}
     >
       <EditorToolbar
@@ -479,6 +576,7 @@ export const Editor = () => {
         onRun={run}
         onPreview={showPreview}
         onSaveAs={saveAs}
+        onHistory={() => setHistoryOpen(true)}
         onImport={importWorkflow}
         onExport={exportWorkflow}
         onReset={resetToTemplate}
@@ -500,7 +598,7 @@ export const Editor = () => {
           workflowId
         }}
       />
-      <Box sx={{ minHeight: 0, display: 'flex', position: 'relative' }}>
+      <Box sx={{ minWidth: 0, minHeight: 0, display: 'flex', position: 'relative' }}>
         {!student && paletteOpen && (
           <NodePalette
             graph={lgraph}
@@ -574,33 +672,56 @@ export const Editor = () => {
               ref={taskView}
               question={workflowForm.question || question}
               questionImage={image}
-              onSubmit={(answer) => beginAttempt(runGraph({ answer }))}
+              onSubmit={handleSubmit}
               outputs={outputs}
               constraints={answerConstraints}
               disabled={attemptState === 'running' || runState === 'queued'}
               runId={runId}
               runState={runState}
               trace={trace}
-              onCancel={() => runId && cancelRun(runId)}
+              runError={failureMessage}
+              connected={connected}
+              progress={processingPercentage}
+              onCancel={handleCancel}
               onSelectTraceNode={selectTraceNode}
               onSelectOutputNode={student ? undefined : selectTraceNode}
+              submissions={student ? undefined : submissionsProps}
             />
           ) : (
             <NodeInspector
               selection={selection}
               history={history}
               modelCatalog={modelCatalog}
+              defaultModel={defaultModel}
               onOpenBlock={openBlock}
             />
           )}
         </EditorRail>
       </Box>
+      <WorkflowHistoryDialog
+        open={historyOpen}
+        currentVersion={workflow.version}
+        onClose={() => setHistoryOpen(false)}
+        onLoad={() => api.workflowVersions(workflowId, token)}
+        onRestore={restoreVersion}
+        onDelete={(versionId) => api.deleteWorkflowVersion(token, workflowId, versionId)}
+        onClear={() => api.clearWorkflowVersions(token, workflowId)}
+      />
       <Snackbar
         open={!!notice}
         autoHideDuration={5000}
         onClose={() => setNotice(null)}
         message={notice}
       />
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={handleSnackbarClose}
+      >
+        <Alert severity={snackbar.severity} onClose={handleSnackbarClose}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
       <Box sx={{ display: 'none' }} data-can-undo={canUndo} data-can-redo={canRedo} />
     </Box>
   )

@@ -5,6 +5,7 @@ import { ConcatObject } from './ConcatObject'
 import { ConcatString } from './ConcatString'
 import { CosineSimilarity } from './CosineSimilarity'
 import { DocumentLoader } from './DocumentLoader'
+import { ExtractLineNode } from './ExtractLineNode'
 import { ExtractNumberNode } from './ExtractNumberNode'
 import { ImageNode } from './ImageNode'
 import { KeywordCheckNode } from './KeywordCheckNode'
@@ -19,8 +20,10 @@ import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
 import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
+import { ReviewFlagNode } from './ReviewFlagNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
+import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
 import { SentenceTransformer } from './SentenceTransformer'
 import { StringArrayToString } from './StringArrayToString'
 import { StringsToArray } from './StringToArray'
@@ -52,7 +55,9 @@ export {
   Precision,
   PromptMessage,
   QuestionNode,
+  ReviewFlagNode,
   Route,
+  SemanticEquivalenceNode,
   SentenceTransformer,
   SampleSolutionNode,
   Textfield,
@@ -63,6 +68,7 @@ export {
   KeywordCheckNode,
   TFIDF,
   ExtractNumberNode,
+  ExtractLineNode,
   MathOperationNode,
   StringArrayToString,
   StringsToArray
@@ -70,11 +76,63 @@ export {
 
 export {
   LGraphNode,
+  CANVAS_THEME,
   CATEGORY_COLORS,
   LINK_TYPE_COLORS,
-  LINK_TYPE_SHAPES
+  LINK_TYPE_SHAPES,
+  getPillLabel,
+  getPortStyle
 } from './litegraph-extensions/LGraphNode'
+export {
+  assertPromptContent,
+  DEFAULT_PROMPT_ROLE,
+  normalizePromptMessages,
+  PromptMessageError
+} from './promptMessages'
+export {
+  applyCanvasTheme,
+  type CanvasThemeOptions,
+  createGridPattern,
+  createGridTile,
+  GRID_CELL_SIZE,
+  GRID_TILE_SIZE
+} from './litegraph-extensions/canvasTheme'
 export * from './NodeDefinition'
+export {
+  detectPolarity,
+  extractNumbers,
+  hardCheck,
+  hasAmbiguousNumber,
+  normalizeAnswer,
+  splitIntoSpans,
+  type HardCheck,
+  type HardCheckOptions,
+  type HardCheckReason,
+  type Polarity
+} from './utils/semanticEquivalence'
+export {
+  cosineSimilarity,
+  FALLBACK_SIMILARITY_WORKER_URL,
+  fetchEmbedding,
+  fetchEntailment,
+  fetchSimilarities,
+  resolveSimilarityWorkerUrl,
+  type EntailmentLabel,
+  type EntailmentScores
+} from './utils/similarityWorker'
+export {
+  DEFAULT_HIGH_THRESHOLD,
+  DEFAULT_LOW_THRESHOLD,
+  type EquivalenceReason
+} from './SemanticEquivalenceNode'
+export { DEFAULT_KEYWORD_THRESHOLD } from './KeywordCheckNode'
+export {
+  DEFAULT_FLAG_PATTERN,
+  DEFAULT_REASON_PREFIX,
+  evaluateReviewSignal,
+  type ReviewSignal
+} from './ReviewFlagNode'
+export { DEFAULT_LINE_PREFIX, extractLine } from './ExtractLineNode'
 export {
   compactNodeWidgets,
   getDefinedNodeConstructors,
@@ -84,14 +142,17 @@ export {
 } from './NodeDefinitionRegistry'
 export {
   applyWrappedText,
+  drawSingleLinePreview,
   drawWrappedText,
   fitLinesToBox,
   isInsideTextArea,
   readTextValue,
   startInlineEdit,
   wrapTextLines,
+  wrappedTextMinHeight,
   wrappedTextTop,
   WRAPPED_TEXT_COLOR,
   WRAPPED_TEXT_FONT,
+  WRAPPED_TEXT_FONT_SIZE,
   WRAPPED_TEXT_LINE_HEIGHT
 } from './widgets/WrappedTextPreview'

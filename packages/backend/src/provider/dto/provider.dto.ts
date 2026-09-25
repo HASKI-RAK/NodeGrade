@@ -39,6 +39,21 @@ export class ModelPolicyDto {
   allowedModels?: string[];
 }
 
+export class DeploymentSettingsDto {
+  /** Provider-qualified default model (ModelRef). Both null clears the default. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(512)
+  providerKey?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(512)
+  modelId?: string | null;
+}
+
 export class ExecutionLimitsDto {
   @IsInt()
   @Min(1)

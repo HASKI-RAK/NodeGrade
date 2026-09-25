@@ -6,9 +6,10 @@ import {
 import type { SerializedGraph } from '@haski/ta-lib';
 import type { BundledTemplate } from './bundled-template.js';
 import { WORKSHOP_TEMPLATES } from './index.js';
-import { workshopClassificationDeadlockTemplate } from './workshop-classification-deadlock.js';
-import { workshopEvidenceStrategyTemplate } from './workshop-evidence-strategy.js';
-import { workshopRubricRaceConditionTemplate } from './workshop-rubric-race-condition.js';
+import { validationReviewBlock } from './validation-review-block.js';
+import { workshopDifferentMistakesTemplate } from './workshop-different-mistakes.js';
+import { workshopSameScoreDifferentGapsTemplate } from './workshop-same-score-different-gaps.js';
+import { workshopWordsVsUnderstandingTemplate } from './workshop-words-vs-understanding.js';
 
 type Link = [number, number, number, number, number, string];
 
@@ -48,9 +49,13 @@ describe('workshop templates', () => {
         JSON.parse(JSON.stringify(template.content)) as SerializedGraph,
       );
 
-      for (const [linkId, originId, originSlot, targetId, targetSlot] of linksOf(
-        template,
-      )) {
+      for (const [
+        linkId,
+        originId,
+        originSlot,
+        targetId,
+        targetSlot,
+      ] of linksOf(template)) {
         const origin = graph.getNodeById(originId);
         const target = graph.getNodeById(targetId);
         expect(origin?.outputs?.[originSlot]?.links).toContain(linkId);
@@ -71,7 +76,9 @@ describe('workshop templates', () => {
         'basic/textfield',
       ]);
       const fed = new Set(
-        linksOf(template).map(([, , , targetId, targetSlot]) => `${targetId}:${targetSlot}`),
+        linksOf(template).map(
+          ([, , , targetId, targetSlot]) => `${targetId}:${targetSlot}`,
+        ),
       );
       for (const node of template.content.nodes) {
         if (sourceTypes.has(node.type)) continue;
@@ -80,6 +87,9 @@ describe('workshop templates', () => {
           // The LLM node's second input is the alternative `messages` list; the
           // workshop graphs use the singular `message` slot only.
           if (node.type === 'models/llm' && slotIndex === 1) return;
+          // The second strings-to-array input is optional: a one-element list
+          // leaves it empty, as the answer-classifier block does.
+          if (node.type === 'utils/strings-to-array' && slotIndex === 1) return;
           expect(fed.has(`${node.id}:${slotIndex}`)).toBe(true);
           expect(input.link).not.toBeNull();
         });
@@ -122,8 +132,41 @@ describe('workshop templates', () => {
     },
   );
 
-  describe('workflow 1: evidence comparison', () => {
-    const template = workshopEvidenceStrategyTemplate;
+  // The presentation walks the same loop in every graph: a model recommends, a
+  // review flag turns that into a verdict, the Submissions inbox counts it
+  // (SPEC-0020/FR-003). One flag per graph keeps the story readable.
+  it.each(
+    [...WORKSHOP_TEMPLATES, validationReviewBlock].map(
+      (t) => [t.slug, t] as const,
+    ),
+  )('%s carries exactly one review flag fed by a model', (_slug, template) => {
+    const flags = nodesOfType(template, 'output/review-flag');
+    expect(flags).toHaveLength(1);
+    const [flag] = flags as [Node];
+    const feeding = linksOf(template).find(
+      ([, , , targetId, targetSlot]) =>
+        targetId === flag.id && targetSlot === 0,
+    );
+    expect(feeding).toBeDefined();
+    const [, originId] = feeding as Link;
+    expect(template.content.nodes.find((n) => n.id === originId)?.type).toBe(
+      'models/llm',
+    );
+    expect(flag.properties).toEqual(
+      expect.objectContaining({
+        label: 'Needs a tutor?',
+        reasonPrefix: 'REASON:',
+      }),
+    );
+  });
+
+  describe('workflow 1: words versus understanding', () => {
+    const template = workshopWordsVsUnderstandingTemplate;
+
+    it('flags only the judgment the prompt reserves for "cannot tell"', () => {
+      const [flag] = nodesOfType(template, 'output/review-flag');
+      expect(flag?.properties?.flagPattern).toBe('JUDGMENT: UNCLEAR');
+    });
 
     it('keeps deterministic evidence out of the model prompt', () => {
       const [llm] = nodesOfType(template, 'models/llm');
@@ -142,47 +185,121 @@ describe('workshop templates', () => {
       const outputs = nodesOfType(template, 'output/output');
       expect(outputs.map((node) => node.properties?.label)).toEqual(
         expect.arrayContaining([
-          'Vocabulary found',
-          'Vocabulary not found',
-          'Reference similarity (not a grade)',
-          'Conceptual diagnosis',
+          'Expected words found',
+          'Expected words not found',
+          'Similarity to reference — not a grade',
+          'Conceptual assessment',
         ]),
       );
-      expect(outputs.every((node) => node.properties?.type === 'text')).toBe(true);
+      expect(outputs.every((node) => node.properties?.type === 'text')).toBe(
+        true,
+      );
+    });
+
+    it('lets the assessor accept everyday wording instead of the expected words', () => {
+      const instructions = nodesOfType(template, 'basic/textfield').find(
+        (node) => titleOf(node) === 'Assessment instructions',
+      ) as Node;
+      const text = String(instructions.properties?.value);
+      expect(text).toContain(
+        'Do not require the words "rotation", "axis", or "sunlight"',
+      );
+      expect(text).toContain(
+        'JUDGMENT: CORRECT, INCOMPLETE, MISCONCEPTION, or UNCLEAR',
+      );
     });
   });
 
-  describe('workflow 2: rubric scoring', () => {
-    const template = workshopRubricRaceConditionTemplate;
+  describe('workflow 2: same score, different gaps', () => {
+    const template = workshopSameScoreDifferentGapsTemplate;
 
-    it('runs one grader per criterion plus one feedback model', () => {
+    it('runs one grader per criterion plus one feedback and one review model', () => {
       const llms = nodesOfType(template, 'models/llm').map(titleOf);
-      expect(llms).toHaveLength(5);
+      expect(llms).toHaveLength(6);
       expect(llms).toEqual(
         expect.arrayContaining([
-          'Read-modify-write grader model',
-          'Interleaving grader model',
-          'Lost update grader model',
-          'Mitigation grader model',
+          'Evaporation grader model',
+          'Condensation grader model',
+          'Rain grader model',
+          'Collection grader model',
           'Feedback model',
+          'Review model',
         ]),
+      );
+    });
+
+    it('gives the reviewer every report, the draft feedback and the answer', () => {
+      const review = nodesOfType(template, 'models/llm').find(
+        (node) => titleOf(node) === 'Review model',
+      ) as Node;
+      const upstream = upstreamOf(template, review);
+      const graders = nodesOfType(template, 'models/llm').filter((node) =>
+        titleOf(node).endsWith('grader model'),
+      );
+      expect(graders).toHaveLength(4);
+      for (const grader of graders) expect(upstream.has(grader.id)).toBe(true);
+      const feedback = nodesOfType(template, 'models/llm').find(
+        (node) => titleOf(node) === 'Feedback model',
+      ) as Node;
+      expect(upstream.has(feedback.id)).toBe(true);
+      const answer = nodesOfType(template, 'input/answer')[0] as Node;
+      expect(upstream.has(answer.id)).toBe(true);
+      const instructions = nodesOfType(template, 'basic/textfield').find(
+        (node) => titleOf(node) === 'Review instructions',
+      ) as Node;
+      expect(String(instructions.properties?.value)).toContain(
+        'RECOMMENDATION: EDUCATOR_REVIEW or KEEP_AS_DRAFT',
       );
     });
 
     it('adds the four criterion points in the graph, not in a model', () => {
       const extractors = nodesOfType(template, 'preprocessing/extract-number');
-      const maths = nodesOfType(template, 'math/math-operation');
-      expect(extractors).toHaveLength(4);
-      expect(maths).toHaveLength(3);
-      expect(maths.every((node) => node.properties?.operation === '+')).toBe(true);
-
-      const total = maths.find((node) => titleOf(node) === 'Total points') as Node;
-      const upstream = upstreamOf(template, total);
-      for (const extractor of extractors) expect(upstream.has(extractor.id)).toBe(true);
-      const scoreOutput = nodesOfType(template, 'output/output').find(
-        (node) => node.properties?.type === 'score',
+      const sums = nodesOfType(template, 'math/math-operation').filter(
+        (node) => node.properties?.operation === '+',
       );
-      expect(scoreOutput?.properties?.label).toBe('Proposed rubric points / 100');
+      expect(extractors).toHaveLength(4);
+      expect(sums).toHaveLength(3);
+
+      const total = sums.find(
+        (node) => titleOf(node) === 'Total points',
+      ) as Node;
+      const upstream = upstreamOf(template, total);
+      for (const extractor of extractors)
+        expect(upstream.has(extractor.id)).toBe(true);
+      // Eight points, not a percentage: shown as text so the score card's pass
+      // threshold and progress bar (both on a 0-100 scale) do not misread it.
+      const totalOutput = nodesOfType(template, 'output/output').find(
+        (node) => node.properties?.label === 'Proposed points / 8',
+      ) as Node;
+      expect(totalOutput.properties?.type).toBe('text');
+      expect(upstreamOf(template, totalOutput).has(total.id)).toBe(true);
+    });
+
+    it('shows the learner a percentage score card derived from the total', () => {
+      const score = nodesOfType(template, 'output/output').find(
+        (node) => node.properties?.label === 'Score',
+      ) as Node;
+      expect(score.properties?.type).toBe('score');
+      const upstream = upstreamOf(template, score);
+      const total = nodesOfType(template, 'math/math-operation').find(
+        (node) => titleOf(node) === 'Total points',
+      ) as Node;
+      expect(upstream.has(total.id)).toBe(true);
+      // The divisor is a visible number node so the weighting activity can raise it.
+      const maximum = nodesOfType(template, 'basic/number').find(
+        (node) => titleOf(node) === 'Maximum points',
+      ) as Node;
+      expect(maximum.properties?.value).toBe(8);
+      expect(upstream.has(maximum.id)).toBe(true);
+      const operations = nodesOfType(template, 'math/math-operation')
+        .filter((node) => upstream.has(node.id))
+        .map((node) => node.properties?.operation);
+      expect(operations).toEqual(expect.arrayContaining(['/', '*']));
+      // No model sits between the rubric points and the score.
+      const models = nodesOfType(template, 'models/llm').filter(
+        (node) => !titleOf(node).endsWith('grader model'),
+      );
+      for (const model of models) expect(upstream.has(model.id)).toBe(false);
     });
 
     it('feeds the feedback model every criterion report but not the total', () => {
@@ -190,9 +307,10 @@ describe('workshop templates', () => {
         (node) => titleOf(node) === 'Feedback model',
       ) as Node;
       const upstream = upstreamOf(template, feedback);
-      const graders = nodesOfType(template, 'models/llm').filter(
-        (node) => node.id !== feedback.id,
+      const graders = nodesOfType(template, 'models/llm').filter((node) =>
+        titleOf(node).endsWith('grader model'),
       );
+      expect(graders).toHaveLength(4);
       for (const grader of graders) expect(upstream.has(grader.id)).toBe(true);
       for (const math of nodesOfType(template, 'math/math-operation'))
         expect(upstream.has(math.id)).toBe(false);
@@ -204,15 +322,17 @@ describe('workshop templates', () => {
       );
       expect(rubrics).toHaveLength(4);
       for (const rubric of rubrics) {
-        expect(String(rubric.properties?.value)).toContain(
+        const text = String(rubric.properties?.value);
+        expect(text).toContain(
           'FIRST LINE of your response must contain only the awarded integer',
         );
+        expect(text).toContain('allowed values: 0, 1, 2');
       }
     });
   });
 
-  describe('workflow 3: classification, policy feedback, review', () => {
-    const template = workshopClassificationDeadlockTemplate;
+  describe('workflow 3: different mistakes, different help', () => {
+    const template = workshopDifferentMistakesTemplate;
 
     const llm = (title: string): Node =>
       nodesOfType(template, 'models/llm').find(
@@ -233,28 +353,62 @@ describe('workshop templates', () => {
       const policy = nodesOfType(template, 'basic/textfield').find(
         (node) => titleOf(node) === 'Feedback policy (educator-owned)',
       ) as Node;
-      expect(String(policy.properties?.value)).toContain('CORRECT_MECHANISM:');
-      expect(upstreamOf(template, llm('Feedback model')).has(policy.id)).toBe(true);
-      expect(upstreamOf(template, llm('Review model')).has(policy.id)).toBe(true);
-      expect(upstreamOf(template, llm('Classification model')).has(policy.id)).toBe(
-        false,
+      const text = String(policy.properties?.value);
+      for (const category of [
+        'CORRECT',
+        'INCOMPLETE',
+        'MISCONCEPTION',
+        'TOO_VAGUE_OR_IRRELEVANT',
+        'CONTRADICTORY',
+      ])
+        expect(text).toContain(`${category}:`);
+      expect(upstreamOf(template, llm('Feedback model')).has(policy.id)).toBe(
+        true,
       );
+      expect(upstreamOf(template, llm('Review model')).has(policy.id)).toBe(
+        true,
+      );
+      expect(
+        upstreamOf(template, llm('Classification model')).has(policy.id),
+      ).toBe(false);
     });
 
     it('gives the reviewer the original student answer, not only the draft', () => {
       const answer = nodesOfType(template, 'input/answer')[0] as Node;
-      expect(upstreamOf(template, llm('Review model')).has(answer.id)).toBe(true);
+      expect(upstreamOf(template, llm('Review model')).has(answer.id)).toBe(
+        true,
+      );
     });
 
-    it('publishes diagnosis, draft feedback and review recommendation', () => {
-      const labels = nodesOfType(template, 'output/output').map(
-        (node) => node.properties?.label,
-      );
-      expect(labels).toEqual([
-        'Answer diagnosis',
-        'Draft feedback (not yet approved)',
+    it('publishes answer type, diagnosis, draft feedback and review recommendation', () => {
+      const outputs = nodesOfType(template, 'output/output');
+      expect(outputs.map((node) => node.properties?.label)).toEqual([
+        'Answer type',
+        'Diagnosis',
+        'Draft student feedback',
         'Review recommendation',
       ]);
+      expect(outputs.map((node) => node.properties?.type)).toEqual([
+        'classifications',
+        'text',
+        'text',
+        'text',
+      ]);
+    });
+
+    it('turns the CATEGORY line into the classification chip without a second model', () => {
+      const chip = nodesOfType(template, 'output/output').find(
+        (node) => node.properties?.label === 'Answer type',
+      ) as Node;
+      const upstream = upstreamOf(template, chip);
+      const [line] = nodesOfType(template, 'text/extract-line') as [Node];
+      expect(line.properties?.prefix).toBe('CATEGORY:');
+      expect(upstream.has(line.id)).toBe(true);
+      const [list] = nodesOfType(template, 'utils/strings-to-array') as [Node];
+      expect(upstream.has(list.id)).toBe(true);
+      expect(upstream.has(llm('Classification model').id)).toBe(true);
+      expect(upstream.has(llm('Feedback model').id)).toBe(false);
+      expect(upstream.has(llm('Review model').id)).toBe(false);
     });
   });
 });

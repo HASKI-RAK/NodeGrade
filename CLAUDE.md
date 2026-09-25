@@ -23,6 +23,8 @@ Database schema + migrations   packages/backend/prisma/
 Specifications                 specs/SPEC-00xx-*/spec.md
 Architecture decisions         docs/adr/
 Debug stack (Docker Compose)   tools/debug/, docker-compose.debug.yml
+Real stack (Docker Compose)    tools/stack.mjs, docker-compose.yml
+Production stack (Portainer)   docker-compose.prod.yml, stack.env.example, .github/workflows/deploy.yml
 Browser e2e                    e2e/
 ```
 
@@ -36,19 +38,23 @@ UI page, route, editor panel      → packages/frontend/src/pages/, src/componen
 Frontend server calls             → packages/frontend/src/api/http.ts
 Participant session / tokens      → packages/frontend/src/store/workspaceSession.ts, src/store/workspaceStore.ts
 Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionRegistry.ts)
+Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
 Graph execution (server)          → packages/backend/src/graphgateway/, src/core/Graph.ts
 Workflow persistence, ETags       → packages/backend/src/workflow/
+Version history, restore          → packages/backend/src/workflow/workflow-history.service.ts
 Workspace access, retention       → packages/backend/src/workspace/
 Templates, bundled content        → packages/backend/src/template/
 Workshops and join codes          → packages/backend/src/workshop/
 Workshop preflight / readiness    → packages/backend/src/workshop/workshop-readiness.service.ts
+Run records, submission history   → packages/backend/src/run/, packages/lib/src/nodes/ReviewFlagNode.ts
 Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
 LTI launch and registration       → packages/backend/src/lti/, packages/lti/
 Specification consistency rules   → tools/spec-lint/
 Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
+Deployment, images, Portainer     → docker-compose.prod.yml, .github/workflows/deploy.yml, README "Deploying with Portainer"
 Schema change                     → packages/backend/prisma/schema.prisma + migrations/
 Content schema backfill           → packages/backend/src/migration/
 ```
@@ -64,6 +70,7 @@ yarn install                       # install
 yarn setup                         # prisma generate + migrate deploy (needs DATABASE_URL)
 yarn dev                           # all workspaces in watch mode
 yarn debug:up                      # deterministic full stack in Docker (ports 15xxx/18000); also debug:status|logs|down|reset
+yarn dev:up                        # deployable stack with the real models (ports 8080/5000/8002/5432); also dev:serve|status|logs|down|reset
 yarn build                         # topological build of all workspaces
 yarn typecheck                     # backend tsc --noEmit + frontend tsc
 yarn lint:check                    # eslint, zero warnings
@@ -96,6 +103,10 @@ a stale `dist` produces failures that look like code bugs.
 - Which models a participant may pick and run is decided server-side by the provider's
   `ModelPolicy`, enforced in `ProviderRuntimeService` on both the catalog and execution.
   Filtering in the editor is presentation, never enforcement (ADR-0008).
+- Embedding similarity is evidence, never a verdict. A pass/fail decision uses
+  `text/semantic-equivalence` (rules, then a cosine floor, then entailment); a threshold
+  on `models/cosine-similarity` marks the wrong learner correct, because "Yes" and "No"
+  score 0.89 against each other (`docs/semantic-equivalence-calibration.md`).
 - Node types exist once, in `packages/lib`. Frontend and backend both import them from
   `@haski/ta-lib`; neither defines its own.
 - Backend is ESM: relative imports carry a `.js` extension even in TypeScript.

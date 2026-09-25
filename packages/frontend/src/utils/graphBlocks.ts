@@ -8,6 +8,7 @@ import {
 import type { LGraph, LGraphCanvas, LGraphNode, SerializedLGraphNode } from 'litegraph.js'
 
 import type { TemplateInterfaces } from '@/api/http'
+import { canvasViewportCenter } from '@/utils/canvasPixelRatio'
 
 type BlockNode = Omit<SerializedLGraphNode, 'id' | 'type' | 'pos'> & {
   id: number
@@ -167,10 +168,7 @@ export const insertBlock = ({
 
   const longestLabel = Math.max(...interfaces.boundary.map((port) => port.label.length))
   wrapper.size = [Math.max(300, longestLabel * 8 + 140), 100]
-  const center = canvas.convertCanvasToOffset([
-    canvas.canvas.width / 2,
-    canvas.canvas.height / 2
-  ])
+  const center = canvasViewportCenter(canvas)
   wrapper.pos = [center[0] - wrapper.size[0] / 2, center[1] - wrapper.size[1] / 2]
   graph.add(wrapper)
 

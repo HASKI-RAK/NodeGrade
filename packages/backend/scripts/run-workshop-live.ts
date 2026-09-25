@@ -6,12 +6,14 @@
  *     yarn workspace backend workshop:live [slug ...]
  *
  * `CASE=<substring>` restricts the run to test answers whose label contains it;
- * `KATALYST_BASE_URL` overrides the vLLM endpoint.
+ * `KATALYST_BASE_URL` overrides the vLLM endpoint; `DUMP_RAW=1` prints each model reply
+ * as a JSON string (line breaks visible) plus the tail of its reasoning.
  *
  * For every template it runs each predefined test answer through the same LGraph path
  * the server uses (`configure` → hydrate → `executeLgraph`) and prints every model
- * response, extracted number and output value. It exists so a facilitator can see the
- * graphs behave with the deployed model before standing in front of a room.
+ * response with its finish reason and token usage, extracted number and output value.
+ * It exists so a facilitator can see the graphs behave with the deployed model before
+ * standing in front of a room.
  */
 import { createOpenAI } from '@ai-sdk/openai';
 import {
@@ -34,56 +36,69 @@ const KATALYST_BASE_URL =
   'https://vllm.katalyst-education.de/v1';
 
 const TEST_ANSWERS: Record<string, { label: string; answer: string }[]> = {
-  'workshop-evidence-strategy': [
+  'workshop-words-vs-understanding': [
     {
-      label: 'slide answer (vague)',
+      label: 'everyday wording, none of the expected words (intended CORRECT)',
       answer:
-        'The Strategy pattern is when you make a class for every method and then the program can choose one.',
+        'Our planet turns. When our part points towards the Sun it is bright, and when it turns away it is dark.',
     },
     {
-      label: 'plausible, no keywords',
+      label: 'every expected word, wrong explanation (intended MISCONCEPTION)',
       answer:
-        'The caller keeps a replaceable object exposing the same operation and delegates the work to it. Another implementation can be plugged in without rewriting the caller.',
+        "Day and night do not happen because of Earth's rotation around its axis. They happen because the Sun circles Earth, changing where sunlight falls.",
     },
     {
-      label: 'all keywords, wrong relationships',
-      answer:
-        'The context does not delegate to a strategy; a common interface is unnecessary and the behaviors are not interchangeable.',
+      label: 'correct as far as it goes (intended INCOMPLETE)',
+      answer: 'Because Earth turns.',
+    },
+    {
+      label: 'explicit misconception (intended MISCONCEPTION)',
+      answer: 'Because clouds cover the Sun at night.',
     },
   ],
-  'workshop-rubric-race-condition': [
+  'workshop-same-score-different-gaps': [
     {
-      label: 'A: mitigation missing (target 80)',
+      label: 'A: collection missing (target 6/8)',
       answer:
-        'An increment reads the counter, adds one and writes it back. Both threads can read zero before either writes; both then write one, so one update is lost.',
+        'Water changes into a gas and enters the air. As it cools, it changes back into tiny drops that form clouds. Water then falls back to the ground as rain.',
     },
     {
-      label: 'B: consequence missing (target 80)',
+      label: 'B: cloud formation missing (target 6/8)',
       answer:
-        'An increment is a separate read, calculation and write. Both threads can read the same old value before either writes. Protect the entire increment with a mutex.',
+        'Water changes into a gas and enters the air. Water falls back to the ground as rain, then gathers in rivers and lakes.',
     },
     {
-      label: 'C: vague (target low)',
-      answer: 'Because both threads access the variable.',
+      label: 'C: complete in everyday words (target 8/8)',
+      answer:
+        'Water from lakes and the sea turns into a gas and rises into the air. High up it cools and turns back into tiny drops, and those drops make clouds. The drops fall down as rain, and the rain runs into rivers and lakes, so it can start again.',
+    },
+    {
+      label: 'D: vague (target low)',
+      answer: 'Water goes up and then it comes down again.',
     },
   ],
-  'workshop-classification-deadlock': [
+  'workshop-different-mistakes-different-help': [
     {
-      label: 'correct mechanism',
-      answer: 'A holds X and waits for Y, while B holds Y and waits for X.',
+      label: 'correct',
+      answer:
+        'A half is bigger because dividing the same pizza into fewer equal pieces makes each piece larger.',
     },
     {
       label: 'incomplete',
-      answer: 'The threads block each other.',
+      answer: 'A half is bigger.',
     },
     {
       label: 'misconception',
-      answer: 'It is slow because both threads use the CPU at the same time.',
+      answer: 'A quarter is bigger because four is bigger than two.',
+    },
+    {
+      label: 'irrelevant',
+      answer: 'I like pizza with mushrooms.',
     },
     {
       label: 'contradictory',
       answer:
-        'A is waiting for a lock held by B, but neither thread is waiting for anything.',
+        'A half is larger than a quarter. A quarter is also larger than a half for these same-sized pizzas.',
     },
   ],
 };
@@ -115,6 +130,19 @@ const runtime: ModelCompletionRuntime = {
       temperature: request.parameters.temperature,
       topP: request.parameters.top_p,
     });
+    // Reasoning tokens count against max_tokens on this deployment; a `length` finish
+    // means the visible reply was cut off (or never started), which is the main way a
+    // stage fails silently.
+    const { finishReason, usage } = result;
+    const budget = `finish=${finishReason} output=${usage.outputTokens ?? '?'} reasoning=${usage.reasoningTokens ?? '?'} of ${request.parameters.max_tokens}`;
+    console.log(
+      finishReason === 'stop' ? `      [${budget}]` : `      !! [${budget}]`,
+    );
+    if (process.env.DUMP_RAW) {
+      console.log(
+        `      raw text: ${JSON.stringify(result.text)}\n      raw reasoning tail: ${JSON.stringify(result.reasoningText?.slice(-600))}`,
+      );
+    }
     return { text: result.text, warnings: [] };
   },
 };

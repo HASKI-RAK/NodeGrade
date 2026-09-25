@@ -1,4 +1,12 @@
-import { compactNodeWidgets, LiteGraph, wrapTextLines } from '@haski/ta-lib'
+import {
+  compactNodeWidgets,
+  LiteGraph,
+  WRAPPED_TEXT_COLOR,
+  WRAPPED_TEXT_FONT,
+  wrappedTextMinHeight,
+  wrappedTextTop,
+  wrapTextLines
+} from '@haski/ta-lib'
 import type { LGraphNode } from 'litegraph.js'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -54,15 +62,21 @@ const makeNode = (properties: Record<string, unknown>, size: [number, number]) =
   return node
 }
 
-const stubCanvas = () => ({
+const stubCanvas = (
+  scale = 1,
+  offset: [number, number] = [0, 0],
+  backing: [number, number] = [800, 600]
+) => ({
   allow_interaction: true,
-  ds: { scale: 1 },
-  convertOffsetToCanvas: (pos: [number, number]) => pos,
+  ds: { scale },
+  // Mirror LiteGraph's DragAndScale.convertOffsetToCanvas: (pos + offset) * scale.
+  convertOffsetToCanvas: (pos: [number, number]) =>
+    [(pos[0] + offset[0]) * scale, (pos[1] + offset[1]) * scale] as [number, number],
   setDirty: vi.fn(),
   canvas: {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
-    width: 800,
-    height: 600
+    width: backing[0],
+    height: backing[1]
   }
 })
 
@@ -86,22 +100,69 @@ describe('wrapped text preview', () => {
     const stub = stubContext()
     stub.draw(node)
     expect(stub.calls.length).toBeGreaterThan(1)
-    expect(stub.calls.join(' ')).toContain('Explain the Strategy')
-    expect(stub.calls.join(' ')).toContain('trade-off')
+    expect(stub.calls[0]).toContain('Explain the Strategy')
+    // Hyphenated words may split across lines ("trade-" / "off."), so compare
+    // the concatenated text rather than a space-joined one.
+    expect(stub.calls.join('')).toContain('trade-off')
+  })
+
+  it('starts the text right below the port row', () => {
+    const node = makeNode({ value: 'x' }, [180, 64])
+    compactNodeWidgets(node)
+    // One output slot: glyphs end near rows*20 + 2 = 22.
+    expect(wrappedTextTop(node)).toBe(22)
+  })
+
+  it('never compacts a text node below two lines of body text', () => {
+    const node = makeNode({ value: 'x' }, [180, 40])
+    compactNodeWidgets(node)
+    // top 22 + two 17px lines + 8px bottom padding.
+    expect(wrappedTextMinHeight(node)).toBe(64)
+    expect(node.size[1]).toBe(64)
+    // Larger saved sizes are left alone.
+    const tall = makeNode({ value: 'x' }, [180, 130])
+    compactNodeWidgets(tall)
+    expect(tall.size[1]).toBe(130)
   })
 
   it('truncates with an ellipsis only when text overflows the node height', () => {
-    const node = makeNode({ value: 'one two three four five six seven' }, [180, 64])
+    const node = makeNode(
+      { value: 'one two three four five six seven eight nine ten eleven twelve' },
+      [180, 64]
+    )
     compactNodeWidgets(node)
     const stub = stubContext()
     stub.draw(node)
-    expect(stub.calls.length).toBe(1)
-    expect(stub.calls[0]).toMatch(/…$/)
+    // Minimum node (64px): (64 - 22 - 8) / 17 -> two visible lines, last elided.
+    expect(stub.calls.length).toBe(2)
+    expect(stub.calls[1]).toMatch(/…$/)
+    expect(stub.calls.join(' ')).not.toContain('twelve')
     node.size = [180, 200]
     const grown = stubContext()
     grown.draw(node)
-    expect(grown.calls.length).toBeGreaterThan(1)
-    expect(grown.calls.join(' ')).toContain('seven')
+    expect(grown.calls.length).toBeGreaterThan(2)
+    expect(grown.calls.join(' ')).toContain('twelve')
+    expect(grown.calls.at(-1)).not.toMatch(/…$/)
+  })
+
+  it('renders other compact nodes with the same body style, cut by width', () => {
+    const node = LiteGraph.createNode<LGraphNode>('output/output')
+    node.properties.label = 'Expected words found in the learner answer today'
+    node.size = [180, 64] as unknown as LGraphNode['size']
+    compactNodeWidgets(node)
+    const stub = stubContext()
+    stub.draw(node)
+    expect(stub.fonts.at(-1)).toBe(WRAPPED_TEXT_FONT)
+    expect(stub.fillStyles.at(-1)).toBe(WRAPPED_TEXT_COLOR)
+    // 160px of room at 5px/char: one line, elided at a word boundary.
+    expect(stub.calls).toHaveLength(1)
+    expect(stub.calls[0]).toMatch(/…$/)
+    expect(stub.calls[0].length).toBeLessThanOrEqual(33)
+    // A wide node shows the whole label instead of a fixed 34-char cut.
+    node.size = [400, 64] as unknown as LGraphNode['size']
+    const wide = stubContext()
+    wide.draw(node)
+    expect(wide.calls).toEqual(['Expected words found in the learner answer today'])
   })
 
   it('opens the inline editor on text click and edits the property', () => {
@@ -144,6 +205,98 @@ describe('wrapped text preview', () => {
     expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
   })
 
+  it('keeps the inline editor inside the node body when zoomed out', () => {
+    const node = makeNode({ value: 'hello world, this is long enough' }, [300, 160])
+    compactNodeWidgets(node)
+    node.pos = [100, 50]
+    const scale = 0.5
+    const offset: [number, number] = [20, 10]
+    const canvas = stubCanvas(scale, offset)
+    node.onMouseDown?.(stubEvent(), [50, 60], canvas as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const top = wrappedTextTop(node)
+    const px = (value: string) => Number.parseFloat(value)
+    // Origin: (node x + PAD_X, node y + top) through pan + zoom.
+    expect(px(editor.style.left)).toBeCloseTo((100 + 10 + offset[0]) * scale)
+    expect(px(editor.style.top)).toBeCloseTo((50 + top + offset[1]) * scale)
+    // Extents shrink with zoom exactly like the canvas-drawn preview does.
+    expect(px(editor.style.width)).toBeCloseTo((300 - 20) * scale)
+    expect(px(editor.style.height)).toBeCloseTo((160 - top - 8 + 4) * scale)
+    expect(px(editor.style.fontSize)).toBeCloseTo(13 * scale)
+    expect(px(editor.style.lineHeight)).toBeCloseTo(17 * scale)
+    // The overlay's far edges never spill past the node body on screen.
+    const nodeRight = (100 + 300 + offset[0]) * scale
+    const nodeBottom = (50 + 160 + offset[1]) * scale
+    expect(px(editor.style.left) + px(editor.style.width)).toBeLessThanOrEqual(nodeRight)
+    expect(px(editor.style.top) + px(editor.style.height)).toBeLessThanOrEqual(nodeBottom)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('places the editor in CSS pixels even when the bitmap is denser', () => {
+    // Device-pixel-ratio rendering keeps a 1600x1200 bitmap behind an 800x600
+    // element; LiteGraph's screen space stays in CSS pixels, so the overlay
+    // must not shrink or shift with the bitmap.
+    const node = makeNode({ value: 'hello world, this is long enough' }, [300, 160])
+    compactNodeWidgets(node)
+    node.pos = [100, 50]
+    const scale = 0.5
+    const offset: [number, number] = [20, 10]
+    const canvas = stubCanvas(scale, offset, [1600, 1200])
+    node.onMouseDown?.(stubEvent(), [50, 60], canvas as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const top = wrappedTextTop(node)
+    const px = (value: string) => Number.parseFloat(value)
+    expect(px(editor.style.left)).toBeCloseTo((100 + 10 + offset[0]) * scale)
+    expect(px(editor.style.top)).toBeCloseTo((50 + top + offset[1]) * scale)
+    expect(px(editor.style.width)).toBeCloseTo((300 - 20) * scale)
+    expect(px(editor.style.fontSize)).toBeCloseTo(13 * scale)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('opens the editor scrolled to the top like the preview, with a scrollbar', () => {
+    const long = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join('\n')
+    const node = makeNode({ value: long }, [320, 120])
+    compactNodeWidgets(node)
+    node.onMouseDown?.(stubEvent(), [50, 60], stubCanvas() as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    // Overflowing text scrolls instead of being clipped, so the whole value
+    // is editable inline; horizontal overflow stays impossible.
+    expect(editor.style.overflowY).toBe('auto')
+    expect(editor.style.overflowX).toBe('hidden')
+    expect(editor.style.scrollbarGutter).toBe('stable')
+    // Mimic display mode: first line visible, caret before the first
+    // character rather than parked at the end (which would scroll down).
+    expect(editor.scrollTop).toBe(0)
+    expect(editor.selectionStart).toBe(0)
+    expect(editor.selectionEnd).toBe(0)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
+  it('widens the editor by the scrollbar lane so lines wrap like the preview', async () => {
+    const node = makeNode({ value: 'hello world, this is long enough' }, [320, 200])
+    compactNodeWidgets(node)
+    node.onMouseDown?.(stubEvent(), [50, 60], stubCanvas() as never)
+    const editor = document.body.querySelector('textarea') as HTMLTextAreaElement
+    const px = (value: string) => Number.parseFloat(value)
+    // jsdom lays nothing out (lane = 0), so the box is exactly the wrap width.
+    expect(px(editor.style.width)).toBeCloseTo(320 - 20)
+    // Pretend the browser reserved an 11px vertical scrollbar gutter inside
+    // the border box: the next frame adds it back to the outer width so the
+    // content box keeps the 300px wrap width.
+    Object.defineProperty(editor, 'offsetWidth', { configurable: true, get: () => 300 })
+    Object.defineProperty(editor, 'clientWidth', { configurable: true, get: () => 289 })
+    const nextFrame = () =>
+      new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+    await nextFrame()
+    await nextFrame()
+    expect(px(editor.style.width)).toBeCloseTo(320 - 20 + 11)
+    editor.blur()
+    expect(document.body.querySelectorAll('textarea')).toHaveLength(0)
+  })
+
   it('keeps explicit line breaks instead of collapsing whitespace', () => {
     const node = makeNode({ value: 'first line\nsecond line here' }, [320, 200])
     compactNodeWidgets(node)
@@ -160,6 +313,25 @@ describe('wrapped text preview', () => {
       1000
     )
     expect(lines).toEqual(['a b', 'c d'])
+  })
+
+  it('breaks after hyphens like the browser so the editor wraps identically', () => {
+    // 5px per char, 50px wide: "one trade-" (10 chars) fits exactly, so the
+    // hyphen is a break opportunity and "off." wraps — as a textarea would.
+    const lines = wrapTextLines(
+      measureStub({}) as CanvasRenderingContext2D,
+      'one trade-off.',
+      50
+    )
+    expect(lines).toEqual(['one trade-', 'off.'])
+    // Hyphen glue joins without a space and stays on one line when it fits.
+    expect(
+      wrapTextLines(measureStub({}) as CanvasRenderingContext2D, 'trade-off', 1000)
+    ).toEqual(['trade-off'])
+    // A leading dash or a double dash is not a break opportunity.
+    expect(
+      wrapTextLines(measureStub({}) as CanvasRenderingContext2D, '-x a--b', 1000)
+    ).toEqual(['-x a--b'])
   })
 
   it('installs click-to-edit without widgets and keeps node serializable', () => {
@@ -195,8 +367,9 @@ describe('wrapped text preview', () => {
       return { font: stub.fonts.at(-1), fillStyle: stub.fillStyles.at(-1) }
     })
     for (const draw of draws) {
-      expect(draw.font).toBe('11px sans-serif')
-      expect(draw.fillStyle).toBe('#d4d7dd')
+      expect(draw.font).toBe(WRAPPED_TEXT_FONT)
+      expect(draw.font).toBe('13px sans-serif')
+      expect(draw.fillStyle).toBe(WRAPPED_TEXT_COLOR)
     }
   })
 })

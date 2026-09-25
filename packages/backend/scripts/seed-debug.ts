@@ -179,6 +179,21 @@ try {
     },
   });
 
+  // The deterministic worker doubles as the deployment default in the debug stack,
+  // so graphs without an explicit model selection exercise the fallback path.
+  await prisma.deploymentSettings.upsert({
+    where: { id: 'singleton' },
+    create: {
+      id: 'singleton',
+      defaultProviderKey: 'local',
+      defaultModelId: 'nodegrade-deterministic',
+    },
+    update: {
+      defaultProviderKey: 'local',
+      defaultModelId: 'nodegrade-deterministic',
+    },
+  });
+
   console.log(
     `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}; browser workspace token ${token}`,
   );

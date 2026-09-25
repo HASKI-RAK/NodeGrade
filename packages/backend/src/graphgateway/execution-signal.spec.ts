@@ -33,10 +33,10 @@ describe('network node execution signals', () => {
           modelId: 'local-model',
         };
         node.properties.needs_model_selection = false;
+        node.isInputConnected = jest.fn((slot: number) => slot === 0);
         node.getInputData = jest
           .fn()
-          .mockReturnValueOnce({ role: 'user', content: 'Answer' })
-          .mockReturnValueOnce(undefined);
+          .mockReturnValue({ role: 'user', content: 'Answer' });
         await node.onExecute();
       },
     ],

@@ -13,7 +13,10 @@ export type SerializedGraph = serializedLGraph<
   SerializedLGraphGroup
 >
 
-export type OutputType = 'text' | 'score' | 'classifications'
+export type OutputType = 'text' | 'score' | 'classifications' | 'review'
+
+/** Verdict a `review` output carries: a human should look, or nothing was found. */
+export type ReviewVerdict = 'flagged' | 'clear'
 
 export type RunState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type NodeExecutionState =
@@ -77,6 +80,8 @@ export type ServerEventPayload = {
     type: OutputType
     label: string
     value: string | number | string[]
+    /** Only on `review` outputs: whether the run needs a tutor (SPEC-0020/FR-002). */
+    verdict?: ReviewVerdict
     /** Editor id of the innermost block wrapper, when the node ran inside one. */
     wrapperId?: number | null
     /** Editor id of the node that produced this output; lets the editor locate it. */

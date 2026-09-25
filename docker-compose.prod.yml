@@ -1,0 +1,163 @@
+# Production stack for Portainer (or any Compose host behind Traefik).
+#
+# Unlike docker-compose.yml this file builds nothing: it runs the images that
+# .github/workflows/deploy.yml pushes to GHCR on every push to `main`, and the
+# same workflow then calls the Portainer stack webhook so Portainer re-pulls the
+# repository and the images and redeploys. README.md, "Deploying with Portainer"
+# walks through the one-time setup.
+#
+# Configuration comes from two places, both filled in from the Portainer stack's
+# environment variables:
+#
+#   - `${VAR}` references below are substituted by Compose when the stack is
+#     deployed. Every one of them has a default except the five that cannot have
+#     one (`:?` marks them), so a fresh stack refuses to start with a message
+#     naming what is missing instead of coming up half configured.
+#   - `env_file: stack.env` hands the backend every variable of the stack as is.
+#     Portainer writes that file next to this one on each deployment, so a new
+#     backend setting (XAPI_*, RETENTION_ENABLED, WORKSPACE_*, ...) needs a new
+#     variable in Portainer and nothing here. stack.env.example lists them. The
+#     file is optional so the stack also starts outside Portainer.
+#
+# Only the frontend joins the Traefik network: nginx in that image proxies
+# /api, /socket.io, /lti and /health to the backend over the stack's private
+# network, so the browser only ever talks to the public origin.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nodegrade}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the Portainer stack environment}
+      POSTGRES_DB: ${POSTGRES_DB:-nodegrade}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nodegrade} -d ${POSTGRES_DB:-nodegrade}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  models:
+    image: ${NODEGRADE_IMAGE_PREFIX:-ghcr.io/haski-rak/nodegrade}-models:${NODEGRADE_IMAGE_TAG:-latest}
+    environment:
+      # Multilingual and MIT licensed, so every deployment may run the default
+      # unchanged. See README.md, "Choosing a different embedding model" before
+      # pointing it elsewhere.
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      EMBEDDING_MAX_SEQ_LENGTH: ${EMBEDDING_MAX_SEQ_LENGTH:-512}
+      EMBEDDING_TASK: ${EMBEDDING_TASK:-}
+      EMBEDDING_TRUST_REMOTE_CODE: ${EMBEDDING_TRUST_REMOTE_CODE:-false}
+      NLI_MODEL: ${NLI_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
+    volumes:
+      - model_cache:/models-cache
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=5)"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      # bge-m3 is 2.3 GB: the first boot downloads it before /health answers.
+      start_period: 600s
+    restart: unless-stopped
+
+  backend:
+    image: ${NODEGRADE_IMAGE_PREFIX:-ghcr.io/haski-rak/nodegrade}-backend:${NODEGRADE_IMAGE_TAG:-latest}
+    # Everything set on the Portainer stack reaches the backend through this
+    # file. The `environment` block below wins where both name a variable.
+    env_file:
+      - path: stack.env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: '5000'
+      # Built from the POSTGRES_* values. Set DATABASE_URL yourself only if the
+      # password holds characters that need URL escaping (@ / % :).
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-nodegrade}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nodegrade}?schema=public}
+      # The public origin. Cookies, CORS and the LTI return URLs all derive from it.
+      FRONTEND_URL: https://${NODEGRADE_HOST:?Set NODEGRADE_HOST in the Portainer stack environment (public hostname, e.g. grade.example.org)}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://${NODEGRADE_HOST}}
+      COOKIE_INSECURE: 'false'
+      # Two proxies stand in front of the backend here (Traefik, then nginx in
+      # the frontend image), so the client address is two hops back in
+      # X-Forwarded-For. Login throttling and the join throttle key on it.
+      TRUST_PROXY: ${TRUST_PROXY:-2}
+      SIMILARITY_WORKER_URL: http://models:8002
+      # Optional external OpenAI-compatible text-generation endpoint offered as
+      # the `local` provider. The bundled `models` service is the similarity
+      # worker, not a text model.
+      MODEL_WORKER_URL: ${MODEL_WORKER_URL:-}
+      # Encrypts provider API keys at rest. Generate once, then never change it:
+      # a new key cannot decrypt the credentials the old one wrote.
+      PROVIDER_ENCRYPTION_KEY: ${PROVIDER_ENCRYPTION_KEY:?Set PROVIDER_ENCRYPTION_KEY in the Portainer stack environment (base64url 32 bytes, see README)}
+      # Without both of these the admin area stays disabled, and nobody can
+      # create the workshop this stack exists to serve.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in the Portainer stack environment}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the Portainer stack environment}
+    networks:
+      - internal
+    depends_on:
+      db:
+        condition: service_healthy
+      models:
+        condition: service_healthy
+    healthcheck:
+      # node:22-bookworm-slim ships neither curl nor wget.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:5000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # `prisma migrate deploy` runs before the server listens.
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    image: ${NODEGRADE_IMAGE_PREFIX:-ghcr.io/haski-rak/nodegrade}-frontend:${NODEGRADE_IMAGE_TAG:-latest}
+    networks:
+      - internal
+      - traefik
+    depends_on:
+      - backend
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:80/']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=${TRAEFIK_NETWORK:-traefik_web}'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-nodegrade}.rule=Host(`${NODEGRADE_HOST}`)'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-nodegrade}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-nodegrade}.tls=true'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-nodegrade}.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-le}'
+      - 'traefik.http.routers.${TRAEFIK_ROUTER:-nodegrade}.service=${TRAEFIK_ROUTER:-nodegrade}'
+      - 'traefik.http.services.${TRAEFIK_ROUTER:-nodegrade}.loadbalancer.server.port=80'
+    restart: unless-stopped
+
+networks:
+  # Private to this stack; Postgres, the worker and the backend publish no ports.
+  internal:
+  # The network Traefik watches. It exists before this stack does.
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik_web}
+    external: true
+
+volumes:
+  db_data:
+  model_cache:

@@ -51,6 +51,9 @@ type ExecutionLimits = {
   workspaceConcurrentRuns: number
   providerConcurrentRequests: number
 }
+type DeploymentSettings = {
+  defaultModel: { providerKey: string; modelId: string } | null
+}
 
 const policyModes: { value: PolicyMode; label: string }[] = [
   { value: 'DENY_ALL', label: 'Deny all — no models offered' },
@@ -113,10 +116,9 @@ export const AdminPage = () => {
     <Box
       component="main"
       boxSizing="border-box"
-      height="100%"
+      minHeight="100dvh"
       maxWidth={1000}
       mx="auto"
-      overflow="auto"
       p={4}
     >
       <Typography variant="h4">Administration</Typography>
@@ -284,6 +286,7 @@ const ProviderAdmin = () => {
           }}
         />
       ))}
+      <DefaultModelCard onSaved={setMessage} />
       <ExecutionLimitsCard onSaved={setMessage} />
       {message && <Typography color="success.main">{message}</Typography>}
       {error && <Typography color="error">{error}</Typography>}
@@ -464,6 +467,175 @@ const ProviderCard = ({
               Test saved connection
             </Button>
             {testStatus && <Chip label={testStatus} />}
+          </Stack>
+          {error && <Typography color="error">{error}</Typography>}
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * The facilitator's deployment default model (SPEC-0016). Every workflow model node
+ * without an explicit selection runs against this model, so templates and ad-hoc
+ * graphs no longer need a per-node choice. The picker only offers enabled providers
+ * and models their policy permits — the same set execution would accept.
+ */
+const DefaultModelCard = ({ onSaved }: { onSaved: (message: string) => void }) => {
+  const [settings, setSettings] = useState<DeploymentSettings | null>(null)
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [providerKey, setProviderKey] = useState('')
+  const [modelId, setModelId] = useState('')
+  const [catalog, setCatalog] = useState<ProviderCatalog | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [{ data: stored }, { data: listed }] = await Promise.all([
+          apiRequest<DeploymentSettings>('/admin/deployment-settings'),
+          apiRequest<{ providers: Provider[] }>('/admin/providers')
+        ])
+        setSettings(stored)
+        setProviders(listed.providers)
+        const fallback =
+          stored.defaultModel?.providerKey ??
+          listed.providers.find((provider) => provider.enabled)?.key ??
+          ''
+        setProviderKey(fallback)
+        setModelId(stored.defaultModel?.modelId ?? '')
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error ? loadError.message : 'Default model load failed.'
+        )
+      }
+    })()
+  }, [])
+  const providerId = providers.find((provider) => provider.key === providerKey)?.id
+  useEffect(() => {
+    setCatalog(null)
+    if (!providerId) return
+    void apiRequest<ProviderCatalog>(`/admin/providers/${providerId}/models`)
+      .then(({ data }) => {
+        setCatalog(data)
+        setModelId((current) =>
+          data.models.some((model) => model.modelId === current && model.allowed)
+            ? current
+            : ''
+        )
+      })
+      .catch(() => setCatalog({ status: 'UNREACHABLE', models: [] }))
+  }, [providerId])
+  const candidates = (catalog?.models ?? []).filter((model) => model.allowed)
+  const currentLabel = settings?.defaultModel
+    ? (providers.find((provider) => provider.key === settings.defaultModel?.providerKey)
+        ?.displayName ?? settings.defaultModel.providerKey) +
+      ` / ${settings.defaultModel.modelId}`
+    : null
+  const save = async () => {
+    if (!providerKey || !modelId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { data } = await adminPut<DeploymentSettings>('/admin/deployment-settings', {
+        providerKey,
+        modelId
+      })
+      setSettings(data)
+      onSaved('Default model saved.')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Default save failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const clear = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { data } = await adminPut<DeploymentSettings>('/admin/deployment-settings', {
+        providerKey: null,
+        modelId: null
+      })
+      setSettings(data)
+      setModelId('')
+      onSaved('Default model cleared.')
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : 'Default clear failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Card>
+      <CardContent>
+        <Stack spacing={2}>
+          <Typography variant="h6">Default model</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Used by every workflow model node without an explicit selection. Stored graphs
+            stay untouched — clearing the default restores the per-node choice.
+          </Typography>
+          <Typography variant="body2">
+            Current default:{' '}
+            {currentLabel ?? 'none — every model node needs its own selection'}
+          </Typography>
+          <TextField
+            select
+            label="Provider"
+            value={providerKey}
+            onChange={(event) => {
+              setProviderKey(event.target.value)
+              setModelId('')
+            }}
+          >
+            {providers
+              .filter((provider) => provider.enabled)
+              .map((provider) => (
+                <MenuItem key={provider.key} value={provider.key}>
+                  {provider.displayName}
+                </MenuItem>
+              ))}
+          </TextField>
+          {catalog === null ? (
+            <CircularProgress size={20} />
+          ) : catalog.status === 'AVAILABLE' ? (
+            <TextField
+              select
+              label="Model"
+              value={modelId}
+              helperText={
+                candidates.length === 0
+                  ? 'This provider permits no model for participants.'
+                  : undefined
+              }
+              onChange={(event) => setModelId(event.target.value)}
+            >
+              {candidates.map((model) => (
+                <MenuItem key={model.modelId} value={model.modelId}>
+                  {model.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Typography color="warning.main">
+              The provider catalog is unavailable ({catalog.status}). Saving is disabled
+              until it answers.
+            </Typography>
+          )}
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              disabled={busy || !providerKey || !modelId}
+              onClick={() => void save()}
+            >
+              Save default
+            </Button>
+            <Button
+              disabled={busy || !settings?.defaultModel}
+              onClick={() => void clear()}
+            >
+              Clear
+            </Button>
           </Stack>
           {error && <Typography color="error">{error}</Typography>}
         </Stack>

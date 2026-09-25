@@ -21,6 +21,10 @@ fails on execution.
      persisted node type and must not change once graphs are saved with it.
    - Wire ports in the constructor with `addIn`/`addOut` (the inherited `addInput`/
      `addOutput` throw), widgets with `addWidget`.
+   - A port may accept several types: pass an array, `addIn(['message', 'string'], 'message')`.
+     The first member is the primary type and decides the port's colour and shape.
+   - Overriding `onConfigure`? Call `super.onConfigure(info)` first, or the node loses the
+     shared port styling and the declared port types on load.
    - Implement `onExecute` (async) reading `getInputData(slot)` and writing
      `setOutputData(slot, value)`.
    - Need an HTTP worker? Implement `init(env)` and read `env.MODEL_WORKER_URL` or
@@ -51,10 +55,19 @@ fails on execution.
    `path` and widget key order to `legacyWidgetKeys` in the same file, so
    `loadLegacyWidgetProperties` can restore them.
 
-6. **Build the library**: `yarn workspace @haski/ta-lib build`. The backend imports `dist`,
+6. **Add it to the two places that enumerate every node type.**
+   - `packages/backend/src/template/bundled/extended-assessment-lab.ts`: one wired
+     instance of the node (new `node({...})` entry plus its link; bump `last_node_id`
+     and `last_link_id`). Its spec asserts that the lab exercises every registered type,
+     and the git pre-commit hook runs that spec.
+   - `packages/backend/src/template/bundled/graph-builder.ts`: a `NODE_SLOTS` row
+     mirroring the constructor's ports, and a builder helper if a bundled template
+     should use the node.
+
+7. **Build the library**: `yarn workspace @haski/ta-lib build`. The backend imports `dist`,
    so skipping this makes the node invisible server-side.
 
-7. **Verify**, narrowest first:
+8. **Verify**, narrowest first:
 
    ```bash
    yarn workspace @haski/ta-frontend test:run src/utils/nodeDefinitions.test.ts

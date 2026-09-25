@@ -6,7 +6,12 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { AppModule } from './app/app.module.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
+import {
+  LEGACY_SIMILARITY_WORKER_URL,
+  similarityWorkerUnset,
+} from './config/configuration.js';
 import { cookiesInsecure } from './config/cookies.js';
+import { trustProxyHops } from './config/trust-proxy.js';
 import { resolveCorsOrigins } from './config/cors.js';
 import { WebSocketCookieAdapter } from './utils/websocket-cookie.adapter.js';
 
@@ -21,7 +26,11 @@ async function bootstrap() {
 
   // The frontend container proxies to the backend, so the client address only survives
   // if Express is told to trust it. Login throttling and audit fields depend on it.
-  app.set('trust proxy', 1);
+  // TRUST_PROXY is the number of proxies in front of the backend: 1 for the Compose
+  // stack (nginx alone), 2 behind a reverse proxy such as Traefik in front of nginx.
+  // Too low and every client shares the proxy's address; too high and a client can
+  // forge its own.
+  app.set('trust proxy', trustProxyHops());
 
   app.use(cookieParser());
 
@@ -66,6 +75,12 @@ async function bootstrap() {
   if (cookiesInsecure()) {
     logger.warn(
       'COOKIE_INSECURE is set: cookies are issued without the Secure attribute. Use this for local HTTP only.',
+    );
+  }
+
+  if (similarityWorkerUnset()) {
+    logger.warn(
+      `SIMILARITY_WORKER_URL is not set: falling back to ${LEGACY_SIMILARITY_WORKER_URL}, which is not this deployment. Every answer an embedding, keyword or equivalence node touches will be sent there. Set it in .env (see .env_template).`,
     );
   }
 

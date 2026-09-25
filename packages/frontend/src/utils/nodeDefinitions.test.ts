@@ -3,6 +3,9 @@ import {
   getDefinedNodeConstructors,
   getNodeDefinition,
   getNodeDefinitions,
+  getPillLabel,
+  getPortStyle,
+  LGraph,
   LINK_TYPE_COLORS,
   LINK_TYPE_SHAPES,
   LiteGraph,
@@ -74,14 +77,61 @@ describe('node definition registry', () => {
     for (const Node of getDefinedNodeConstructors()) {
       const node = new Node()
       for (const slot of [...(node.inputs ?? []), ...(node.outputs ?? [])]) {
-        const color = LINK_TYPE_COLORS[slot.type as keyof typeof LINK_TYPE_COLORS]
+        const { color, shape } = getPortStyle(String(slot.type))
         expect(slot.color_on).toBe(color)
         expect(slot.color_off).toBe(color)
-        expect(slot.shape).toBe(
-          LINK_TYPE_SHAPES[slot.type as keyof typeof LINK_TYPE_SHAPES]
-        )
+        expect(slot.shape).toBe(shape)
       }
     }
+  })
+
+  it('draws a port accepting several types as its primary type', () => {
+    const node = LiteGraph.createNode('models/llm')
+    for (const slot of node.inputs ?? []) {
+      expect(String(slot.type).split(',').length).toBeGreaterThan(1)
+      expect(slot.color_on).toBe(LINK_TYPE_COLORS.message)
+      expect(slot.shape).toBe(LINK_TYPE_SHAPES.message)
+    }
+    expect(node.inputs?.map(({ label }) => label)).toEqual([
+      'message | string',
+      'messages | strings'
+    ])
+  })
+
+  it('links a text output straight into either message port', () => {
+    const graph = new LGraph()
+    const text = LiteGraph.createNode('basic/textfield')
+    const strings = LiteGraph.createNode('utils/strings-to-array')
+    const number = LiteGraph.createNode('basic/number')
+    const llm = LiteGraph.createNode('models/llm')
+    ;[text, strings, number, llm].forEach((node) => graph.add(node))
+
+    expect(text.connect(0, llm, 0)).toBeTruthy()
+    expect(text.connect(0, llm, 1)).toBeTruthy()
+    // A string list is the aggregate port's own widening, not the singular one's.
+    expect(strings.connect(0, llm, 1)).toBeTruthy()
+    expect(strings.connect(0, llm, 0)).toBeFalsy()
+    // Widening message ports must not turn them into wildcards.
+    expect(number.connect(0, llm, 0)).toBeFalsy()
+  })
+
+  it('widens message ports back after loading a graph saved with narrow ones', () => {
+    const node = LiteGraph.createNode('models/llm')
+    const narrow = [
+      { name: 'message', type: 'message', link: null },
+      { name: 'messages', type: '*', link: 7 }
+    ]
+    node.configure({ ...node.serialize(), inputs: narrow })
+
+    expect(node.inputs?.[0].type).toContain('string')
+    expect(node.inputs?.[1].type).toContain('[string]')
+    expect(node.inputs?.map(({ label }) => label)).toEqual([
+      'message | string',
+      'messages | strings'
+    ])
+    // The wire the graph was saved with survives the retype.
+    expect(node.inputs?.[1].link).toBe(7)
+    expect(node.inputs?.[1].color_on).toBe(LINK_TYPE_COLORS.message)
   })
 
   it('restyles legacy ports on configure and keeps titles readable', () => {
@@ -96,13 +146,33 @@ describe('node definition registry', () => {
     expect(node.outputs?.[0].color_on).toBe(LINK_TYPE_COLORS.message)
 
     // Titles stay near-white on the dark bar; the category signal is the pill
-    // plus the status dot, never a full-bleed tint.
+    // fill plus the status dot, never a full-bleed tint.
     expect(LiteGraph.NODE_TITLE_COLOR).toBe('#F5F7FA')
     for (const Node of getDefinedNodeConstructors()) {
       const category = Node.definition.category
       expect(Reflect.get(Node, 'title_text_color')).toBe('#F5F7FA')
       expect(Reflect.get(Node, 'boxcolor')).toBe(CATEGORY_COLORS[category])
       expect(Reflect.get(Node, 'color')).toBeUndefined()
+    }
+  })
+
+  it('labels pills with the node type while keeping the category color', () => {
+    expect(getPillLabel({ title: 'Answer Input', category: 'Assessment' })).toBe(
+      'ANSWER INPUT'
+    )
+    expect(getPillLabel({ title: 'Textfield', category: 'Essential' })).toBe(
+      'TEXTFIELD'
+    )
+    expect(getPillLabel(undefined, 'input/answer')).toBe('ANSWER')
+    expect(
+      getPillLabel({ category: 'Validation' }, 'preprocessing/extract-number')
+    ).toBe('EXTRACT NUMBER')
+    expect(getPillLabel({ category: 'AI' })).toBe('AI')
+    expect(getPillLabel(undefined)).toBeUndefined()
+    for (const Node of getDefinedNodeConstructors()) {
+      expect(getPillLabel(Node.definition, Node.getPath())).toBe(
+        Node.definition.title.toUpperCase()
+      )
     }
   })
 })

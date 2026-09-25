@@ -1,4 +1,9 @@
 import {
+  DEFAULT_FLAG_PATTERN,
+  DEFAULT_HIGH_THRESHOLD as EQUIVALENCE_HIGH_THRESHOLD,
+  DEFAULT_KEYWORD_THRESHOLD as KEYWORD_SIMILARITY_THRESHOLD,
+  DEFAULT_LOW_THRESHOLD as EQUIVALENCE_LOW_THRESHOLD,
+  DEFAULT_REASON_PREFIX,
   KATALYST_MODEL_QWEN_FLASH,
   PROVIDER_KEY_KATALYST,
 } from '@haski/ta-lib';
@@ -29,27 +34,55 @@ const NODE_SLOTS: Record<string, SlotTable> = {
   'input/answer': { inputs: [], outputs: [slot('string')] },
   'input/sample-solution': { inputs: [], outputs: [slot('string')] },
   'basic/textfield': { inputs: [], outputs: [slot('string')] },
+  'basic/number': { inputs: [], outputs: [slot('number')] },
+  'basic/sum': {
+    inputs: [slot('A', 'number'), slot('B', 'number')],
+    outputs: [slot('A+B', 'number')],
+  },
   'utils/concat-string': {
     inputs: [slot('string'), slot('string')],
     outputs: [slot('string')],
+  },
+  'utils/concat-object': {
+    inputs: [slot('*', '*'), slot('*', '*')],
+    outputs: [slot('*', '*')],
+  },
+  'utils/strings-to-array': {
+    inputs: [slot('string'), slot('string')],
+    outputs: [slot('[string]', '[string]')],
   },
   'basic/prompt-message': {
     inputs: [slot('string')],
     outputs: [slot('message')],
   },
+  // Both message ports take text, a message, or a list of either (SPEC-0019/FR-001),
+  // which is why the prompt text below reaches them without a `prompt-message` node
+  // in between. `LGraphNode.onConfigure` restores these types on load, so older
+  // stored content gains the same acceptance without a reissue.
   'models/llm': {
-    inputs: [slot('message'), slot('messages', '*')],
+    inputs: [
+      slot('message', 'message,string,[message]'),
+      slot('messages', 'message,[message],[string],string'),
+    ],
     outputs: [slot('string')],
   },
   'preprocessing/extract-number': {
     inputs: [slot('string')],
     outputs: [slot('number')],
   },
+  'text/extract-line': {
+    inputs: [slot('text', 'string')],
+    outputs: [slot('line', 'string')],
+  },
   'math/math-operation': {
     inputs: [slot('number'), slot('number')],
     outputs: [slot('number')],
   },
   'math/precision': { inputs: [slot('number')], outputs: [slot('number')] },
+  'preprocessing/clean': {
+    inputs: [slot('string')],
+    outputs: [slot('string')],
+  },
   'text/keyword-check': {
     inputs: [
       slot('keywords (comma-separated)', 'string'),
@@ -58,6 +91,14 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [
       slot('present keywords', 'string'),
       slot('missing keywords', 'string'),
+    ],
+  },
+  'text/semantic-equivalence': {
+    inputs: [slot('answer', 'string'), slot('expected answer', 'string')],
+    outputs: [
+      slot('equivalent', 'boolean'),
+      slot('similarity', 'number'),
+      slot('verdict', 'string'),
     ],
   },
   'models/sentence-transformer': {
@@ -69,6 +110,12 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [slot('number')],
   },
   'output/output': { inputs: [slot('*')], outputs: [] },
+  // Mirrors `ReviewFlagNode`: `addIn(['string', 'boolean'], 'signal')`, so the stored
+  // slot type is the comma-joined form `onConfigure` restores on load.
+  'output/review-flag': {
+    inputs: [slot('signal', 'string,boolean')],
+    outputs: [slot('flagged', 'boolean')],
+  },
 };
 
 export type NodeRef = { readonly id: number; readonly type: string };
@@ -233,20 +280,20 @@ export class GraphBuilder {
   concat(
     title: string,
     pos: [number, number],
-    upper: NodeRef,
-    lower: NodeRef,
+    upper?: NodeRef,
+    lower?: NodeRef,
     slots: { upper?: number; lower?: number } = {},
   ): NodeRef {
     const node = this.add({
       type: 'utils/concat-string',
       title,
       pos,
-      size: [240, 80],
+      size: [310, 80],
       properties: { value: '', space: true },
       widgetsValues: [true],
     });
-    this.link(upper, slots.upper ?? 0, node, 0);
-    this.link(lower, slots.lower ?? 0, node, 1);
+    if (upper) this.link(upper, slots.upper ?? 0, node, 0);
+    if (lower) this.link(lower, slots.lower ?? 0, node, 1);
     return node;
   }
 
@@ -275,27 +322,50 @@ export class GraphBuilder {
     return assembled;
   }
 
-  promptMessage(
+  /**
+   * A system message on the singular `message` port and prompt text on the
+   * aggregate `messages` port. The node sends slot 0 before slot 1, so the
+   * conversation reads system-then-user without a `prompt-message` node or a
+   * `concat-object` to assemble it (SPEC-0019/FR-009).
+   *
+   * Leaves `model_ref` unset so execution substitutes the facilitator's
+   * deployment default at run time (SPEC-0016); stored content stays untouched.
+   */
+  llmWithSystem(
     title: string,
     pos: [number, number],
-    source: NodeRef,
+    systemMessage: NodeRef,
+    prompt: NodeRef,
+    settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
     const node = this.add({
-      type: 'basic/prompt-message',
+      type: 'models/llm',
       title,
       pos,
-      size: [260, 80],
-      properties: { value: { role: 'user', content: '' } },
-      widgetsValues: ['user'],
+      size: [320, 220],
+      properties: {
+        value: '',
+        model: '',
+        model_ref: null,
+        needs_model_selection: true,
+        max_tokens: settings.maxTokens,
+        temperature: settings.temperature,
+        top_p: 0.9,
+        top_k: 40,
+        presence_penalty: 0,
+      },
+      widgetsValues: [settings.maxTokens, settings.temperature, 0.9, 40, 0, ''],
     });
-    this.link(source, 0, node, 0);
+    this.link(systemMessage, 0, node, 0);
+    this.link(prompt, 0, node, 1);
     return node;
   }
 
+  /** Prompt text straight into the singular `message` port (SPEC-0019/FR-002). */
   llm(
     title: string,
     pos: [number, number],
-    message: NodeRef,
+    prompt: NodeRef,
     settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
     const node = this.add({
@@ -306,24 +376,22 @@ export class GraphBuilder {
       properties: katalystLlmProperties(settings),
       widgetsValues: katalystLlmWidgets(settings),
     });
-    this.link(message, 0, node, 0);
+    this.link(prompt, 0, node, 0);
     return node;
   }
 
-  /** Prompt text → message → model in one call. Returns the LLM node. */
+  /**
+   * Prompt text → model. The model keeps the position it had when a
+   * `prompt-message` node stood between the two, so the surrounding groups and
+   * columns of a workshop graph still line up.
+   */
   llmStage(
     title: string,
     pos: [number, number],
     prompt: NodeRef,
     settings: LlmSettings = KATALYST_LLM,
   ): NodeRef {
-    const message = this.promptMessage(`${title} message`, pos, prompt);
-    return this.llm(
-      `${title} model`,
-      [pos[0] + 300, pos[1]],
-      message,
-      settings,
-    );
+    return this.llm(`${title} model`, [pos[0] + 460, pos[1]], prompt, settings);
   }
 
   extractNumber(
@@ -335,10 +403,34 @@ export class GraphBuilder {
       type: 'preprocessing/extract-number',
       title,
       pos,
-      size: [220, 60],
+      size: [320, 60],
       properties: { value: '' },
     });
     this.link(source, 0, node, 0);
+    return node;
+  }
+
+  /**
+   * Lifts one `KEY: value` line out of a model reply. This is how a four-line
+   * diagnosis becomes the bare category a `classifications` output wants,
+   * without asking the model a second time.
+   */
+  extractLine(
+    title: string,
+    pos: [number, number],
+    source: NodeRef,
+    prefix: string,
+    sourceSlot = 0,
+  ): NodeRef {
+    const node = this.add({
+      type: 'text/extract-line',
+      title,
+      pos,
+      size: [320, 80],
+      properties: { prefix, value: '' },
+      widgetsValues: [prefix],
+    });
+    this.link(source, sourceSlot, node, 0);
     return node;
   }
 
@@ -353,7 +445,7 @@ export class GraphBuilder {
       type: 'math/math-operation',
       title,
       pos,
-      size: [220, 90],
+      size: [420, 90],
       properties: { operation, valueOne: 0, valueTwo: 0 },
       widgetsValues: [operation],
     });
@@ -372,7 +464,7 @@ export class GraphBuilder {
       type: 'math/precision',
       title,
       pos,
-      size: [220, 80],
+      size: [260, 80],
       properties: { value: -1, precision: digits },
       widgetsValues: [digits],
     });
@@ -383,39 +475,85 @@ export class GraphBuilder {
   keywordCheck(
     title: string,
     pos: [number, number],
-    keywords: NodeRef,
-    text: NodeRef,
+    keywords?: NodeRef,
+    text?: NodeRef,
+    options: { useSemantic?: boolean; threshold?: number } = {},
   ): NodeRef {
+    const { useSemantic = false, threshold = KEYWORD_SIMILARITY_THRESHOLD } =
+      options;
     const node = this.add({
       type: 'text/keyword-check',
       title,
       pos,
-      size: [300, 110],
+      size: [300, 130],
       properties: {
-        useSemantic: false,
+        useSemantic,
+        threshold,
         presentKeywords: '',
         missingKeywords: '',
       },
-      widgetsValues: [false],
+      widgetsValues: [useSemantic, threshold],
     });
-    this.link(keywords, 0, node, 0);
-    this.link(text, 0, node, 1);
+    if (keywords) this.link(keywords, 0, node, 0);
+    if (text) this.link(text, 0, node, 1);
+    return node;
+  }
+
+  /**
+   * Whether an answer *means* the expected answer, as opposed to how close the
+   * two sit in embedding space. See `text/semantic-equivalence` for why those
+   * are different questions and why the defaults sit where they do.
+   */
+  semanticEquivalence(
+    title: string,
+    pos: [number, number],
+    answer?: NodeRef,
+    expected?: NodeRef,
+    options: {
+      lowThreshold?: number;
+      highThreshold?: number;
+      useEntailment?: boolean;
+    } = {},
+  ): NodeRef {
+    const {
+      lowThreshold = EQUIVALENCE_LOW_THRESHOLD,
+      highThreshold = EQUIVALENCE_HIGH_THRESHOLD,
+      useEntailment = true,
+    } = options;
+    const node = this.add({
+      type: 'text/semantic-equivalence',
+      title,
+      pos,
+      size: [340, 200],
+      properties: {
+        lowThreshold,
+        highThreshold,
+        useEntailment,
+        checkNumbers: true,
+        checkPolarity: true,
+        similarity: 0,
+        verdict: '',
+      },
+      widgetsValues: [lowThreshold, highThreshold, useEntailment, true, true],
+    });
+    if (answer) this.link(answer, 0, node, 0);
+    if (expected) this.link(expected, 0, node, 1);
     return node;
   }
 
   sentenceTransformer(
     title: string,
     pos: [number, number],
-    source: NodeRef,
+    source?: NodeRef,
   ): NodeRef {
     const node = this.add({
       type: 'models/sentence-transformer',
       title,
       pos,
-      size: [260, 60],
+      size: [460, 60],
       properties: { value: -1 },
     });
-    this.link(source, 0, node, 0);
+    if (source) this.link(source, 0, node, 0);
     return node;
   }
 
@@ -429,11 +567,124 @@ export class GraphBuilder {
       type: 'models/cosine-similarity',
       title,
       pos,
-      size: [260, 80],
+      size: [300, 80],
       properties: { value: -1 },
     });
     this.link(left, 0, node, 0);
     this.link(right, 0, node, 1);
+    return node;
+  }
+
+  number(title: string, pos: [number, number], value: number): NodeRef {
+    return this.add({
+      type: 'basic/number',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value },
+      widgetsValues: [value],
+    });
+  }
+
+  sum(
+    title: string,
+    pos: [number, number],
+    left?: NodeRef,
+    right?: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'basic/sum',
+      title,
+      pos,
+      size: [220, 80],
+      properties: { precision: 1, path: 'basic/sum' },
+    });
+    if (left) this.link(left, 0, node, 0);
+    if (right) this.link(right, 0, node, 1);
+    return node;
+  }
+
+  concatObject(
+    title: string,
+    pos: [number, number],
+    first: NodeRef,
+    second: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'utils/concat-object',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value: [] },
+    });
+    this.link(first, 0, node, 0);
+    this.link(second, 0, node, 1);
+    return node;
+  }
+
+  stringsToArray(
+    title: string,
+    pos: [number, number],
+    first: NodeRef,
+    second?: NodeRef,
+  ): NodeRef {
+    const node = this.add({
+      type: 'utils/strings-to-array',
+      title,
+      pos,
+      size: [220, 60],
+      properties: { value: [] },
+    });
+    this.link(first, 0, node, 0);
+    if (second) this.link(second, 0, node, 1);
+    return node;
+  }
+
+  clean(title: string, pos: [number, number], source?: NodeRef): NodeRef {
+    const node = this.add({
+      type: 'preprocessing/clean',
+      title,
+      pos,
+      size: [260, 140],
+      properties: {
+        value: '',
+        trim: true,
+        space: false,
+        doubleSpace: true,
+        dot: false,
+        comma: false,
+        lower: false,
+        upper: false,
+        stem: false,
+        removeEnclosingSpecialChars: true,
+      },
+      widgetsValues: [
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+      ],
+    });
+    if (source) this.link(source, 0, node, 0);
+    return node;
+  }
+
+  /** System-role prompt text → message in one call. Returns the message node. */
+  systemPrompt(title: string, pos: [number, number], source: NodeRef): NodeRef {
+    const node = this.add({
+      type: 'basic/prompt-message',
+      title,
+      pos,
+      size: [260, 80],
+      properties: { value: { role: 'system', content: '' } },
+      widgetsValues: ['system'],
+    });
+    this.link(source, 0, node, 0);
     return node;
   }
 
@@ -448,9 +699,42 @@ export class GraphBuilder {
       type: 'output/output',
       title: `${label} output`,
       pos,
-      size: [260, 80],
+      size: [410, 80],
       properties: { uniqueId: '', type, label, value: '' },
       widgetsValues: [label, type],
+    });
+    this.link(source, sourceSlot, node, 0);
+    return node;
+  }
+
+  /**
+   * Review flag: turns a reviewer's recommendation text (or a boolean) into the
+   * structured `review` output the preview card and the Submissions inbox count
+   * (SPEC-0020/FR-001, FR-003). The default markers match the two-line
+   * `RECOMMENDATION:` / `REASON:` contract the bundled review prompts print.
+   */
+  reviewFlag(
+    label: string,
+    pos: [number, number],
+    source: NodeRef,
+    options: {
+      sourceSlot?: number;
+      flagPattern?: string;
+      reasonPrefix?: string;
+    } = {},
+  ): NodeRef {
+    const {
+      sourceSlot = 0,
+      flagPattern = DEFAULT_FLAG_PATTERN,
+      reasonPrefix = DEFAULT_REASON_PREFIX,
+    } = options;
+    const node = this.add({
+      type: 'output/review-flag',
+      title: `${label} flag`,
+      pos,
+      size: [410, 110],
+      properties: { label, flagPattern, reasonPrefix, value: '' },
+      widgetsValues: [label, flagPattern, reasonPrefix],
     });
     this.link(source, sourceSlot, node, 0);
     return node;

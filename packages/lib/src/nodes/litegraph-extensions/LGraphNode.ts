@@ -1,6 +1,7 @@
 import {
   INodeInputSlot,
   INodeOutputSlot,
+  INodeSlot,
   LGraphNode as LGN,
   LGraph,
   LiteGraph
@@ -8,8 +9,8 @@ import {
 import { WebSocket } from 'ws'
 
 import WebSocketNode from '../behavior/WebSocketNode'
-import { InOut } from '../types/NodeLinkMessage'
-import { ServerEventPayload } from '../../events'
+import { InOut, PortType, primaryLinkType, toSlotType } from '../types/NodeLinkMessage'
+import { ServerEventPayload, TraceOutput } from '../../events'
 import type { ModelExecutionWarning } from '../types/ModelRef'
 import type { NodeCategory } from '../NodeDefinition'
 
@@ -25,6 +26,7 @@ export const LINK_TYPE_COLORS: Record<InOut, string> = {
   message: '#FACC15',
   '[number]': '#22D3EE',
   '[string]': '#F472B6',
+  '[message]': '#FCD34D',
   image: '#FB923C',
   '*': '#E2E8F0'
 }
@@ -45,10 +47,24 @@ export const LINK_TYPE_SHAPES: Record<InOut, number> = {
   message: LiteGraph.ARROW_SHAPE,
   '[number]': GRID_SHAPE,
   '[string]': GRID_SHAPE,
+  '[message]': GRID_SHAPE,
   '*': LiteGraph.BOX_SHAPE
 }
 
-/** Title-bar tint per node category (design A header stripe). */
+/**
+ * Color and shape a port is drawn with. A port that accepts several types
+ * (`message,string,[message]`) resolves to its primary type, so widening what
+ * a port accepts never gives it a second look (SPEC-0019/FR-008).
+ */
+export function getPortStyle(type: PortType | string): {
+  color: string | undefined
+  shape: number | undefined
+} {
+  const primary = primaryLinkType(type)
+  return { color: LINK_TYPE_COLORS[primary], shape: LINK_TYPE_SHAPES[primary] }
+}
+
+/** Pill fill per node category. The pill text names the node type; the fill keeps the category signal. */
 export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   AI: '#A78BFA',
   Essential: '#2DD4BF',
@@ -56,16 +72,59 @@ export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   Assessment: '#FBBF24'
 }
 
+/**
+ * Pill label for a node title bar: the canonical node type name, not the
+ * category. Falls back to the short type path (`input/answer` -> `ANSWER`)
+ * and finally to the category so untyped nodes keep a label.
+ */
+export function getPillLabel(
+  definition: { title?: string; category?: NodeCategory } | undefined,
+  fallbackType?: string | null
+): string | undefined {
+  const title = definition?.title?.trim()
+  if (title) return title.toUpperCase()
+  if (fallbackType) {
+    const short = fallbackType.split('/').pop()?.replace(/-/g, ' ').trim()
+    if (short) return short.toUpperCase()
+  }
+  const category = definition?.category?.trim()
+  if (category) return category.toUpperCase()
+  return undefined
+}
+
+/**
+ * Surface palette for the graph canvas. LiteGraph ships a neutral `#222`
+ * clear color plus a grid tile of `#222`/`#191919`/`#141414`; the old node
+ * fill `#2B2D3A` sat at 1.17:1 against it, so nodes barely separated from
+ * the background. This palette pushes the canvas down and the node up on
+ * the same blue-gray hue: body over canvas is 1.77:1, and every text color
+ * stays above 6:1 on the body (`WRAPPED_TEXT_COLOR` 8.4, `NODE_TEXT_COLOR`
+ * 6.3, `NODE_TITLE_COLOR` 9.5). The title bar is a shade darker than the
+ * body so the header reads as a header without a saturated fill.
+ */
+export const CANVAS_THEME = {
+  /** Flat clear color; the only thing painted below 0.5 zoom. */
+  canvas: '#14161C',
+  /** Fine grid every 10 units, drawn at half alpha by LiteGraph at 1x. */
+  gridMinor: '#1C1F28',
+  /** Coarse grid every 100 units. */
+  gridMajor: '#0E1015',
+  /** Node body fill (`NODE_DEFAULT_BGCOLOR`). */
+  nodeBody: '#3B4056',
+  /** Node title bar fill (`NODE_DEFAULT_COLOR`). */
+  nodeTitle: '#2F3346'
+} as const
+
 interface ILGraphNode extends LGN {
   onExecute(): Promise<void>
   init?(env: Record<string, unknown>): void
   env?: Record<string, unknown>
-  addOut<T extends InOut>(
+  addOut<T extends PortType>(
     type: T,
     name?: string,
     extra_info?: Partial<INodeOutputSlot>
   ): INodeOutputSlot
-  addIn(type: InOut, name?: string, extra_info?: Partial<INodeInputSlot>): INodeInputSlot
+  addIn(type: PortType, name?: string, extra_info?: Partial<INodeInputSlot>): INodeInputSlot
 }
 
 // extend the LGraphNode class by adding a new method
@@ -77,6 +136,23 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
 
   /** Transient warnings produced by the current execution. */
   executionWarnings?: ModelExecutionWarning[]
+
+  /**
+   * Transient trace rows a node wants shown next to its outputs, for detail
+   * that is not an output slot — the prompt a model node actually sent, for
+   * instance (SPEC-0019/FR-007). The runner renumbers their slots and
+   * sanitizes them exactly like real outputs.
+   */
+  executionDetails?: TraceOutput[]
+
+  /**
+   * Slot types as the constructor declared them, indexed by slot. `configure()`
+   * overwrites `inputs`/`outputs` with the types a graph was serialized with,
+   * so a port widened after that graph was saved would otherwise come back
+   * narrow; `onConfigure` restores these (SPEC-0019/FR-008). Never serialized.
+   */
+  private declaredInputTypes: string[] = []
+  private declaredOutputTypes: string[] = []
 
   emitEventCallback?(event: {
     eventName: keyof ServerEventPayload
@@ -139,14 +215,17 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @returns The added input slot.
    */
   addIn(
-    type: InOut,
+    type: PortType,
     name?: string | undefined,
     extra_info?: Partial<INodeInputSlot> | undefined
   ): INodeInputSlot {
-    const _name = name ?? type
-    return super.addInput(_name, type, {
-      ...LGraphNode.mapLinkTypeToColor(type),
-      shape: LINK_TYPE_SHAPES[type],
+    const slotType = toSlotType(type)
+    const _name = name ?? slotType
+    const { color, shape } = getPortStyle(type)
+    this.declaredInputTypes[this.inputs?.length ?? 0] = slotType
+    return super.addInput(_name, slotType, {
+      ...(color ? { color_off: color, color_on: color } : {}),
+      shape,
       ...extra_info
     })
   }
@@ -159,15 +238,18 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @param extra_info - Additional information for the output slot (optional).
    * @returns The added output slot.
    */
-  addOut<T extends InOut>(
+  addOut<T extends PortType>(
     type: T,
     name?: string,
     extra_info?: Partial<INodeOutputSlot>
   ): INodeOutputSlot {
-    const _name = name ?? type
-    return super.addOutput(_name, type, {
-      ...LGraphNode.mapLinkTypeToColor(type),
-      shape: LINK_TYPE_SHAPES[type],
+    const slotType = toSlotType(type)
+    const _name = name ?? slotType
+    const { color, shape } = getPortStyle(type)
+    this.declaredOutputTypes[this.outputs?.length ?? 0] = slotType
+    return super.addOutput(_name, slotType, {
+      ...(color ? { color_off: color, color_on: color } : {}),
+      shape,
       ...extra_info
     })
   }
@@ -183,26 +265,34 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
   }
 
   /**
-   * Reapplies the shared port style after `configure()` overwrites slots with
-   * serialized values. Old graphs carry translucent colors and no shape, so
-   * without this they keep the bleak look forever. Takes the serialized info
-   * so subclasses (LLMNode) can extend the signature without a type clash.
+   * Restores the port contract after `configure()` overwrites slots with
+   * serialized values. Two things drift: a graph saved before a port was
+   * widened carries the narrower slot type, and old graphs carry translucent
+   * colors and no shape, so without this they keep the bleak look forever.
+   * Declared types win over serialized ones (SPEC-0019/FR-008); link ids on
+   * the slot are left alone, so existing wires survive untouched. Takes the
+   * serialized info so subclasses (LLMNode) can extend the signature without
+   * a type clash.
    */
   onConfigure(_info?: unknown): void {
-    for (const slot of [...(this.inputs ?? []), ...(this.outputs ?? [])]) {
-      const type = slot.type as InOut
-      const color = LINK_TYPE_COLORS[type]
-      if (color) {
-        slot.color_off = color
-        slot.color_on = color
-      }
-      const shape = LINK_TYPE_SHAPES[type]
-      if (shape !== undefined) slot.shape = shape
+    const restyle = (slots: INodeSlot[], declared: string[]) => {
+      slots.forEach((slot, index) => {
+        const declaredType = declared[index]
+        if (declaredType) slot.type = declaredType
+        const { color, shape } = getPortStyle(String(slot.type))
+        if (color) {
+          slot.color_off = color
+          slot.color_on = color
+        }
+        if (shape !== undefined) slot.shape = shape
+      })
     }
+    restyle(this.inputs ?? [], this.declaredInputTypes)
+    restyle(this.outputs ?? [], this.declaredOutputTypes)
   }
 
   /**
-   * Draws the category pill in the title bar (design B element). Implemented
+   * Draws the node-type pill in the title bar (design B element). Implemented
    * as `onDrawTitleBox` (not `onDrawForeground`): LiteGraph paints the title
    * string after the foreground pass, so a foreground pill always ends up
    * underneath the title text, and the default title text after
@@ -212,6 +302,8 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * at the pill gutter. Runs in node local coordinates, title bar y [-30, 0].
    * `compactNodeWidgets` wraps `onDrawForeground`, never this hook, so the
    * pill and the preview text compose instead of clobbering each other.
+   * The pill text names the node type (`definition.title`); the pill fill
+   * keeps the category color so the category signal survives the rename.
    */
   onDrawTitleBox(
     context: CanvasRenderingContext2D,
@@ -221,10 +313,10 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     titleFont: string
   ): void {
     const ctor = this.constructor as typeof LGraphNode & {
-      definition?: { category?: NodeCategory }
+      definition?: { category?: NodeCategory; title?: string }
       boxcolor?: string
     }
-    const label = ctor.definition?.category
+    const category = ctor.definition?.category
     // Always draw the status dot (LiteGraph default) so uncategorized nodes
     // keep their look; the pill only applies to categorized nodes.
     const boxSize = 10
@@ -239,10 +331,11 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
       Math.PI * 2
     )
     context.fill()
-    if (!label || this.flags?.collapsed) return
-    const fill = CATEGORY_COLORS[label]
+    if (!category || this.flags?.collapsed) return
+    const fill = CATEGORY_COLORS[category]
     if (!fill) return
-    const text = label.toUpperCase()
+    const text = getPillLabel(ctor.definition, this.type)
+    if (!text) return
     context.save()
     context.font = 'bold 10px Tahoma, sans-serif'
     const paddingX = 8
@@ -254,7 +347,12 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     // "Cosine Similarity" readable instead of truncated to "Conc…". Measure
     // the title in the real title font so the gutter accounts for the actual
     // rendered width, not the 10px pill font.
-    context.font = titleFont
+    //
+    // NOTE: the shipped LiteGraph calls this hook with four arguments only
+    // (ctx, titleHeight, size, scale), so titleFont arrives as undefined and
+    // assigning undefined to context.font is silently ignored. The fallback
+    // below uses the same default the canvas itself uses for title text.
+    context.font = titleFont || `${Reflect.get(LiteGraph, 'NODE_TEXT_SIZE') ?? 14}px Arial`
     const titleWidth = context.measureText(String(this.getTitle() ?? '')).width
     const gap = 10
     const minWidth = Math.ceil(
@@ -275,6 +373,10 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
     else context.rect(x, y, width, height)
     context.fill()
     context.fillStyle = '#14161C'
+    // Back to the pill font: the title measurement above leaves the
+    // context on the much wider title font, which would spill the pill
+    // label past its rect and into the slot labels.
+    context.font = 'bold 10px Tahoma, sans-serif'
     context.textAlign = 'left'
     context.textBaseline = 'middle'
     context.fillText(text, x + paddingX, y + height / 2 + 0.5)
@@ -330,9 +432,9 @@ export abstract class LGraphNode extends LGN implements ILGraphNode, WebSocketNo
    * @returns The color object corresponding to the link type.
    */
   static mapLinkTypeToColor(
-    type: InOut
+    type: PortType | string
   ): { color_off: string; color_on: string } | undefined {
-    const color = LINK_TYPE_COLORS[type]
+    const { color } = getPortStyle(type)
     if (!color) return undefined
     return { color_off: color, color_on: color }
   }

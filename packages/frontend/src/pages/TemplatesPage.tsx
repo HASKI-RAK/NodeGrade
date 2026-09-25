@@ -11,7 +11,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  Grid,
   InputLabel,
   List,
   ListItem,
@@ -33,6 +32,77 @@ import {
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
 
 type PreviewNode = { id: number; type: string; title?: string }
+
+/**
+ * Method phrases highlighted inside workflow descriptions on the card.
+ * Longest first so "embedding similarity to a reference" wins over
+ * "embedding similarity". Matching is case-insensitive; the original
+ * casing is preserved in the output.
+ */
+const METHOD_TERMS = [
+  'embedding similarity to a reference',
+  'deterministic point aggregation',
+  'expected-words check',
+  'conceptual assessment',
+  'rubric-based scoring',
+  'deterministic aggregation',
+  'drafts feedback',
+  'review stage',
+  'criterion-based',
+  'criterion reports',
+  'cosine similarity',
+  'sentence-transformer',
+  'expected words',
+  'embedding similarity',
+  'keyword search',
+  'feedback policy',
+  'classification',
+  'classifies',
+  'extract-number',
+  'math nodes',
+  'LLM judgment',
+  'LLM grader',
+  'LLM classification',
+  'LLM feedback',
+  'LLM review',
+  'formative feedback',
+  'rubric criteria',
+  'rubric'
+]
+
+const METHOD_PATTERN = new RegExp(
+  `(${METHOD_TERMS.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+  'gi'
+)
+
+const VISIBLE_TEMPLATE_SLUGS = new Set([
+  'workshop-words-vs-understanding',
+  'workshop-same-score-different-gaps',
+  'workshop-different-mistakes-different-help'
+])
+
+const TemplateDescription = ({ text }: { text: string | null }) => {
+  if (!text) return null
+  const parts = text.split(METHOD_PATTERN)
+  return (
+    <Typography sx={{ whiteSpace: 'pre-line' }}>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? <strong key={index}>{part}</strong> : part
+      )}
+    </Typography>
+  )
+}
+
+const TemplateTags = ({ tags }: { tags: string[] }) => {
+  if (tags.length === 0) return null
+  return (
+    <Stack direction="row" gap={0.5} mt={1} flexWrap="wrap" aria-label="Template methods">
+      {tags.map((tag) => (
+        <Chip key={tag} label={tag} size="small" variant="outlined" />
+      ))}
+    </Stack>
+  )
+}
 
 const graphStructure = (revision: TemplateRevision) => {
   const parsed = JSON.parse(revision.content) as {
@@ -63,7 +133,12 @@ export const TemplatesPage = () => {
   }, [])
 
   const visibleTemplates = useMemo(
-    () => templates?.filter((template) => kind === 'ALL' || template.kind === kind),
+    () =>
+      templates?.filter(
+        (template) =>
+          VISIBLE_TEMPLATE_SLUGS.has(template.slug) &&
+          (kind === 'ALL' || template.kind === kind)
+      ),
     [kind, templates]
   )
 
@@ -101,46 +176,51 @@ export const TemplatesPage = () => {
           </Select>
         </FormControl>
       </Stack>
-      <Grid container spacing={2}>
+      <Box
+        sx={{
+          columns: { xs: 1, md: 2 },
+          columnGap: 2,
+          '& > *': { breakInside: 'avoid', mb: 2 }
+        }}
+      >
         {visibleTemplates?.map((template) => (
-          <Grid key={template.id} size={{ xs: 12, md: 6 }}>
-            <Card>
-              <CardContent>
-                <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
-                  <Chip label={template.kind === 'WORKFLOW' ? 'Workflow' : 'Block'} />
-                  <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
-                </Stack>
-                <Typography variant="h6">{template.name}</Typography>
-                <Typography>{template.description}</Typography>
-              </CardContent>
-              <CardActions>
-                <Button
-                  onClick={async () => {
-                    setPreviewLoading(true)
-                    try {
-                      setPreview(await api.template(template.slug))
-                    } finally {
-                      setPreviewLoading(false)
-                    }
-                  }}
-                >
-                  Preview structure
-                </Button>
-                <Button
-                  disabled={!session || template.kind !== 'WORKFLOW'}
-                  onClick={async () => {
-                    if (!session) return
-                    const workflow = await api.fromTemplate(session.token, template.slug)
-                    navigate(`/editor/${workflow.id}`)
-                  }}
-                >
-                  Use template
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
+          <Card key={template.id}>
+            <CardContent>
+              <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
+                <Chip label={template.kind === 'WORKFLOW' ? 'Workflow' : 'Block'} />
+                <Chip label={template.category ?? 'Uncategorized'} variant="outlined" />
+              </Stack>
+              <Typography variant="h6">{template.name}</Typography>
+              <TemplateDescription text={template.description} />
+              <TemplateTags tags={template.tags} />
+            </CardContent>
+            <CardActions>
+              <Button
+                onClick={async () => {
+                  setPreviewLoading(true)
+                  try {
+                    setPreview(await api.template(template.slug))
+                  } finally {
+                    setPreviewLoading(false)
+                  }
+                }}
+              >
+                Preview structure
+              </Button>
+              <Button
+                disabled={!session || template.kind !== 'WORKFLOW'}
+                onClick={async () => {
+                  if (!session) return
+                  const workflow = await api.fromTemplate(session.token, template.slug)
+                  navigate(`/editor/${workflow.id}`)
+                }}
+              >
+                Use template
+              </Button>
+            </CardActions>
+          </Card>
         ))}
-      </Grid>
+      </Box>
       {visibleTemplates?.length === 0 && (
         <Typography color="text.secondary">No templates match this type.</Typography>
       )}
@@ -149,7 +229,11 @@ export const TemplatesPage = () => {
         <DialogContent sx={{ minWidth: { sm: 480 } }}>
           {previewLoading && <CircularProgress />}
           {preview && !previewLoading && (
-            <TemplateStructure revision={preview.revision} />
+            <Stack spacing={2}>
+              <TemplateDescription text={preview.template.description} />
+              <TemplateTags tags={preview.template.tags} />
+              <TemplateStructure revision={preview.revision} />
+            </Stack>
           )}
         </DialogContent>
         <DialogActions>

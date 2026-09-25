@@ -1,11 +1,15 @@
 import type { BundledTemplate } from './bundled-template.js';
 
 /**
- * A reusable "turn text into feedback" subgraph: prompt message -> LLM -> output.
+ * A reusable "turn text into feedback" subgraph: text -> LLM -> output.
  *
  * The declared interface is what makes it insertable rather than just pasteable — the
  * editor can offer to wire an existing answer node into the prompt input (FR-020) and
  * the LLM's string output onward, instead of dropping three disconnected nodes.
+ *
+ * The block's `text` port lands straight on the model's `message` slot: since
+ * SPEC-0019/FR-002 that slot takes a plain string, so the `prompt-message` node
+ * that used to sit between them only to satisfy a wire type is gone.
  *
  * SPEC-0003/FR-021 names five canonical blocks. This ships the mechanism plus the one
  * whose content is genuinely settled; the rubric scorer, answer classifier,
@@ -21,41 +25,26 @@ export const feedbackGeneratorBlock: BundledTemplate = {
   category: 'Feedback',
   tags: ['llm', 'feedback'],
   content: {
-    last_node_id: 3,
-    last_link_id: 2,
+    last_node_id: 2,
+    last_link_id: 1,
     nodes: [
       {
         id: 1,
-        type: 'basic/prompt-message',
-        pos: [80, 100],
-        size: [280, 100],
-        flags: {},
-        order: 0,
-        mode: 0,
-        inputs: [{ name: 'string', type: 'string', link: null }],
-        outputs: [{ name: 'message', type: 'message', links: [1] }],
-        title: 'Feedback prompt',
-        properties: {
-          value: {
-            role: 'user',
-            content: '',
-          },
-        },
-        widgets_values: ['user'],
-      },
-      {
-        id: 2,
         type: 'models/llm',
         pos: [420, 100],
         size: [300, 200],
         flags: {},
-        order: 1,
+        order: 0,
         mode: 0,
         inputs: [
-          { name: 'message', type: 'message', link: 1 },
-          { name: 'messages', type: '*', link: null },
+          { name: 'message', type: 'message,string,[message]', link: null },
+          {
+            name: 'messages',
+            type: 'message,[message],[string],string',
+            link: null,
+          },
         ],
-        outputs: [{ name: 'string', type: 'string', links: [2] }],
+        outputs: [{ name: 'string', type: 'string', links: [1] }],
         title: 'Feedback model',
         properties: {
           model: '',
@@ -69,28 +58,25 @@ export const feedbackGeneratorBlock: BundledTemplate = {
         },
       },
       {
-        id: 3,
+        id: 2,
         type: 'output/output',
         pos: [780, 100],
         size: [210, 80],
         flags: {},
-        order: 2,
+        order: 1,
         mode: 0,
-        inputs: [{ name: '*', type: '*', link: 2 }],
+        inputs: [{ name: '*', type: '*', link: 1 }],
         outputs: [],
         title: 'Feedback',
         properties: {
-          uniqueId: '3',
+          uniqueId: '2',
           type: 'text',
           label: 'Feedback',
           value: '',
         },
       },
     ],
-    links: [
-      [1, 1, 0, 2, 0, 'message'],
-      [2, 2, 0, 3, 0, 'string'],
-    ],
+    links: [[1, 1, 0, 2, 0, 'string']],
     groups: [],
     config: {},
     extra: {},
@@ -113,7 +99,7 @@ export const feedbackGeneratorBlock: BundledTemplate = {
         label: 'Feedback text',
         dataType: 'string',
         direction: 'output',
-        internalNodeId: 2,
+        internalNodeId: 1,
         internalSlot: 0,
         description: 'Generated formative feedback.',
       },

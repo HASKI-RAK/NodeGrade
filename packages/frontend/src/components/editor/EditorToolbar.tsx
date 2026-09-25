@@ -1,4 +1,5 @@
 import AddIcon from '@mui/icons-material/Add'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -24,7 +25,11 @@ import {
 } from '@mui/material'
 import { useRef, useState } from 'react'
 
+import { ColorSchemeMenuItems } from '@/components/ColorSchemeMenuItems'
 import type { SaveStatus } from '@/hooks/useAutosave'
+
+import { CATEGORY_DESCRIPTIONS, CATEGORY_ORDER } from './categoryInfo'
+import { CategoryPill } from './CategoryPill'
 
 const labels: Record<SaveStatus, string> = {
   loading: 'Loading…',
@@ -49,6 +54,7 @@ export const EditorToolbar = ({
   onRun,
   onPreview,
   onSaveAs,
+  onHistory,
   onImport,
   onExport,
   onReset,
@@ -71,6 +77,7 @@ export const EditorToolbar = ({
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
+  onHistory: () => void
   onImport: (file: File) => Promise<void>
   onExport: () => void
   onReset: () => Promise<void>
@@ -90,6 +97,7 @@ export const EditorToolbar = ({
   const [resetOpen, setResetOpen] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [name, setName] = useState(`${workflowName} copy`)
   const fileRef = useRef<HTMLInputElement | null>(null)
   return (
@@ -142,6 +150,11 @@ export const EditorToolbar = ({
               />
             </Tooltip>
           )}
+          <Tooltip title="Node colors and adding nodes">
+            <IconButton aria-label="Editor help" onClick={() => setHelpOpen(true)}>
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
           <IconButton
             aria-label="More editor actions"
             onClick={(event) => setAnchor(event.currentTarget)}
@@ -176,6 +189,16 @@ export const EditorToolbar = ({
           <MenuItem
             onClick={() => {
               setAnchor(null)
+              onHistory()
+            }}
+          >
+            Version history…
+          </MenuItem>
+        )}
+        {!student && (
+          <MenuItem
+            onClick={() => {
+              setAnchor(null)
               fileRef.current?.click()
             }}
           >
@@ -199,6 +222,8 @@ export const EditorToolbar = ({
         >
           Connection information
         </MenuItem>
+        <Divider />
+        <ColorSchemeMenuItems onSelect={() => setAnchor(null)} />
         {!student && (
           <MenuItem>
             <FormControlLabel
@@ -318,6 +343,41 @@ export const EditorToolbar = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConnectionOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Node colors and adding nodes</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography variant="body2">
+              Each node&apos;s title bar shows its type. The pill color shows its
+              category.
+            </Typography>
+            <Stack spacing={1}>
+              {CATEGORY_ORDER.map((category) => (
+                <Stack key={category} direction="row" spacing={1.5} alignItems="center">
+                  <CategoryPill category={category} />
+                  <Typography variant="body2">
+                    {CATEGORY_DESCRIPTIONS[category]}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+            <Typography variant="subtitle2">Adding nodes</Typography>
+            <Typography variant="body2" component="div">
+              <ol style={{ margin: 0, paddingLeft: 20 }}>
+                <li>Click Add in the top bar to open the node palette.</li>
+                <li>Search, then click a node to insert it at the canvas center.</li>
+                <li>
+                  Drag from an output dot to an input dot to connect them. Dot colors show
+                  the value type they carry.
+                </li>
+              </ol>
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

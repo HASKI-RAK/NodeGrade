@@ -7,6 +7,7 @@ import { ConcatObject } from './ConcatObject'
 import { ConcatString } from './ConcatString'
 import { CosineSimilarity } from './CosineSimilarity'
 import { DocumentLoader } from './DocumentLoader'
+import { ExtractLineNode } from './ExtractLineNode'
 import { ExtractNumberNode } from './ExtractNumberNode'
 import { ImageNode } from './ImageNode'
 import { KeywordCheckNode } from './KeywordCheckNode'
@@ -19,14 +20,21 @@ import type {
   NodeDefinition,
   NodePropertyDefinition
 } from './NodeDefinition'
-import { applyWrappedText } from './widgets/WrappedTextPreview'
+import {
+  applyWrappedText,
+  drawSingleLinePreview,
+  readTextValue,
+  wrappedTextMinHeight
+} from './widgets/WrappedTextPreview'
 import { NumberNode } from './NumberNode'
 import { OutputNode } from './OutputNode'
 import { Precision } from './Precision'
 import { PromptMessage } from './PromptMessage'
 import { QuestionNode } from './QuestionNode'
+import { ReviewFlagNode } from './ReviewFlagNode'
 import { Route } from './Route'
 import { SampleSolutionNode } from './SampleSolutionNode'
+import { SemanticEquivalenceNode } from './SemanticEquivalenceNode'
 import { SentenceTransformer } from './SentenceTransformer'
 import { StringArrayToString } from './StringArrayToString'
 import { StringsToArray } from './StringToArray'
@@ -58,7 +66,7 @@ const textarea = (
 ): NodePropertyDefinition => ({
   key,
   label,
-  control: { type: 'textarea', rows: 5 },
+  control: { type: 'textarea', rows: 8 },
   advanced: false,
   required: false,
   keyValue
@@ -121,10 +129,21 @@ const entries: readonly Entry[] = [
       {
         key: 'type',
         label: 'Display',
-        control: { type: 'select', options: ['text', 'success', 'warning', 'error'] },
+        control: { type: 'select', options: ['text', 'score', 'classifications'] },
         advanced: false,
         required: true
       }
+    ]
+  },
+  {
+    node: ReviewFlagNode,
+    category: 'Assessment',
+    description: 'Flag a run for a human tutor.',
+    tags: ['review', 'flag'],
+    properties: [
+      text('label', 'Label', true),
+      text('flagPattern', 'Flag markers'),
+      text('reasonPrefix', 'Reason prefix')
     ]
   },
   {
@@ -179,7 +198,7 @@ const entries: readonly Entry[] = [
       {
         key: 'value',
         label: 'Prompt',
-        control: { type: 'textarea', rows: 7 },
+        control: { type: 'textarea', rows: 10 },
         advanced: false,
         required: true,
         keyValue: true
@@ -271,6 +290,13 @@ const entries: readonly Entry[] = [
     description: 'Extract a number from text.'
   },
   {
+    node: ExtractLineNode,
+    category: 'Validation',
+    description: 'Extract the line that follows a prefix.',
+    tags: ['classification', 'structured'],
+    properties: [text('prefix', 'Line prefix', true)]
+  },
+  {
     node: MathOperationNode,
     category: 'Validation',
     description: 'Apply a numeric operation.',
@@ -333,7 +359,23 @@ const entries: readonly Entry[] = [
     category: 'Validation',
     description: 'Check required keywords.',
     tags: ['semantic'],
-    properties: [toggle('useSemantic', 'Use semantic similarity')]
+    properties: [
+      toggle('useSemantic', 'Use semantic similarity'),
+      number('threshold', 'Similarity threshold', true)
+    ]
+  },
+  {
+    node: SemanticEquivalenceNode,
+    category: 'Validation',
+    description: 'Decide whether an answer means the same as the expected answer.',
+    tags: ['semantic', 'similarity', 'entailment'],
+    properties: [
+      number('lowThreshold', 'Reject below similarity', true),
+      number('highThreshold', 'Accept above similarity', true),
+      toggle('useEntailment', 'Verify with entailment'),
+      toggle('checkNumbers', 'Compare numbers'),
+      toggle('checkPolarity', 'Compare yes/no')
+    ]
   }
 ]
 
@@ -358,6 +400,7 @@ const byType = new Map(definitions.map(({ definition }) => [definition.type, def
 
 const legacyWidgetKeys = new Map<string, readonly string[]>([
   [OutputNode.getPath(), ['label', 'type']],
+  [ReviewFlagNode.getPath(), ['label', 'flagPattern', 'reasonPrefix']],
   [
     LLMNode.getPath(),
     [
@@ -389,11 +432,22 @@ const legacyWidgetKeys = new Map<string, readonly string[]>([
     ]
   ],
   [Precision.getPath(), ['precision']],
+  [ExtractLineNode.getPath(), ['prefix']],
   [NumberNode.getPath(), ['value']],
   [MathOperationNode.getPath(), ['operation']],
   [StringArrayToString.getPath(), ['separator']],
   [CountNode.getPath(), ['operation']],
-  [KeywordCheckNode.getPath(), ['useSemantic']]
+  [KeywordCheckNode.getPath(), ['useSemantic', 'threshold']],
+  [
+    SemanticEquivalenceNode.getPath(),
+    [
+      'lowThreshold',
+      'highThreshold',
+      'useEntailment',
+      'checkNumbers',
+      'checkPolarity'
+    ]
+  ]
 ])
 
 export const getDefinedNodeConstructors = (): readonly DefinedNodeConstructor[] =>
@@ -465,13 +519,16 @@ const WRAPPED_TEXT_NODES: Readonly<Record<string, string>> = {
 
 export function compactNodeWidgets(node: LiteGraphNode): void {
   // Free-text nodes lost their canvas widget: shrinking them row-by-row
-  // would clip the new wrapped preview. Only enforce the minimum footprint;
-  // serialized sizes (e.g. bundled templates) are preserved as-is so saved
-  // layouts never shrink on load.
+  // would clip the new wrapped preview. Only enforce the minimum footprint
+  // (room for two lines); serialized sizes (e.g. bundled templates) are
+  // preserved as-is so saved layouts never shrink on load.
   if (node.type && WRAPPED_TEXT_NODES[node.type]) {
     Reflect.set(node, 'widgets', [])
     Reflect.set(node, 'serialize_widgets', false)
-    node.size = [Math.max(node.size[0], 180), Math.max(node.size[1], 64)]
+    node.size = [
+      Math.max(node.size[0], 180),
+      Math.max(node.size[1], wrappedTextMinHeight(node))
+    ]
     if (Reflect.get(node, '__compactDefinitionApplied')) return
     Reflect.set(node, '__compactDefinitionApplied', true)
     applyWrappedText(node, WRAPPED_TEXT_NODES[node.type])
@@ -494,22 +551,7 @@ export function compactNodeWidgets(node: LiteGraphNode): void {
     'onDrawForeground',
     function (this: LiteGraphNode, context: CanvasRenderingContext2D) {
       if (typeof previousDraw === 'function') Reflect.apply(previousDraw, this, [context])
-      const raw = this.properties[keyProperty.key]
-      const nested =
-        typeof raw === 'object' && raw !== null ? Reflect.get(raw, 'content') : raw
-      const value = String(nested ?? '')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (!value) return
-      context.save()
-      context.fillStyle = '#d4d7dd'
-      context.font = '11px sans-serif'
-      context.fillText(
-        value.length > 34 ? `${value.slice(0, 33)}…` : value,
-        10,
-        this.size[1] - 9
-      )
-      context.restore()
+      drawSingleLinePreview(this, context, readTextValue(this, keyProperty.key))
     }
   )
 }

@@ -35,9 +35,13 @@ Responsibilities:
 - optimistic concurrency through `If-Match`/`ETag`
 - draft `content` versus `publishedContent` projection (ADR-0007)
 - creation and reset from a template revision
+- version history: a `WorkflowVersion` row per state the workflow leaves, coalesced on
+  save and forced before a reset or restore, with a per-workflow cap (newest 20)
 
-Primary entry points: `workflow.controller.ts`, `workflow.service.ts`, `workflow-etag.ts`,
-`workflow-slug.ts`, `dto/workflow.dto.ts`
+Primary entry points: `workflow.controller.ts`, `workflow.service.ts`,
+`workflow-history.service.ts`, `workflow-history.controller.ts`
+(`/workflows/:id/versions`), `workflow-etag.ts`, `workflow-slug.ts`,
+`workflow-serialize.ts`, `dto/workflow.dto.ts`
 
 Depends on: Prisma, templates. Used by: editor UI, graph execution, benchmark.
 
@@ -62,9 +66,17 @@ Primary entry points: `template.service.ts`, `template.controller.ts`,
 Bundled graphs are TypeScript modules under `bundled/`. The three WAIE tutorial graphs
 (`bundled/workshop-*.ts`, exported together as `WORKSHOP_TEMPLATES`) are declared through
 `bundled/graph-builder.ts`, which owns slot wiring, link ids and `last_*_id` bookkeeping so a
-template states only nodes and connections. `packages/backend/scripts/run-workshop-live.ts`
-(`yarn workspace backend workshop:live`) runs those graphs headlessly against the real
-KATALYST deployment with predefined test answers — the facilitator's pre-workshop check.
+template states only nodes and connections. Their subject matter is everyday science (day
+and night, the water cycle, sharing a pizza) so participants evaluate the assessment
+workflow rather than their own knowledge. Each of the three, and the `validation-review`
+block, ends in one `output/review-flag` node fed by a model, so the facilitator can walk
+the same recommend → flag → inbox loop in every example (SPEC-0020/FR-003). Slugs are
+named after the assessment concept,
+not the example, so an example can change without a new slug; slugs that did change are
+listed in `RETIRED_TEMPLATE_SLUGS` and the seeder unpublishes them on boot.
+`packages/backend/scripts/run-workshop-live.ts` (`yarn workspace backend workshop:live`)
+runs those graphs headlessly against the real KATALYST deployment with the prepared test
+answers — the facilitator's pre-workshop check.
 
 Tests: `packages/backend/src/template/**/*.spec.ts`
 
@@ -119,7 +131,15 @@ Responsibilities:
 
 Primary entry points: `provider.service.ts`, `provider-runtime.service.ts`,
 `provider.controller.ts`, `model.controller.ts`, `provider-credential-cipher.ts`,
-`model-policy.ts`, `execution-limits.service.ts`, `execution-limits.controller.ts`
+`model-policy.ts`, `execution-limits.service.ts`, `execution-limits.controller.ts`,
+`deployment-settings.service.ts`, `deployment-settings.controller.ts`
+
+The facilitator's deployment default model lives in the `DeploymentSettings`
+singleton: model nodes without an explicit `model_ref` execute against it
+(substituted at run time, never persisted), and the participant catalog carries
+it as `defaultModel` only when it is runnable. In production the local model
+worker is filtered from the participant catalog and refused at execution, while
+the facilitator's per-provider views stay unfiltered.
 
 Related: shared types in `packages/lib/src/nodes/types/ModelRef.ts`; admin UI in
 `packages/frontend/src/pages/admin/AdminPage.tsx`
@@ -135,14 +155,36 @@ Responsibilities:
 - Socket.IO `runGraph`/`cancelRun` handling, per-client run registry, cancellation
 - topological LiteGraph execution with per-node lifecycle events
 - trace output sanitizing and truncation
+- writing the run record before the terminal event (ADR-0009)
 - xAPI statements for LTI launches
 
 Primary entry points: `graph.gateway.ts`, `graph-handler.service.ts`, `core/Graph.ts`,
 `core/trace-sanitizer.ts`, `config/node-env.ts`, `packages/backend/utils/socket-emitter.ts`
 
-Depends on: workflow service, provider runtime, `@haski/ta-lib` nodes.
+Depends on: workflow service, provider runtime, run service, `@haski/ta-lib` nodes.
 
 Tests: `packages/backend/src/graphgateway/**/*.spec.ts`, `src/core/*.spec.ts`
+
+## Run records
+
+Location: `packages/backend/src/run/`
+
+Responsibilities:
+
+- one `Run` row per completed or failed execution: answer, sanitized outputs, first score,
+  the derived review flag and reason, the LTI launch name, the participant's review mark
+- workspace-scoped list with filter and summary counts, detail, mark reviewed / reopen
+- refusing LTI launches under the published projection (learners never see the inbox)
+- per-workflow cap (newest 200) applied at write time; deletion cascades from workspace
+  and workflow
+
+Primary entry points: `run.service.ts` (`record`, `list`, `get`, `setReview`),
+`run.controller.ts` (`/workflows/:id/runs`), `dto/run.dto.ts`
+
+Depends on: Prisma, workspace guard. Used by: graph execution (writes), the Submissions
+tab in the preview rail (reads).
+
+Tests: `packages/backend/src/run/*.spec.ts`, `packages/backend/test/run-records.int-spec.ts`
 
 ## Shared graph library (`@haski/ta-lib`)
 
@@ -150,7 +192,10 @@ Location: `packages/lib/src/`
 
 Responsibilities:
 
-- every LiteGraph node implementation (`nodes/*.ts`, ~28 types)
+- every LiteGraph node implementation (`nodes/*.ts`, ~29 types), including the review
+  flag (`nodes/ReviewFlagNode.ts`, `output/review-flag`) that turns a reviewer's
+  recommendation into the structured `review` output the preview marks and the
+  Submissions inbox counts (SPEC-0020)
 - node metadata used by palette and inspector (`nodes/NodeDefinition.ts`,
   `nodes/NodeDefinitionRegistry.ts`, `nodes/LGraphRegisterCustomNodes.ts`)
 - client/server event contracts and trace payloads (`events/ServerEvents.ts`)
@@ -169,14 +214,22 @@ registration happens in this package.
 Location: `packages/frontend/src/pages/Editor.tsx`, `packages/frontend/src/components/`
 
 Responsibilities: LiteGraph canvas hosting, palette/inspector/toolbar rails, autosave and
-version conflict handling, undo history, run controls, trace and task views.
+version conflict handling, undo history, run controls, trace and task views, the
+Submissions inbox over stored runs (editor only; hidden for LTI student launches).
 
 Primary entry points: `components/Canvas.tsx`, `components/editor/EditorToolbar.tsx`,
 `components/editor/NodePalette.tsx`, `components/editor/NodeInspector.tsx`,
 `components/editor/EditorRail.tsx`, `components/TaskView.tsx`, `components/TraceView.tsx`,
-`hooks/useAutosave.ts`, `hooks/useGraphHistory.ts`, `hooks/useGraphOperations.ts`,
-`hooks/useSocket.ts`, `hooks/useServerEvents.ts`, `hooks/useWorkflowForm.ts`,
+`components/SubmissionsView.tsx`, `components/ResultCard.tsx`, `hooks/useAutosave.ts`,
+`hooks/useGraphHistory.ts`, `hooks/useGraphOperations.ts`, `hooks/useSocket.ts`,
+`hooks/useServerEvents.ts`, `hooks/useSubmissions.ts`, `hooks/useWorkflowForm.ts`,
 `i18n/preview.ts`, `utils/graphBlocks.ts`
+
+LiteGraph canvas installers live in `utils/`: `canvasPixelRatio.ts` (device-pixel-ratio
+bitmap behind a CSS-pixel coordinate system; `canvasCssSize`/`canvasViewportCenter` for
+viewport maths), `nodeConnectionHighlight.ts` (hover/selection wire accent),
+`subgraphChrome.ts` (hides LiteGraph's own subgraph banner and panels; the breadcrumb in
+`Editor.tsx` owns block navigation) and `debugBridge.ts` (`window.__NODEGRADE_DEBUG__`).
 
 The preview's question and answer-length bounds come from the open graph through
 `hooks/useWorkflowForm.ts`; its participant-facing strings live in `i18n/preview.ts`.
@@ -246,6 +299,46 @@ range with a fake model and embedding worker (`fake-model.mjs`), seeded demo gra
 both before the server starts, using the bundled content byte for byte so the bootstrap
 seeder recognises its own hash and appends no revision.
 
+`fake-model.mjs` stands in for every endpoint of the NLP worker as well as the
+text-generation one: `/sentence_embedding` and `/similarity` from a hashed bag of words,
+and `/entailment` from token overlap plus a negation list. It is arithmetic, not a model —
+unrelated text scores near 0 and a paraphrase scores low, where a real worker scores it
+high. Use it to check that a graph runs, never to judge how the equivalence cascade
+behaves. `DEBUG_NLI_DISABLED=1` makes `/entailment` answer 503, which is what the real
+worker does when `NLI_MODEL` is empty.
+
+## Deployable stack
+
+Location: `tools/stack.mjs`, `docker-compose.yml`
+
+The same `up|serve|down|status|logs|reset` verbs as the debug driver, against the real
+stack: Postgres, the sentence-transformer worker with `EMBEDDING_MODEL` and `NLI_MODEL`
+actually loaded, the backend and the frontend, on the default 8080/5000/8002/5432 ports
+(each overridable through `NODEGRADE_*_PORT`). Exposed as `yarn dev:up` and friends.
+
+It wraps Compose rather than documenting it because three of the ways this stack fails
+look like success: a start without `--build` serves the previous image's routes,
+templates and migrations; a `PROVIDER_ENCRYPTION_KEY` supplied per command cannot decrypt
+what the last one wrote; and a stack with no `ADMIN_USERNAME`/`ADMIN_PASSWORD` comes up
+healthy with no way to create a workshop. So `up` always builds, writes a key into `.env`
+once and never rewrites a value that exists, and reports what is still missing after the
+containers are healthy.
+
+## Production stack
+
+Location: `docker-compose.prod.yml`, `stack.env.example`, `.github/workflows/deploy.yml`,
+`packages/backend/src/config/trust-proxy.ts`
+
+The deployed form of the same topology for Portainer behind Traefik. The compose file
+runs the GHCR images the workflow pushes on every push to `main` and never builds; the
+workflow ends by calling the Portainer stack webhook, so a merge into `main` is the
+release. Required settings use `${VAR:?message}` so a stack missing one refuses to start
+by name, the rest default, and the backend additionally loads Portainer's `stack.env`
+through `env_file` so optional backend variables need no compose edit. `trust-proxy.ts`
+reads `TRUST_PROXY`, the number of proxies whose `X-Forwarded-For` entries Express may
+believe: 1 in `docker-compose.yml`, 2 here. `stack.env.example` documents every variable
+the stack reads; README.md, "Deploying with Portainer" has the one-time setup.
+
 ## Browser suite
 
 Location: `e2e/`, `playwright.config.ts`
@@ -281,10 +374,19 @@ local IDs, and requirements with neither a tracing acceptance criterion nor a
 (`yarn test:specs`) covers it with node:test and is gated by the `specs` job in
 `.github/workflows/pr.yml`.
 
-## Embedding worker
+## NLP worker
 
 Location: `models/`
 
-Flask + sentence-transformers service backing `SentenceTransformer`, `CosineSimilarity`
-and semantic `KeywordCheckNode`. Reached through `MODEL_WORKER_URL` /
-`SIMILARITY_WORKER_URL` injected by `packages/backend/src/config/node-env.ts`.
+Flask service backing `SentenceTransformer`, `CosineSimilarity`, semantic
+`KeywordCheckNode` and `SemanticEquivalenceNode`. Reached through `MODEL_WORKER_URL` /
+`SIMILARITY_WORKER_URL` injected by `packages/backend/src/config/node-env.ts`; the nodes
+go through `packages/lib/src/nodes/utils/similarityWorker.ts`, the only place that knows
+the endpoint shapes.
+
+Three endpoints: `/sentence_embedding` (one string or a batch), `/similarity` (one source
+against many targets in a single forward pass) and `/entailment` (a
+natural-language-inference cross-encoder, loaded on first use, answering 503 when
+`NLI_MODEL` is empty). Models are chosen by `EMBEDDING_MODEL` and `NLI_MODEL`;
+`models/calibrate.py` measures both against a labelled pair set and
+`docs/semantic-equivalence-calibration.md` records what it found.

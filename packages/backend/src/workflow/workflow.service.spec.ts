@@ -1,6 +1,7 @@
 import { PrismaService } from '../prisma.service.js';
 import { TemplateService } from '../template/template.service.js';
 import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
+import type { WorkflowHistoryService } from './workflow-history.service.js';
 import { WorkflowService } from './workflow.service.js';
 
 const revision = (overrides: Record<string, unknown> = {}) => ({
@@ -50,11 +51,16 @@ describe('WorkflowService', () => {
       getCurrentRevision: jest.fn().mockResolvedValue(revision()),
       getRevision: jest.fn().mockResolvedValue(revision()),
     };
+    const history = {
+      isDue: jest.fn().mockResolvedValue(true),
+      capture: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new WorkflowService(
       { workflow } as unknown as PrismaService,
       templates as unknown as TemplateService,
+      history as unknown as WorkflowHistoryService,
     );
-    return { service, workflow, templates };
+    return { service, workflow, templates, history };
   };
 
   describe('list', () => {
@@ -276,6 +282,74 @@ describe('WorkflowService', () => {
         'ws-a',
       );
     });
+
+    it('captures the state the save replaces (SPEC-0021/AC-001)', async () => {
+      const { service, workflow, history } = build();
+      workflow.findFirst.mockResolvedValue(
+        row({ version: 4, content: '{"nodes":[{"id":1}]}' }),
+      );
+
+      await service.update(
+        workspaceA.id,
+        'wf-1',
+        { kind: 'versions', versions: [4] },
+        { content: '{"nodes":[]}' },
+      );
+
+      expect(history.capture).toHaveBeenCalledWith(
+        'wf-1',
+        expect.objectContaining({ version: 4, content: '{"nodes":[{"id":1}]}' }),
+      );
+    });
+
+    it('reads the old content only when a checkpoint is due', async () => {
+      const { service, workflow, history } = build();
+      history.isDue.mockResolvedValue(false);
+
+      await service.update(
+        workspaceA.id,
+        'wf-1',
+        { kind: 'versions', versions: [1] },
+        { content: '{"nodes":[]}' },
+      );
+
+      // Only the closing summary read, which never carries content.
+      expect(
+        workflow.findFirst.mock.calls.filter(
+          (call) => call[0].select.content === true,
+        ),
+      ).toHaveLength(0);
+      expect(history.capture).not.toHaveBeenCalled();
+    });
+
+    it('captures nothing when the save was rejected as stale', async () => {
+      const { service, workflow, history } = build();
+      workflow.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.update(
+          workspaceA.id,
+          'wf-1',
+          { kind: 'versions', versions: [1] },
+          { content: '{"nodes":[]}' },
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+
+      expect(history.capture).not.toHaveBeenCalled();
+    });
+
+    it('does not snapshot a rename, which changes no graph', async () => {
+      const { service, history } = build();
+
+      await service.update(
+        workspaceA.id,
+        'wf-1',
+        { kind: 'versions', versions: [1] },
+        { name: 'Renamed' },
+      );
+
+      expect(history.capture).not.toHaveBeenCalled();
+    });
   });
 
   describe('createFromTemplateSlug', () => {
@@ -378,6 +452,28 @@ describe('WorkflowService', () => {
       expect(workflow.updateMany.mock.calls[0][0].data.version).toEqual({
         increment: 1,
       });
+    });
+
+    it('keeps the discarded edits in history, due or not (SPEC-0021/AC-002)', async () => {
+      const { service, workflow, history } = build();
+      history.isDue.mockResolvedValue(false);
+      workflow.findFirst
+        .mockResolvedValueOnce({
+          sourceTemplateRevisionId: 'rev-1',
+          version: 7,
+          name: 'Rubric assessment',
+          content: 'edited-content',
+          contentSchema: 2,
+        })
+        .mockResolvedValueOnce(row());
+
+      await service.reset(workspaceA.id, 'wf-1');
+
+      expect(history.capture).toHaveBeenCalledWith(
+        'wf-1',
+        expect.objectContaining({ version: 7, content: 'edited-content' }),
+        'reset',
+      );
     });
 
     it('refuses a workflow that has no source template', async () => {

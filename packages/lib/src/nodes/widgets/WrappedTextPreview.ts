@@ -1,38 +1,67 @@
 /* eslint-disable immutable/no-mutation */
-import type { LGraphCanvas, LGraphNode, Vector2 } from 'litegraph.js'
+import { type LGraphCanvas, type LGraphNode, LiteGraph, type Vector2 } from 'litegraph.js'
 
 /**
  * Wrapped compact text preview with seamless click-to-edit.
  *
  * This is the third design for free-text `keyValue` properties (Question,
  * Sample solution, Textfield): it keeps the compact look — no opaque canvas
- * widget, `11px sans-serif` in `#d4d7dd` — but word-wraps over every line the
+ * widget, `13px sans-serif` in `#E6E9EF` — but word-wraps over every line the
  * node height allows instead of truncating to one line. The only truncation
  * is an `…` on the last visible line when text would overflow the node, so
  * resizing the node reveals more text.
  *
  * Editing opens a DOM `<textarea>` overlay styled to the same font metrics,
- * so the swap from canvas text to editable text has no visible jump: the
- * cursor simply appears where the user clicked. It commits on Enter/blur,
- * cancels on Escape, and follows zoom/pan/resize/move via rAF like the old
- * `Textfield.onMouseDown` editor did.
+ * so the swap from canvas text to editable text has no visible jump: it
+ * opens scrolled to the top with the caret before the first character, and
+ * text the preview elides is reachable through the overlay's scrollbar. It
+ * commits on Enter/blur, cancels on Escape, and follows zoom/pan/resize/move
+ * via rAF like the old `Textfield.onMouseDown` editor did.
  */
 
-export const WRAPPED_TEXT_FONT = '11px sans-serif'
-export const WRAPPED_TEXT_COLOR = '#d4d7dd'
-export const WRAPPED_TEXT_LINE_HEIGHT = 13
+/**
+ * Body text metrics shared by the wrapped preview, the single-line compact
+ * preview and the inline editor. 13px sits one step under the 14px slot
+ * labels and titles so the node's actual content no longer reads as a
+ * footnote, and stays legible when the canvas is zoomed out. The color is a
+ * notch brighter than `NODE_TEXT_COLOR` (slot labels) and just under
+ * `NODE_TITLE_COLOR`, keeping the title > body > label hierarchy.
+ */
+export const WRAPPED_TEXT_FONT_SIZE = 13
+export const WRAPPED_TEXT_FONT = `${WRAPPED_TEXT_FONT_SIZE}px sans-serif`
+export const WRAPPED_TEXT_COLOR = '#E6E9EF'
+/** Inline editor scrollbar thumb: the body text color at ~35% alpha. */
+export const WRAPPED_TEXT_SCROLLBAR_COLOR = `${WRAPPED_TEXT_COLOR}59`
+export const WRAPPED_TEXT_LINE_HEIGHT = 17
 export const WRAPPED_TEXT_PAD_X = 10
-export const WRAPPED_TEXT_PAD_BOTTOM = 9
+export const WRAPPED_TEXT_PAD_BOTTOM = 8
 export const WRAPPED_TEXT_ELLIPSIS = '…'
 
 const FLAG = '__wrappedTextApplied'
 const EDIT_INPUT_ID = (node: LGraphNode): string => `wrappedText${node.id}`
 
-/** Top edge of the text area: below the port rows, never inside the slots. */
+/**
+ * Top edge of the text area, right below the port rows. LiteGraph centres
+ * slot `i` at `(i + 0.7) * NODE_SLOT_HEIGHT` and draws its label with an
+ * alphabetic baseline at `+5`, so the last row's glyphs end near
+ * `rows * 20 + 2`. The preview starts exactly there instead of at LiteGraph's
+ * widget origin (`max_y + 2 = rows * 20 + 6`), reclaiming the dead band under
+ * the title bar / slots. Display (`drawWrappedText`), the inline editor
+ * (`startInlineEdit`) and the hit-test share this origin so edit mode aligns
+ * with display mode.
+ */
 export const wrappedTextTop = (node: LGraphNode): number => {
   const portRows = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0)
-  return Math.max(30, portRows * 20 + 14)
+  return portRows * 20 + 2
 }
+
+/**
+ * Smallest node height that still shows two lines of body text. Used as the
+ * compaction floor for text nodes so a shrunken node never degrades to a
+ * single elided line.
+ */
+export const wrappedTextMinHeight = (node: LGraphNode): number =>
+  wrappedTextTop(node) + WRAPPED_TEXT_LINE_HEIGHT * 2 + WRAPPED_TEXT_PAD_BOTTOM
 
 /** Read the text value, tolerating the `{ content }` envelope some nodes use. */
 export const readTextValue = (node: LGraphNode, key: string): string => {
@@ -65,10 +94,39 @@ const splitLongWord = (
 }
 
 /**
+ * A wrap unit: `text` is placed on the line, `glue` means it continues the
+ * previous unit without a space (the tail of a hyphenated word).
+ */
+type WrapToken = { text: string; glue: boolean }
+
+/**
+ * Tokenize a paragraph the way the browser breaks lines: at spaces, and after
+ * a hyphen that sits between two non-space characters (`trade-off` → `trade-`
+ * + `off`). Matching the textarea's break opportunities keeps the inline
+ * editor's line breaks identical to the canvas preview.
+ */
+const tokenizeParagraph = (paragraph: string): WrapToken[] => {
+  const tokens: WrapToken[] = []
+  for (const word of paragraph.split(' ')) {
+    if (!word) continue
+    let start = 0
+    for (let index = 0; index < word.length - 1; index += 1) {
+      if (word[index] === '-' && word[index + 1] !== '-' && index > start) {
+        tokens.push({ text: word.slice(start, index + 1), glue: start > 0 })
+        start = index + 1
+      }
+    }
+    tokens.push({ text: word.slice(start), glue: start > 0 })
+  }
+  return tokens
+}
+
+/**
  * Word-wrap paragraphs for a canvas context. Keeps explicit newlines (unlike
  * the old single-line preview, which collapsed all whitespace), wraps on
- * spaces, and char-splits words longer than the line. Pure: takes the text
- * and width, returns wrapped lines with no truncation applied.
+ * spaces and after hyphens, and char-splits words longer than the line.
+ * Pure: takes the text and width, returns wrapped lines with no truncation
+ * applied.
  */
 export const wrapTextLines = (
   context: CanvasRenderingContext2D,
@@ -78,26 +136,27 @@ export const wrapTextLines = (
   const lines: string[] = []
   for (const paragraph of text.split('\n')) {
     let line = ''
-    const words = paragraph.split(' ').filter((part) => part.length > 0)
-    if (!words.length) {
+    const tokens = tokenizeParagraph(paragraph)
+    if (!tokens.length) {
       lines.push('')
       continue
     }
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word
+    for (const token of tokens) {
+      const joiner = token.glue ? '' : ' '
+      const candidate = line ? `${line}${joiner}${token.text}` : token.text
       if (context.measureText(candidate).width <= maxWidth) {
         line = candidate
       } else if (!line) {
-        // Single word wider than the box: spill it across lines.
-        const parts = splitLongWord(context, word, maxWidth)
+        // Single token wider than the box: spill it across lines.
+        const parts = splitLongWord(context, token.text, maxWidth)
         line = parts.pop() ?? ''
         lines.push(...parts)
       } else {
         lines.push(line)
-        if (context.measureText(word).width <= maxWidth) {
-          line = word
+        if (context.measureText(token.text).width <= maxWidth) {
+          line = token.text
         } else {
-          const parts = splitLongWord(context, word, maxWidth)
+          const parts = splitLongWord(context, token.text, maxWidth)
           line = parts.pop() ?? ''
           lines.push(...parts)
         }
@@ -166,6 +225,34 @@ export const drawWrappedText = (
   context.textAlign = 'left'
   const { visible } = fitLinesToBox(wrapTextLines(context, value, width), maxLines)
   paintLines(context, visible, WRAPPED_TEXT_PAD_X, top)
+  context.restore()
+}
+
+/**
+ * Draw the one-line compact preview used by every other `keyValue` node
+ * (model name, output label, separator, ...). Same font and color as the
+ * wrapped preview so all node bodies read alike; the line is cut by measured
+ * width, not by a character count, so it fills wide nodes and never spills
+ * out of narrow ones. Baseline sits `PAD_BOTTOM` above the node's bottom edge.
+ */
+export const drawSingleLinePreview = (
+  node: LGraphNode,
+  context: CanvasRenderingContext2D,
+  text: string
+): void => {
+  if (node.flags?.collapsed) return
+  const value = text.replace(/\s+/g, ' ').trim()
+  if (!value) return
+  const width = node.size[0] - WRAPPED_TEXT_PAD_X * 2
+  if (width <= 0) return
+  context.save()
+  context.fillStyle = WRAPPED_TEXT_COLOR
+  context.font = WRAPPED_TEXT_FONT
+  context.textBaseline = 'alphabetic'
+  context.textAlign = 'left'
+  const { visible } = fitLinesToBox(wrapTextLines(context, value, width), 1)
+  const [line = ''] = visible
+  context.fillText(line, WRAPPED_TEXT_PAD_X, node.size[1] - WRAPPED_TEXT_PAD_BOTTOM)
   context.restore()
 }
 
@@ -264,14 +351,30 @@ export const startInlineEdit = (
   input.style.border = 'none'
   input.style.margin = '0px'
   input.style.outline = 'none'
-  input.style.padding = `0px 0px 0px ${WRAPPED_TEXT_PAD_X}px`
+  // The overlay is placed at the text origin (node x + PAD_X) with the exact
+  // wrap width, so the content box has no padding of its own: padding here
+  // would shift glyphs right and narrow the wrap, making lines break
+  // differently from the canvas preview.
+  input.style.padding = '0px'
   input.style.font = WRAPPED_TEXT_FONT
   input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT}px`
   input.style.color = WRAPPED_TEXT_COLOR
-  input.style.backgroundColor = '#2B2D3A'
+  // Same fill as the node body underneath, whichever theme is active, so the
+  // overlay is invisible except for the caret.
+  input.style.backgroundColor = nodeBodyColor(node)
   input.style.borderRadius = '2px'
   input.style.resize = 'none'
-  input.style.overflow = 'hidden'
+  // The preview elides overflowing text; the editor scrolls it instead so
+  // the whole value stays reachable without leaving the node. A thin thumb
+  // in the body text color keeps the overlay looking like part of the node.
+  // `scrollbar-gutter: stable` reserves the lane whether or not the text
+  // overflows, so the content box has one width and never re-wraps when the
+  // scrollbar appears; `updateInputBounds` widens the box by that lane.
+  input.style.overflowX = 'hidden'
+  input.style.overflowY = 'auto'
+  input.style.scrollbarGutter = 'stable'
+  input.style.scrollbarWidth = 'thin'
+  input.style.scrollbarColor = `${WRAPPED_TEXT_SCROLLBAR_COLOR} transparent`
   input.style.whiteSpace = 'pre-wrap'
   input.style.overflowWrap = 'break-word'
 
@@ -280,21 +383,36 @@ export const startInlineEdit = (
     if (!input.isConnected) return
     const rect = host.getBoundingClientRect()
     const top = wrappedTextTop(node)
+    // Text origin in graph units (node origin + horizontal padding + port
+    // rows), converted once: convertOffsetToCanvas applies pan and zoom and
+    // yields CSS pixels relative to the canvas element - LiteGraph's screen
+    // space, the same one its mouse handling uses. The bitmap may be denser
+    // than that (device-pixel-ratio rendering), so never derive a scale from
+    // `host.width`.
     const [canvasX, canvasY] = canvas.convertOffsetToCanvas([
-      node.pos[0],
+      node.pos[0] + WRAPPED_TEXT_PAD_X,
       node.pos[1] + top
     ])
-    const cssPerUnitX = rect.width / host.width
-    const cssPerUnitY = rect.height / host.height
-    const scaleY = canvas.ds.scale * cssPerUnitY
-    input.style.left = `${rect.left + (canvasX + WRAPPED_TEXT_PAD_X) * cssPerUnitX}px`
-    // Text starts `top` graph units below the node origin, including the
-    // title offset; convertOffsetToCanvas already accounts for pan/zoom.
-    input.style.top = `${rect.top + canvasY * cssPerUnitY}px`
-    input.style.width = `${Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2) * cssPerUnitX}px`
-    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * cssPerUnitY}px`
-    input.style.fontSize = `${11 * scaleY}px`
-    input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scaleY}px`
+    // Graph units → CSS pixels for *extents* (width, height, font metrics).
+    // Unlike positions these are not routed through convertOffsetToCanvas,
+    // so the zoom factor has to be applied here; without it the overlay keeps
+    // its 1:1 footprint at every zoom level and spills out of the node body
+    // when zoomed out.
+    const scale = canvas.ds.scale
+    // The scrollbar lane lives inside the border box and would narrow the
+    // content box below the preview's wrap width, breaking lines in different
+    // places. Measure the lane (no border, no padding: border box minus
+    // client box) and add it back, so the text keeps the canvas wrap width
+    // and the scrollbar sits in the node's right padding. Zero on overlay
+    // scrollbar platforms and in jsdom.
+    const scrollbarLane = Math.max(0, input.offsetWidth - input.clientWidth)
+    const wrapWidth = Math.max(0, node.size[0] - WRAPPED_TEXT_PAD_X * 2)
+    input.style.left = `${rect.left + canvasX}px`
+    input.style.top = `${rect.top + canvasY}px`
+    input.style.width = `${wrapWidth * scale + scrollbarLane}px`
+    input.style.height = `${Math.max(0, node.size[1] - top - WRAPPED_TEXT_PAD_BOTTOM + 4) * scale}px`
+    input.style.fontSize = `${WRAPPED_TEXT_FONT_SIZE * scale}px`
+    input.style.lineHeight = `${WRAPPED_TEXT_LINE_HEIGHT * scale}px`
     animationFrameId = window.requestAnimationFrame(updateInputBounds)
   }
 
@@ -331,10 +449,21 @@ export const startInlineEdit = (
 
   document.body.appendChild(input)
   updateInputBounds()
+  // Open the way the preview looks: first line at the top, caret before the
+  // first character. Assigning `.value` parks the caret at the end and
+  // focusing scrolls the caret into view, which would open a long text
+  // scrolled to its last line; reset both after focus.
   input.focus()
-  input.setSelectionRange(input.value.length, input.value.length)
+  input.setSelectionRange(0, 0)
+  input.scrollTop = 0
   canvas.setDirty(true, true)
   return true
+}
+
+/** Resolve the node body fill the same way LiteGraph's `drawNode` does. */
+const nodeBodyColor = (node: LGraphNode): string => {
+  const ctor = node.constructor as { bgcolor?: string }
+  return node.bgcolor || ctor.bgcolor || LiteGraph.NODE_DEFAULT_BGCOLOR
 }
 
 const commitValue = (node: LGraphNode, key: string, next: string): void => {

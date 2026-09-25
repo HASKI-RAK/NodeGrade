@@ -124,4 +124,15 @@ describe('start page', () => {
       expect(screen.queryByText('Workspace store unavailable.')).not.toBeInTheDocument()
     )
   })
+
+  it('offers the appearance picker without a provider', async () => {
+    stubApi(() => jsonResponse({ workspace, token: 'tok' }))
+    renderStart()
+
+    await screen.findByRole('heading', { name: 'Start workshop' })
+    await userEvent.click(screen.getByRole('button', { name: 'Appearance' }))
+    expect(screen.getByRole('menuitem', { name: /System/ })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: /Light/ })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: /Dark/ })).toBeVisible()
+  })
 })

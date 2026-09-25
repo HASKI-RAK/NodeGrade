@@ -35,3 +35,7 @@ test-results/
 .claude/.headroom_wrap_settings.lock
 .claude/.headroom_wrap_marker.json
 .claude/.headroom_wrap_owners.json
+# Written by Portainer next to docker-compose.prod.yml on each deployment.
+stack.env
+.claude/settings.local.json
+.tokensave/

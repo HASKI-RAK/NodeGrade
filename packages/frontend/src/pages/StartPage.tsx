@@ -1,19 +1,27 @@
+import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto'
+import DarkModeIcon from '@mui/icons-material/DarkMode'
+import LightModeIcon from '@mui/icons-material/LightMode'
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  IconButton,
+  Menu,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material'
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '@/api/http'
+import { ColorSchemeMenuItems } from '@/components/ColorSchemeMenuItems'
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
 import { ensureWorkspaceSession } from '@/store/workspaceSession'
+import { useColorScheme } from '@/theme/colorScheme'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
 const EMPTY_GRAPH =
@@ -22,9 +30,11 @@ const EMPTY_GRAPH =
 export const StartPage = () => {
   const navigate = useNavigate()
   const { session, error, retry } = useWorkspaceSession()
+  const { preference } = useColorScheme()
   const [code, setCode] = useState('')
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [appearanceAnchor, setAppearanceAnchor] = useState<HTMLElement | null>(null)
 
   // Code entry and the conference deep link resolve through the same route, so the join
   // flow (SPEC-0014) has exactly one implementation to keep correct.
@@ -65,9 +75,32 @@ export const StartPage = () => {
 
   return (
     <Box maxWidth={760} mx="auto" p={4}>
-      <Typography variant="h3" gutterBottom>
-        NodeGrade
-      </Typography>
+      <Box display="flex" alignItems="flex-start" justifyContent="space-between">
+        <Typography variant="h3" gutterBottom>
+          NodeGrade
+        </Typography>
+        <Tooltip title={`Appearance: ${preference}`}>
+          <IconButton
+            aria-label="Appearance"
+            onClick={(event) => setAppearanceAnchor(event.currentTarget)}
+          >
+            {preference === 'light' ? (
+              <LightModeIcon />
+            ) : preference === 'dark' ? (
+              <DarkModeIcon />
+            ) : (
+              <BrightnessAutoIcon />
+            )}
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Menu
+        anchorEl={appearanceAnchor}
+        open={!!appearanceAnchor}
+        onClose={() => setAppearanceAnchor(null)}
+      >
+        <ColorSchemeMenuItems onSelect={() => setAppearanceAnchor(null)} />
+      </Menu>
       <Typography color="text.secondary" mb={3}>
         Build and adapt assessment workflows.
       </Typography>

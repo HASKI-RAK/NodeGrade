@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { DeploymentSettingsService } from './deployment-settings.service.js';
 import {
   DEFAULT_EXECUTION_LIMITS,
   ExecutionLimitsService,
@@ -30,6 +31,7 @@ describe('ProviderRuntimeService', () => {
   const runtimeById = jest.fn();
   const runtimeByKey = jest.fn();
   const readLimits = jest.fn();
+  const readSettings = jest.fn();
   let service: ProviderRuntimeService;
 
   beforeEach(async () => {
@@ -38,6 +40,8 @@ describe('ProviderRuntimeService', () => {
     runtimeByKey.mockReset();
     readLimits.mockReset();
     readLimits.mockResolvedValue(DEFAULT_EXECUTION_LIMITS);
+    readSettings.mockReset();
+    readSettings.mockResolvedValue({ defaultModel: null });
     const module = await Test.createTestingModule({
       providers: [
         ProviderRuntimeService,
@@ -52,6 +56,10 @@ describe('ProviderRuntimeService', () => {
         {
           provide: ExecutionLimitsService,
           useValue: { get: readLimits },
+        },
+        {
+          provide: DeploymentSettingsService,
+          useValue: { get: readSettings },
         },
       ],
     }).compile();
@@ -144,10 +152,13 @@ describe('ProviderRuntimeService', () => {
       }),
     );
     global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ id: 'kept' }, { id: 'other' }] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ data: [{ id: 'kept' }, { id: 'other' }] }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
     );
 
     await expect(service.providerCatalog('curated-id')).resolves.toEqual({
@@ -405,6 +416,118 @@ describe('ProviderRuntimeService', () => {
           modelId: 'local-model',
         },
       ],
+    });
+  });
+
+  it('exposes the stored default in the catalog only when it is runnable', async () => {
+    const open = provider('open');
+    enabledRuntimeProviders.mockResolvedValue([open]);
+    runtimeByKey.mockResolvedValue(open);
+    readSettings.mockResolvedValue({
+      defaultModel: { providerKey: 'open', modelId: 'model-a' },
+    });
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(service.catalog()).resolves.toMatchObject({
+      defaultModel: { providerKey: 'open', modelId: 'model-a' },
+    });
+
+    readSettings.mockResolvedValue({
+      defaultModel: { providerKey: 'open', modelId: 'vanished' },
+    });
+    service.invalidateCatalog();
+    await expect(service.catalog()).resolves.toMatchObject({
+      defaultModel: null,
+    });
+  });
+
+  it('reads a disabled or policy-excluded stored default as no default', async () => {
+    enabledRuntimeProviders.mockResolvedValue([provider('open')]);
+    runtimeByKey.mockResolvedValue(provider('open', { enabled: false }));
+    readSettings.mockResolvedValue({
+      defaultModel: { providerKey: 'open', modelId: 'model-a' },
+    });
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(service.defaultModel()).resolves.toBeNull();
+  });
+
+  describe('in production', () => {
+    const previousEnv = process.env.NODE_ENV;
+
+    beforeEach(() => {
+      process.env.NODE_ENV = 'production';
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = previousEnv;
+    });
+
+    it('hides the local worker from the participant catalog', async () => {
+      enabledRuntimeProviders.mockResolvedValue([
+        provider('local', {
+          type: 'MODEL_WORKER',
+          baseUrl: 'http://model-worker:8000',
+        }),
+        provider('open'),
+      ]);
+      global.fetch = jest.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: 'any-model' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const catalog = await service.catalog();
+
+      expect(
+        catalog.models.some((model) => model.ref.providerKey === 'local'),
+      ).toBe(false);
+      expect(
+        catalog.providers.some((entry) => entry.providerKey === 'local'),
+      ).toBe(false);
+      expect(
+        catalog.models.some((model) => model.ref.providerKey === 'open'),
+      ).toBe(true);
+    });
+
+    it('refuses local-worker execution even with an explicit reference', async () => {
+      runtimeByKey.mockResolvedValue(
+        provider('local', {
+          type: 'MODEL_WORKER',
+          baseUrl: 'http://model-worker:8000',
+        }),
+      );
+      global.fetch = jest.fn();
+
+      await expect(
+        service.complete({
+          modelRef: { providerKey: 'local', modelId: 'local-model' },
+          messages: [],
+          parameters: {},
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'MODEL_UNAVAILABLE' }),
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('reads a stored local default as no default', async () => {
+      readSettings.mockResolvedValue({
+        defaultModel: { providerKey: 'local', modelId: 'local-model' },
+      });
+
+      await expect(service.defaultModel()).resolves.toBeNull();
     });
   });
 });

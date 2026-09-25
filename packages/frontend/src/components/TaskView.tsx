@@ -4,25 +4,19 @@ import {
   RunState,
   ServerEventPayload
 } from '@haski/ta-lib'
-import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import {
+  Alert,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   FormControl,
-  IconButton,
   Stack,
   Tab,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material'
-import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress'
-import { styled } from '@mui/material/styles'
-import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import LinearProgress from '@mui/material/LinearProgress'
+import { forwardRef, memo, useImperativeHandle, useRef, useState } from 'react'
 
 import {
   DEFAULT_PREVIEW_LOCALE,
@@ -31,36 +25,22 @@ import {
   previewMessages
 } from '@/i18n/preview'
 
+import { ResultCard } from './ResultCard'
+import { SubmissionsView, type SubmissionsViewProps } from './SubmissionsView'
 import { TraceView } from './TraceView'
-
-interface MyThemeComponentProps {
-  color?: 'primary' | 'secondary'
-}
-
-/** A score at or above this value counts as passed (SPEC-0007/FR-004). */
-const PASS_THRESHOLD = 60
-
-/**
- * based on value successPercentage, color progress bar changes
- */
-const BorderLinearProgress = styled(LinearProgress)<
-  MyThemeComponentProps & { value: number }
->(({ theme, value }) => ({
-  height: 10,
-  borderRadius: 5,
-  [`&.${linearProgressClasses.colorPrimary}`]: {
-    backgroundColor: theme.palette.grey[theme.palette.mode === 'light' ? 200 : 800]
-  },
-  [`& .${linearProgressClasses.bar}`]: {
-    borderRadius: 5,
-    backgroundColor: value >= PASS_THRESHOLD ? '#388E3C' : '#308fe8'
-  }
-}))
 
 export type TaskViewHandle = {
   submit: () => boolean
   focusAnswer: () => void
 }
+
+type PreviewTab = 'test' | 'trace' | 'submissions'
+
+/** What the host supplies for the Submissions tab; strings and run-again are TaskView's. */
+export type TaskViewSubmissions = Omit<
+  SubmissionsViewProps,
+  'messages' | 'locale' | 'onRunAgain' | 'runDisabled'
+>
 
 const lengthError = (
   answer: string,
@@ -82,111 +62,6 @@ export type SelectGraphNode = (
 
 type Output = ServerEventPayload['outputSet']
 
-/**
- * One result on its own card: the output node's label as title, the value as body.
- * The locate button is an editor affordance and only renders when a handler is given;
- * students see the card without it.
- */
-const ResultCard = ({
-  output,
-  messages,
-  onLocate
-}: {
-  output: Output
-  messages: PreviewMessages
-  onLocate?: () => void
-}) => {
-  const title =
-    output.type === 'classifications'
-      ? output.label || messages.classificationsHeading
-      : output.label
-  const passed =
-    output.type === 'score' &&
-    typeof output.value === 'number' &&
-    output.value >= PASS_THRESHOLD
-
-  const body = (() => {
-    switch (output.type) {
-      case 'text':
-        return (
-          <Typography
-            variant="body1"
-            sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-          >
-            {String(output.value).trim()}
-          </Typography>
-        )
-      case 'score':
-        if (typeof output.value !== 'number') return null
-        return (
-          <Stack spacing={1}>
-            <Typography variant="h4" component="p" fontWeight={600}>
-              {output.value}
-            </Typography>
-            {output.value >= 0 && output.value <= 100 && (
-              <BorderLinearProgress
-                variant="determinate"
-                value={output.value}
-                aria-label={title}
-              />
-            )}
-          </Stack>
-        )
-      case 'classifications':
-        if (!Array.isArray(output.value)) return null
-        return (
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {output.value
-              // Unconnected list inputs arrive as null over the wire; never show an empty chip.
-              .filter(
-                (classification): classification is string =>
-                  typeof classification === 'string' && classification.trim().length > 0
-              )
-              .map((classification, index) => (
-                <Chip
-                  key={`${index}-${classification}`}
-                  label={classification}
-                  variant="outlined"
-                />
-              ))}
-          </Stack>
-        )
-    }
-  })()
-
-  return (
-    <Card variant="outlined" component="article" aria-label={title}>
-      <CardContent sx={{ '&:last-child': { paddingBottom: 2 } }}>
-        <Stack spacing={1}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
-            <Typography
-              variant="subtitle1"
-              component="h3"
-              fontWeight={600}
-              sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}
-            >
-              {title}
-            </Typography>
-            {passed && <Chip size="small" color="success" label={messages.passed} />}
-            {onLocate && (
-              <Tooltip title={messages.locateOutputNode(title)}>
-                <IconButton
-                  size="small"
-                  aria-label={messages.locateOutputNode(title)}
-                  onClick={onLocate}
-                >
-                  <CenterFocusStrongIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Stack>
-          {body}
-        </Stack>
-      </CardContent>
-    </Card>
-  )
-}
-
 const Results = ({
   outputs,
   messages,
@@ -197,7 +72,7 @@ const Results = ({
   onSelectOutputNode?: SelectGraphNode
 }) => {
   const values = Object.values(outputs ?? {})
-  const hasModelText = values.some((out) => out.type === 'text')
+  const hasModelText = values.some((out) => out.type === 'text' || out.type === 'review')
   return (
     <Stack spacing={1.5} aria-label={messages.resultsHeading}>
       <Typography variant="h6">{messages.resultsHeading}</Typography>
@@ -249,6 +124,12 @@ const TaskView = forwardRef<
     runId?: string
     runState?: RunState
     trace?: ServerEventPayload['nodeExecutionChanged'][]
+    /** Terminal failure/cancel message for the in-flight attempt, shown on Test tab. */
+    runError?: string
+    /** False while the socket is down: submitting is disabled with a hint. */
+    connected?: boolean
+    /** 0-100 run progress for the inline Test-tab indicator. */
+    progress?: number
     onCancel?: () => void
     onSelectTraceNode?: SelectGraphNode
     /**
@@ -256,6 +137,11 @@ const TaskView = forwardRef<
      * output node that produced it. Leave undefined for students.
      */
     onSelectOutputNode?: SelectGraphNode
+    /**
+     * Editor-only: the Submissions inbox (SPEC-0020/FR-009). Leave undefined for
+     * students, who share a workspace and must not see each other's runs (FR-007).
+     */
+    submissions?: TaskViewSubmissions
   }
 >(
   (
@@ -270,23 +156,23 @@ const TaskView = forwardRef<
       runId,
       runState,
       trace = [],
+      runError,
+      connected = true,
+      progress = 0,
       onCancel = () => undefined,
       onSelectTraceNode = () => undefined,
-      onSelectOutputNode
+      onSelectOutputNode,
+      submissions
     },
     ref
   ) => {
     const messages = previewMessages[locale]
-    const [tab, setTab] = useState<'test' | 'trace'>('test')
+    const [tab, setTab] = useState<PreviewTab>('test')
     const [answer, setAnswer] = useState('')
     const [error, setError] = useState<string | null>(null)
     const answerRef = useRef<HTMLInputElement>(null)
-
-    // A started run has something to show on the Trace tab; the Test tab has nothing new
-    // until it finishes.
-    useEffect(() => {
-      if (runState === 'queued' || runState === 'running') setTab('trace')
-    }, [runState])
+    const running = runState === 'queued' || runState === 'running'
+    const submitDisabled = disabled || !connected
 
     const handleSetAnswer = (event: React.ChangeEvent<HTMLInputElement>): void => {
       const nextAnswer = event.target.value
@@ -301,18 +187,28 @@ const TaskView = forwardRef<
       }
     }
 
-    const submit = (): boolean => {
-      if (disabled) return false
-      const message = lengthError(answer, constraints, messages)
+    const submitAnswer = (value: string): boolean => {
+      if (submitDisabled) return false
+      const message = lengthError(value, constraints, messages)
       setError(message)
       if (message) return false
-      onSubmit(answer)
+      onSubmit(value)
       return true
     }
+
+    const submit = (): boolean => submitAnswer(answer)
 
     const handleSubmit = (event?: React.FormEvent<HTMLFormElement>): void => {
       event?.preventDefault()
       submit()
+    }
+
+    // "Run again" from a stored submission: the old answer lands in the Test tab and
+    // runs against whatever the graph is now (FR-012).
+    const runAgain = (value: string): void => {
+      setAnswer(value)
+      setTab('test')
+      submitAnswer(value)
     }
 
     useImperativeHandle(ref, () => ({
@@ -322,9 +218,19 @@ const TaskView = forwardRef<
 
     return (
       <Stack spacing={2} padding={2}>
-        <Tabs value={tab} onChange={(_, value: 'test' | 'trace') => setTab(value)}>
+        <Tabs
+          value={tab}
+          onChange={(_, value: PreviewTab) => setTab(value)}
+          aria-label="Preview"
+        >
           <Tab value="test" label={messages.testTab} />
           <Tab value="trace" label={messages.traceTab} />
+          {submissions && (
+            <Tab
+              value="submissions"
+              label={messages.submissionsTab(submissions.summary.needsReview)}
+            />
+          )}
         </Tabs>
         {tab === 'trace' && (
           <TraceView
@@ -335,8 +241,19 @@ const TaskView = forwardRef<
             onSelectNode={onSelectTraceNode}
           />
         )}
+        {submissions && (
+          // Hidden rather than unmounted, so an open submission survives a look at Test.
+          <Box hidden={tab !== 'submissions'}>
+            <SubmissionsView
+              {...submissions}
+              messages={messages}
+              locale={locale}
+              onRunAgain={runAgain}
+              runDisabled={submitDisabled}
+            />
+          </Box>
+        )}
         <Box hidden={tab !== 'test'}>
-          <span id="rewardId" />
           <Typography variant="h5">{messages.questionHeading}</Typography>
           {questionImage && (
             <img
@@ -363,7 +280,7 @@ const TaskView = forwardRef<
             <FormControl fullWidth error={!!error}>
               <Stack spacing={2}>
                 <TextField
-                  id="outlined-multiline-static"
+                  id="preview-answer"
                   label={messages.answerLabel}
                   multiline
                   error={!!error}
@@ -374,13 +291,57 @@ const TaskView = forwardRef<
                   inputRef={answerRef}
                   onChange={handleSetAnswer}
                   onKeyDown={keyDownHandler}
-                  disabled={disabled}
+                  disabled={submitDisabled}
+                  aria-describedby="preview-run-status"
                 />
-                <Stack direction="row" spacing={2}>
-                  <Button variant="contained" type="submit" disabled={disabled}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Button
+                    variant="contained"
+                    type="submit"
+                    disabled={submitDisabled}
+                    title={connected ? undefined : messages.runDisconnected}
+                  >
                     {disabled ? messages.submitting : messages.submit}
                   </Button>
+                  {running && (
+                    <Button color="warning" onClick={onCancel}>
+                      Cancel
+                    </Button>
+                  )}
                   <Typography variant="caption">{messages.runHint}</Typography>
+                </Stack>
+                <Stack id="preview-run-status" spacing={1} aria-live="polite">
+                  {!connected && (
+                    <Alert severity="warning">{messages.runDisconnected}</Alert>
+                  )}
+                  {running && (
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {runState === 'queued'
+                          ? messages.waitingToStart
+                          : messages.assessingProgress(progress)}
+                      </Typography>
+                      <LinearProgress
+                        variant={progress > 0 ? 'determinate' : 'indeterminate'}
+                        value={progress}
+                      />
+                      <Button size="small" onClick={() => setTab('trace')}>
+                        {messages.viewTrace}
+                      </Button>
+                    </>
+                  )}
+                  {runError && !running && (
+                    <Alert
+                      severity={runState === 'cancelled' ? 'warning' : 'error'}
+                      action={
+                        <Button size="small" color="inherit" onClick={() => submit()}>
+                          {messages.retry}
+                        </Button>
+                      }
+                    >
+                      {runError}
+                    </Alert>
+                  )}
                 </Stack>
                 <Results
                   outputs={outputs}

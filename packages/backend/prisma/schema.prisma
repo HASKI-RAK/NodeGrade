@@ -56,6 +56,7 @@ model Workspace {
   lastActiveAt DateTime @default(now())
 
   workflows Workflow[]
+  runs      Run[]
 
   @@index([type, lastActiveAt])
   @@index([workshopId])
@@ -98,10 +99,91 @@ model Workflow {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  runs     Run[]
+  versions WorkflowVersion[]
+
   @@unique([workspaceId, slug])
   @@index([workspaceId, updatedAt(sort: Desc)])
   @@index([sourceTemplateRevisionId])
   @@index([contentSchema])
+}
+
+/// A past state of a workflow, kept so an edit can be undone after the editor is closed
+/// (SPEC-0021).
+///
+/// Written *before* the state it records is overwritten, so the row always holds content
+/// that is no longer current: the live row is the present, these are the past. The
+/// version number is the workflow's optimistic counter at the moment of capture, which
+/// is what the history list shows.
+model WorkflowVersion {
+  id         String   @id @default(cuid(2))
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  /// `Workflow.version` the snapshot was taken at. Not unique: a restore captures the
+  /// live state again, and repeated saves at the same version cannot happen but a
+  /// restored-then-re-restored workflow can revisit one.
+  version Int
+  name    String
+  content String
+  /// Carried, not stamped: restoring must not claim content was migrated when it was
+  /// captured before a content-schema change.
+  contentSchema Int @default(2)
+  /// Why the state was captured: `save`, `reset` or `restore`. A code rather than a
+  /// sentence, so the wording of the history list stays in the frontend.
+  reason String @default("save")
+  /// Nodes in the captured graph, so the list can be read without loading content.
+  nodeCount Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([workflowId, createdAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------------------
+// Run records (SPEC-0020)
+// ---------------------------------------------------------------------------
+
+enum RunOutcome {
+  COMPLETED
+  FAILED
+}
+
+/// One completed or failed execution, written by the socket run handler before the
+/// terminal event and read over REST (ADR-0009). The trace stays ephemeral (SPEC-0006);
+/// only the answer, the emitted outputs and the derived review flag are kept.
+model Run {
+  /// The run id the socket events carried, so a client can match what it saw.
+  id          String    @id
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflowId  String
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  outcome RunOutcome
+  /// Capped in the service; the graph already cuts answers at 1500 characters.
+  answer  String
+  /// Sanitized `outputSet` payloads in execution order, capped per value and per run.
+  outputs Json
+  /// First `score` output, denormalized so the list never loads `outputs`.
+  score   Float?
+
+  /// Any `review` output with verdict `flagged` (FR-005); the reasons joined.
+  flagged      Boolean @default(false)
+  flagReason   String?
+  errorMessage String?
+  /// LTI launch display name; null for browser and workshop workspaces (FR-007).
+  submittedBy  String?
+
+  reviewedAt DateTime?
+  reviewNote String?
+
+  startedAt  DateTime
+  finishedAt DateTime
+  durationMs Int
+
+  @@index([workflowId, startedAt(sort: Desc)])
+  @@index([workspaceId])
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +379,20 @@ model ExecutionLimits {
   workspaceConcurrentRuns    Int
   providerConcurrentRequests Int
   updatedAt                  DateTime @updatedAt
+}
+
+/// Deployment-global defaults owned by the facilitator (SPEC-0016). Exactly one row,
+/// keyed by SINGLETON_ID. When set, every model node without an explicit `model_ref`
+/// executes against the default instead of failing with "select a model".
+model DeploymentSettings {
+  id String @id
+
+  /// Provider-qualified default model (ModelRef.providerKey). Null means no default:
+  /// every model node needs its own selection.
+  defaultProviderKey String?
+  defaultModelId     String?
+
+  updatedAt DateTime @updatedAt
 }
 
 // LTI Platform Registration

@@ -1,9 +1,4 @@
-import {
-  compactNodeWidgets,
-  getNodeDefinitions,
-  LiteGraph,
-  type NodeCategory
-} from '@haski/ta-lib'
+import { compactNodeWidgets, getNodeDefinitions, LiteGraph } from '@haski/ta-lib'
 import SearchIcon from '@mui/icons-material/Search'
 import {
   Box,
@@ -20,8 +15,10 @@ import type { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js'
 import { useMemo, useState } from 'react'
 
 import type { WorkflowTemplate } from '@/api/http'
+import { canvasViewportCenter } from '@/utils/canvasPixelRatio'
 
-const categories: NodeCategory[] = ['Essential', 'AI', 'Assessment', 'Validation']
+import { CATEGORY_ORDER } from './categoryInfo'
+import { CategoryPill } from './CategoryPill'
 
 export const NodePalette = ({
   graph,
@@ -69,10 +66,7 @@ export const NodePalette = ({
   const addNode = (type: string) => {
     const node = LiteGraph.createNode(type)
     if (!node) return
-    const center = canvas?.convertCanvasToOffset([
-      canvas.canvas.width / 2,
-      canvas.canvas.height / 2
-    ]) ?? [0, 0]
+    const center = canvas ? canvasViewportCenter(canvas) : [0, 0]
     node.pos = [center[0] - node.size[0] / 2, center[1] - node.size[1] / 2]
     compactNodeWidgets(node)
     onMutate(() => {
@@ -87,7 +81,11 @@ export const NodePalette = ({
     <Box
       aria-label="Node palette"
       sx={{
+        position: 'absolute',
+        inset: '0 auto 0 0',
+        zIndex: 1,
         width: 320,
+        maxWidth: '100%',
         height: '100%',
         overflowY: 'auto',
         bgcolor: 'background.paper',
@@ -113,14 +111,14 @@ export const NodePalette = ({
           )
         }}
       />
-      {categories.map((category) => {
+      {CATEGORY_ORDER.map((category) => {
         const matches = definitions.filter(
           (definition) => definition.category === category
         )
         if (!matches.length) return null
         return (
           <Box key={category} mt={2}>
-            <Typography variant="overline">{category}</Typography>
+            <CategoryPill category={category} />
             <List dense disablePadding>
               {matches.map((definition) => (
                 <ListItem key={definition.type} disablePadding>

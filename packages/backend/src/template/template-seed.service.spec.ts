@@ -25,6 +25,7 @@ const build = () => {
   const templates = {
     createTemplate: jest.fn().mockResolvedValue({}),
     addRevision: jest.fn().mockResolvedValue({}),
+    setPublished: jest.fn().mockResolvedValue({}),
   };
 
   const service = new TemplateSeedService(
@@ -39,10 +40,11 @@ describe('TemplateSeedService', () => {
   it('installs a bundled template on a fresh deployment (AC-013)', async () => {
     const { service, templates } = build();
 
-    await expect(service.seed([bundled])).resolves.toEqual({
+    await expect(service.seed([bundled], [])).resolves.toEqual({
       created: 1,
       updated: 0,
       skipped: 0,
+      retired: 0,
     });
 
     expect(templates.createTemplate).toHaveBeenCalledWith(
@@ -57,7 +59,7 @@ describe('TemplateSeedService', () => {
   it('marks the first revision as bundled, so it can recognise its own work', async () => {
     const { service, templates } = build();
 
-    await service.seed([bundled]);
+    await service.seed([bundled], []);
 
     expect(templates.createTemplate.mock.calls[0][0].revision.origin).toBe(
       'BUNDLED',
@@ -71,10 +73,11 @@ describe('TemplateSeedService', () => {
       contentHash: BUNDLED_HASH,
     });
 
-    await expect(service.seed([bundled])).resolves.toEqual({
+    await expect(service.seed([bundled], [])).resolves.toEqual({
       created: 0,
       updated: 0,
       skipped: 1,
+      retired: 0,
     });
     expect(templates.addRevision).not.toHaveBeenCalled();
   });
@@ -86,10 +89,11 @@ describe('TemplateSeedService', () => {
       contentHash: 'an-older-hash',
     });
 
-    await expect(service.seed([bundled])).resolves.toEqual({
+    await expect(service.seed([bundled], [])).resolves.toEqual({
       created: 0,
       updated: 1,
       skipped: 0,
+      retired: 0,
     });
     expect(templates.addRevision).toHaveBeenCalledWith(
       'tpl-1',
@@ -105,10 +109,11 @@ describe('TemplateSeedService', () => {
       contentHash: 'an-older-hash',
     });
 
-    await expect(service.seed([bundled])).resolves.toEqual({
+    await expect(service.seed([bundled], [])).resolves.toEqual({
       created: 0,
       updated: 0,
       skipped: 1,
+      retired: 0,
     });
     // Appending would not destroy their revision, but it would move currentRevision off
     // it, so the next "use template" would hand out the shipped version instead.
@@ -120,12 +125,62 @@ describe('TemplateSeedService', () => {
     template.findUnique.mockResolvedValue({ id: 'tpl-1' });
     templateRevision.findFirst.mockResolvedValue({ contentHash: 'older' });
 
-    await service.seed([bundled]);
+    await service.seed([bundled], []);
 
     // A deploy must not undo a facilitator's unpublish (FR-017a).
     expect(templates.addRevision.mock.calls[0][1]).not.toHaveProperty(
       'published',
     );
+  });
+
+  describe('retired slugs', () => {
+    it('unpublishes a retired template that a previous deploy installed', async () => {
+      const { service, template, templates } = build();
+      template.findUnique.mockResolvedValue({
+        id: 'tpl-old',
+        published: true,
+        deletedAt: null,
+      });
+
+      await expect(service.seed([], ['old-slug'])).resolves.toEqual({
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        retired: 1,
+      });
+      expect(templates.setPublished).toHaveBeenCalledWith('tpl-old', false);
+    });
+
+    it('is idempotent: an already unpublished or unknown slug is not touched', async () => {
+      const { service, template, templates } = build();
+      template.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'tpl-old',
+          published: false,
+          deletedAt: null,
+        });
+
+      const result = await service.seed([], ['never-installed', 'old-slug']);
+
+      expect(result.retired).toBe(0);
+      expect(templates.setPublished).not.toHaveBeenCalled();
+    });
+
+    it('leaves a facilitator-edited retired template published', async () => {
+      const { service, template, templateRevision, templates } = build();
+      template.findUnique.mockResolvedValue({
+        id: 'tpl-old',
+        published: true,
+        deletedAt: null,
+      });
+      templateRevision.count.mockResolvedValue(1);
+
+      const result = await service.seed([], ['old-slug']);
+
+      expect(result.retired).toBe(0);
+      expect(templates.setPublished).not.toHaveBeenCalled();
+    });
   });
 
   it('can be switched off', async () => {

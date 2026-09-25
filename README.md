@@ -84,6 +84,26 @@ yarn dev
 
 This will launch both the server and the frontend PWA in development mode.
 
+`yarn dev` does not start the NLP worker. Without it the embedding, keyword and
+equivalence nodes have nothing to call — and if `SIMILARITY_WORKER_URL` is unset the
+backend silently falls back to a remote host that is not yours, so those nodes keep
+working while every answer they touch leaves your machine. The backend logs a warning at
+startup when that happens.
+
+Either point `SIMILARITY_WORKER_URL` at the debug stack (`yarn debug:up`, deterministic,
+no model download) or run the real worker beside `yarn dev`:
+
+```bash
+cd models
+python -m venv .venv && .venv/bin/pip install -r requirements.txt   # Windows: .venv/Scripts/pip
+cp .env_template .env        # defaults are fine; HF_HOME needs a writable path
+.venv/bin/python model_worker.py
+```
+
+First boot downloads `BAAI/bge-m3` (2.3 GB) before `/health` answers; the entailment
+model loads on the first `/entailment` request, not at startup. Then set
+`SIMILARITY_WORKER_URL="http://127.0.0.1:8002"` in your backend `.env`.
+
 ### Workshop flow
 
 Workshops move `DRAFT` → `PUBLISHED` → `CLOSED`. Facilitators sign in at `/admin`,
@@ -159,8 +179,9 @@ only through `api/http.ts` and `utils/socket.ts`; sessions live in
 - `models/`: Flask + sentence-transformers embedding/similarity worker
   (`models/Dockerfile` builds it).
 - `packages/backend/prisma/`: schema + migrations; `e2e/`: Playwright browser coverage;
-  `tools/debug/`: deterministic debug stack; `tools/spec-lint/`: `specs/` consistency
-  linter; `specs/`, `docs/adr/`: requirements and decisions.
+  `tools/debug/`: deterministic debug stack; `tools/stack.mjs`: the deployable stack
+  (`yarn dev:up`); `tools/spec-lint/`: `specs/` consistency linter; `specs/`,
+  `docs/adr/`: requirements and decisions.
 
 ## Example Usage
 
@@ -179,10 +200,28 @@ same on every run and no API key is needed.
 
 ## Docker
 
+Two stacks, and which one you want depends on whether you need real model output.
+
 `yarn debug:up` starts PostgreSQL, the backend, frontend, and deterministic
 OpenAI-compatible model worker (ports `15xxx` / `18000`). `yarn debug:status` and
 `yarn debug:logs` inspect it, `yarn debug:down` stops it, and `yarn debug:reset`
-recreates its database.
+recreates its database. Nothing is downloaded and no API key is needed, but the
+worker only imitates the models: its embeddings are a hash of the words, so
+scores are stable and comparable rather than meaningful.
+
+`yarn dev:up` starts the deployable stack from `docker-compose.yml` instead —
+the same containers a server runs, with the real embedding model (`BAAI/bge-m3`)
+and the real entailment model behind `text/semantic-equivalence`. `dev:status`,
+`dev:logs`, `dev:down` and `dev:reset` mirror the debug commands. The first start
+downloads about 2.3 GB of weights before the NLP worker reports healthy, so give
+it several minutes; later starts read the cached copy from a Docker volume.
+`yarn dev:serve` runs it in the foreground.
+
+Both stacks can run at once: their containers, volumes and host ports do not
+overlap.
+
+`docker-compose.prod.yml` is the third file: the deployed stack behind Traefik, running
+prebuilt images from GHCR rather than building. See "Deploying with Portainer" below.
 
 ## Providers and model governance
 
@@ -223,15 +262,50 @@ change applies without a restart.
 
 ## Deployment
 
-`docker-compose.yml` builds and runs the deployable stack: PostgreSQL, the backend on port
-5000, and the frontend on port 8080. It expects the model and similarity workers to be
-reachable at `MODEL_WORKER_URL` and `SIMILARITY_WORKER_URL`; `models/Dockerfile` builds the
-Python worker that serves them.
+`docker-compose.yml` builds and runs the deployable stack: PostgreSQL, the sentence-
+transformer worker on port 8002, the backend on port 5000, and the frontend on port 8080.
+The backend reaches the embedding worker through the Compose network at `models:8002`.
+The frontend nginx container forwards `/api`, `/socket.io`, `/lti`, and `/health` to the
+backend over the Compose network, so browsers use the frontend's public origin.
+`MODEL_WORKER_URL` is an optional external OpenAI-compatible text-generation
+endpoint offered as the `local` provider; it stays empty unless a deployment
+provides one.
+
+```bash
+yarn dev:up
+```
+
+That wrapper (`tools/stack.mjs`) is the same `docker compose` call with the
+mistakes removed: it always passes `--build`, it generates a
+`PROVIDER_ENCRYPTION_KEY` into `.env` on the first run and never touches it
+again, and after the stack reports healthy it prints the endpoints and names
+whatever is still missing. `yarn dev:down` stops it; `yarn dev:reset` deletes
+the database and the model cache and starts over.
+
+On a host without Yarn, the equivalent is:
 
 ```bash
 PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=') \
   docker compose up --build -d
 ```
+
+`--build` is not optional after a `git pull`. Compose reuses an existing image
+whenever one carries the right tag, so without it a stack that starts cleanly can
+still be running code from weeks ago — visible as missing routes, an old set of
+bundled templates, or migrations that were already applied.
+
+Put `PROVIDER_ENCRYPTION_KEY` in `.env` rather than passing it per command: a new
+key on the next start cannot decrypt the provider credentials the previous one
+wrote.
+
+The database publishes on host port 5432, which is the port a local PostgreSQL
+already holds. Set `NODEGRADE_DATABASE_PORT` to move it;
+`NODEGRADE_MODELS_PORT`, `NODEGRADE_BACKEND_PORT` and `NODEGRADE_FRONTEND_PORT`
+do the same for the rest.
+
+The Compose defaults target local HTTP at `http://localhost:8080` and set
+`COOKIE_INSECURE=true`. For a public HTTPS deployment, set `FRONTEND_URL` and
+`CORS_ORIGIN` to the public origin and set `COOKIE_INSECURE=false`.
 
 Configure the backend through the environment (`.env_template` lists every variable):
 
@@ -242,16 +316,145 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Facilitator sign-in at `/admin`. Without them the admin area stays disabled. |
 | `FRONTEND_URL`, `CORS_ORIGIN` | Public origin of the frontend, and the origins allowed to call the API. |
 | `MODEL_WORKER_URL` | An OpenAI-compatible endpoint offered as the `local` provider. |
-| `SIMILARITY_WORKER_URL` | The embedding worker used by the NLP nodes. |
+| `SIMILARITY_WORKER_URL` | The NLP worker (`models/`) behind the embedding, keyword and equivalence nodes. |
 | `OPENAI_API_KEY`, `OPENROUTER_API_KEY` | Seed credentials for the cloud providers. A seeded cloud provider starts with its model policy set to deny-all; a facilitator opens it in `/admin/providers`. |
 | `BEARER_TOKEN` | Auth for a custom OpenAI-compatible endpoint, when needed. |
 | `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
 | `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
+| `TRUST_PROXY` | Reverse proxies in front of the backend (default 1: the frontend's nginx). `docker-compose.prod.yml` sets 2 for Traefik ahead of nginx. Login throttling and the join throttle key on the client address this resolves. |
 | `RETENTION_ENABLED` | Delete idle browser and ended workshop workspaces after 60 days (default true). |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
+| `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
 | `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window (room-tolerant join throttle). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
+
+The NLP worker itself reads five variables of its own (set on the `models` service, not
+the backend):
+
+| Variable | Purpose |
+|---|---|
+| `EMBEDDING_MODEL` | Sentence-embedding model (default `BAAI/bge-m3`; multilingual, MIT). |
+| `EMBEDDING_MAX_SEQ_LENGTH` | Token cap per input (default 512), which bounds CPU latency. |
+| `EMBEDDING_TASK` | Task name for task-conditioned models, e.g. `text-matching`. Empty for models that take none, which is most of them. |
+| `EMBEDDING_TRUST_REMOTE_CODE` | Allow the model repository to execute its own Python on load. Default `false`. |
+| `NLI_MODEL` | Entailment cross-encoder behind `/entailment`, loaded on first use. Set it empty to disable the stage; `text/semantic-equivalence` then falls back to its cosine ceiling. |
+
+Model choice is measured, not assumed:
+[docs/embedding-model-comparison.md](docs/embedding-model-comparison.md) ranks six models
+across the four comparisons the graph performs, and
+[docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md)
+records where the thresholds come from. `models/compare_models.py` and
+`models/calibrate.py` reproduce them.
+
+### Deploying with Portainer
+
+`docker-compose.prod.yml` is the same topology behind Traefik, and it builds nothing:
+it runs the images that `.github/workflows/deploy.yml` pushes to GHCR on every push to
+`main` (`ghcr.io/haski-rak/nodegrade-backend`, `-frontend`, `-models`, tagged `latest`
+and `sha-<commit>`). After the push the workflow calls the Portainer stack webhook, so
+merging `dev` into `main` is the whole release: Portainer re-pulls the repository and
+the images and recreates what changed. Only the frontend joins the Traefik network;
+Postgres, the NLP worker and the backend publish no ports at all.
+
+One-time setup, in this order:
+
+1. **Make the packages pullable.** On the first run GHCR creates the three packages
+   private. Either set each to public in the repository's package settings, or add
+   `ghcr.io` as a registry in Portainer with a token that has `read:packages` and pick
+   it when creating the stack.
+2. **Create the stack from git.** Portainer, *Stacks* > *Add stack* > *Repository*:
+   repository `https://github.com/HASKI-RAK/NodeGrade`, reference `refs/heads/main`,
+   compose path `docker-compose.prod.yml`. Under *Environment variables* enter the
+   values from [`stack.env.example`](stack.env.example); the four required ones are
+   `NODEGRADE_HOST`, `POSTGRES_PASSWORD`, `PROVIDER_ENCRYPTION_KEY` and the
+   `ADMIN_USERNAME`/`ADMIN_PASSWORD` pair, and the stack refuses to start naming
+   whichever is missing. Generate the encryption key once:
+
+   ```bash
+   openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+   ```
+
+   Portainer substitutes `${VAR}` in the compose file from those variables and also
+   writes all of them to a `stack.env` file next to it, which the backend loads through
+   `env_file`. So any backend setting from the table above (`XAPI_*`,
+   `RETENTION_ENABLED`, `WORKSPACE_MAX_WORKFLOWS`, ...) is a new variable in Portainer
+   and no change to the compose file. `stack.env` is optional and gitignored, so the
+   file also runs outside Portainer with plain `docker compose --env-file`.
+3. **Turn on the webhook.** In the stack, enable *GitOps updates*, choose *Webhook*,
+   switch on *Re-pull image* and save. Copy the webhook URL into the repository as the
+   Actions secret `PORTAINER_WEBHOOK_URL`. Without the secret the workflow still pushes
+   the images and ends with a warning instead of a redeploy.
+4. **Deploy once by hand** (*Update the stack* or *Pull and redeploy*). The first start
+   downloads the 2.3 GB embedding model before the worker reports healthy, so the
+   backend, which waits for it, takes several minutes to appear. Later starts read the
+   cached copy from the `model_cache` volume.
+
+From then on every push to `main` runs the workflow, and the deploy job's log shows the
+HTTP status Portainer answered. Portainer answers as soon as it has queued the redeploy,
+so a green job means "asked"; the stack's log in Portainer shows the pull and restart.
+To roll back, set `NODEGRADE_IMAGE_TAG` in the stack to a `sha-` tag from an earlier
+Actions run and redeploy; the next webhook call keeps that pin until you clear it.
+
+Traefik expects the external network `traefik_web`, the entrypoint `websecure` and the
+certificate resolver `le`; `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`,
+`TRAEFIK_CERT_RESOLVER` and `TRAEFIK_ROUTER` change those without touching the file.
+Two proxies stand in front of the backend there (Traefik, then nginx), which is why the
+file sets `TRUST_PROXY=2`; raise it by one for each proxy ahead of Traefik. The `models`
+service runs `bge-m3` and the entailment model on CPU and wants about 4 GB of memory.
+
+### Choosing a different embedding model
+
+No model weights ship in this repository. The worker downloads whatever
+`EMBEDDING_MODEL` names from Hugging Face at startup, which means the licence that
+applies to your deployment is the licence of the model you choose, and accepting it is
+your decision rather than this project's. The defaults are MIT on both models so that
+every deployment can use them unchanged.
+
+Six candidates are measured across the four comparisons the graph performs in
+[docs/embedding-model-comparison.md](docs/embedding-model-comparison.md). Two results
+decide most overrides:
+
+- `intfloat/multilingual-e5-large-instruct` is the strongest embedding measured, and it
+  is **MIT**. It wins on raw similarity and loses inside the full cascade, so prefer it
+  when your workflow scores with `models/cosine-similarity` or `text/keyword-check`
+  rather than with `text/semantic-equivalence`.
+- Model choice is worth a few points; staging the decision is worth thirty. Across six
+  models raw cosine spans 28 points of accuracy on the same pairs and the cascade spans
+  11, with the ranking inverted between them.
+
+`jinaai/jina-embeddings-v3` is the model whose licence question comes up most often, and
+it does **not** win: `e5-large-instruct` beats it on three scenarios of four. Its weights
+are **CC-BY-NC-4.0**, which permits non-commercial use with attribution; attribution
+alone does not extend it to commercial use. If your deployment is non-commercial — a
+university course, an internal research pilot — it may be available to you. Read the
+licence and decide for your own context; if money changes hands anywhere near the
+deployment, get that decision reviewed by someone qualified rather than relying on this
+paragraph. Since a permissively licensed model measures better here, the simplest answer
+is not to need the review.
+
+To run it anyway:
+
+```yaml
+environment:
+  EMBEDDING_MODEL: jinaai/jina-embeddings-v3
+  EMBEDDING_TASK: text-matching
+  EMBEDDING_TRUST_REMOTE_CODE: 'true'
+```
+
+`EMBEDDING_TRUST_REMOTE_CODE=true` lets `transformers` download and execute Python from
+the model repository inside the worker process. Jina v3 requires it because its
+architecture lives next to the weights rather than in `transformers` itself, and it pulls
+that code from a *second* repository, `jinaai/xlm-roberta-flash-implementation`. Enable it
+only for repositories you have reason to trust, pin a revision if you can, and never
+enable it together with an `EMBEDDING_MODEL` value that anything outside your deployment
+can influence.
+
+Measure before switching, on your own pairs:
+
+```bash
+python models/compare_models.py --models <repository-id>
+```
 
 Apply schema migrations on every release, before the new backend serves traffic:
 

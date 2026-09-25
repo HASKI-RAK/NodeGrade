@@ -62,6 +62,8 @@ test('workshop workflow autosaves and executes', async ({ page }) => {
   await page.getByLabel('Your answer').fill('Playwright deterministic answer')
   await page.getByRole('button', { name: 'Run assessment' }).click()
   await page.evaluate(() => window.__NODEGRADE_DEBUG__?.waitForEvent('graphFinished'))
+  // Runs stay on the Test tab with inline progress; the trace is one click away.
+  await page.getByRole('tab', { name: 'Trace' }).click()
   await expect(page.getByText('Run: completed')).toBeVisible()
   const traceSteps = page.getByRole('button', { name: /^Toggle / })
   await expect(traceSteps).toHaveCount(3)

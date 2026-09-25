@@ -70,6 +70,7 @@ describe('extended assessment laboratory template', () => {
         'Semantic similarity',
         'Word count + 5',
         'TF-IDF diagnostics',
+        'Score line',
       ]),
     );
   });

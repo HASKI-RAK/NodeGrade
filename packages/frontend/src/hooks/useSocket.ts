@@ -22,16 +22,26 @@ export function useSocket({
 }) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [connectionStatus, setConnectionStatus] = useState('Connecting…')
+  const [connected, setConnected] = useState(false)
 
   useEffect(() => {
     disconnectSocket()
     const instance = getSocket(workspaceToken)
     attachDebugSocket(instance)
     setSocket(instance)
-    const connected = () => setConnectionStatus('Connected')
-    const disconnected = () => setConnectionStatus('Disconnected')
-    const failed = () => setConnectionStatus('Connection error')
-    instance.on('connect', connected)
+    const connectedHandler = () => {
+      setConnectionStatus('Connected')
+      setConnected(true)
+    }
+    const disconnected = () => {
+      setConnectionStatus('Disconnected')
+      setConnected(false)
+    }
+    const failed = () => {
+      setConnectionStatus('Connection error')
+      setConnected(false)
+    }
+    instance.on('connect', connectedHandler)
     instance.on('disconnect', disconnected)
     instance.on('connect_error', failed)
     void connectSocket().catch(failed)
@@ -64,5 +74,5 @@ export function useSocket({
     [socket, workflowId]
   )
 
-  return { socket, connectionStatus, runGraph, cancelRun }
+  return { socket, connectionStatus, connected, runGraph, cancelRun }
 }

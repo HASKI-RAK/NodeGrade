@@ -1,8 +1,12 @@
 import { ServerEventPayload } from '@haski/ta-lib'
 import { AlertColor } from '@mui/material'
-import { LGraph } from 'litegraph.js'
+import { LGraph, type LGraphNode } from 'litegraph.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Socket } from 'socket.io-client'
+
+const RUNNING_COLOR = '#88FF00'
+const FAILED_COLOR = '#ff0000'
+const IDLE_COLOR = '#FFFFFF00'
 
 type EventHandlerArray<T> = [keyof T, (payload: T[keyof T]) => void | Promise<void>][]
 type EventHandlerMap<T> = {
@@ -38,6 +42,15 @@ export interface UseServerEventsResult {
   beginGraphLoad: () => void
   beginAttempt: (requestId?: string) => void
   failAttempt: (message: string) => void
+  /**
+   * Locally abandon the in-flight attempt (queued or running). Late server events
+   * for the abandoned request are ignored; when the server belatedly assigns a
+   * run id to an abandoned queued request it is exposed as cancelledRunId so the
+   * caller can still send cancelRun and free the workspace slot.
+   */
+  cancelAttempt: (message: string) => void
+  cancelledRunId: string | undefined
+  acknowledgeCancelledRun: () => void
   handleSnackbarClose: (event: React.SyntheticEvent | Event, reason?: string) => void
 }
 
@@ -61,6 +74,8 @@ export function useServerEvents({
   const [trace, setTrace] = useState<ServerEventPayload['nodeExecutionChanged'][]>([])
   const requestIdRef = useRef<string | undefined>(undefined)
   const runIdRef = useRef<string | undefined>(undefined)
+  const cancelledRequestRef = useRef<string | undefined>(undefined)
+  const [cancelledRunId, setCancelledRunId] = useState<string | undefined>(undefined)
   const [snackbar, setSnackbar] = useState<{
     message: string
     severity: AlertColor
@@ -88,32 +103,139 @@ export function useServerEvents({
     setProcessingPercentage(0)
   }, [])
 
-  const beginAttempt = useCallback((requestId?: string) => {
-    requestIdRef.current = requestId
-    runIdRef.current = undefined
-    setRunId(undefined)
-    setRunState('queued')
-    setTrace([])
-    setAttemptState('running')
-    setFailureMessage(undefined)
-    setOutputs(undefined)
-    setProcessingPercentage(0)
+  /**
+   * Every node this hook ever paints (green while running, red on failure).
+   * Clearing on a new attempt guarantees no stale highlight survives the run
+   * that set it, even if that run's terminal event was lost.
+   */
+  const highlightedRef = useRef<Set<LGraphNode>>(new Set())
+  /** Subset of highlightedRef currently shown as running (green). At most one step. */
+  const runningRef = useRef<LGraphNode[]>([])
+
+  const paintNodes = useCallback(
+    (nodes: LGraphNode[], color: string) => {
+      if (nodes.length === 0) return
+      for (const node of nodes) {
+        node.color = color
+        if (color === IDLE_COLOR) highlightedRef.current.delete(node)
+        else highlightedRef.current.add(node)
+      }
+      lgraph.setDirtyCanvas(true, true)
+    },
+    [lgraph]
+  )
+
+  const clearRunningNodes = useCallback(() => {
+    paintNodes(runningRef.current, IDLE_COLOR)
+    runningRef.current = []
+  }, [paintNodes])
+
+  const clearAllHighlights = useCallback(() => {
+    paintNodes([...highlightedRef.current], IDLE_COLOR)
+    highlightedRef.current.clear()
+    runningRef.current = []
+  }, [paintNodes])
+
+  const beginAttempt = useCallback(
+    (requestId?: string) => {
+      requestIdRef.current = requestId
+      runIdRef.current = undefined
+      cancelledRequestRef.current = undefined
+      setCancelledRunId(undefined)
+      setRunId(undefined)
+      setRunState('queued')
+      setTrace([])
+      setAttemptState('running')
+      setFailureMessage(undefined)
+      setOutputs(undefined)
+      setProcessingPercentage(0)
+      clearAllHighlights()
+    },
+    [clearAllHighlights]
+  )
+
+  const failAttempt = useCallback(
+    (message: string) => {
+      setAttemptState('failed')
+      setFailureMessage(message)
+      setProcessingPercentage(0)
+      setSnackbar({ message, severity: 'error', open: true })
+      clearRunningNodes()
+    },
+    [clearRunningNodes]
+  )
+
+  const cancelAttempt = useCallback(
+    (message: string) => {
+      cancelledRequestRef.current = requestIdRef.current
+      requestIdRef.current = undefined
+      runIdRef.current = undefined
+      setRunId(undefined)
+      setRunState('cancelled')
+      setAttemptState('failed')
+      setFailureMessage(message)
+      setProcessingPercentage(0)
+      setSnackbar({ message, severity: 'info', open: true })
+      clearRunningNodes()
+    },
+    [clearRunningNodes]
+  )
+
+  const acknowledgeCancelledRun = useCallback(() => {
+    cancelledRequestRef.current = undefined
+    setCancelledRunId(undefined)
   }, [])
 
-  const failAttempt = useCallback((message: string) => {
-    setAttemptState('failed')
-    setFailureMessage(message)
-    setProcessingPercentage(0)
-    setSnackbar({ message, severity: 'error', open: true })
-  }, [])
+  /**
+   * The server executes a compiled flat graph whose ids are renumbered from 1,
+   * so `payload.nodeId` is a compiled execution id that must never address the
+   * editor graph directly. `sourceId` (plus `wrapperId` for block-internal
+   * nodes) is the editor identity — the same resolution `selectTraceNode` uses.
+   */
+  const resolveEditorNodes = useCallback(
+    (payload: ServerEventPayload['nodeExecutionChanged']): LGraphNode[] => {
+      if (payload.wrapperId != null && payload.sourceId != null) {
+        const wrapper = lgraph.getNodeById(payload.wrapperId)
+        if (wrapper && wrapper.type === 'graph/subgraph' && 'subgraph' in wrapper) {
+          const inner = (wrapper.subgraph as LGraph).getNodeById(payload.sourceId)
+          // Paint both so the highlight is visible whether the block is open
+          // (inner node) or closed (wrapper node).
+          return [wrapper, ...(inner ? [inner] : [])]
+        }
+        if (wrapper) return [wrapper]
+      }
+      if (payload.sourceId != null) {
+        const node = lgraph.getNodeById(payload.sourceId)
+        if (node) return [node]
+      }
+      // Backwards compatibility for payloads without editor identity.
+      const fallback = lgraph.getNodeById(payload.nodeId)
+      return fallback ? [fallback] : []
+    },
+    [lgraph]
+  )
 
-  const colorNode = (nodeId: number, state: string) => {
-    const node = lgraph.getNodeById(nodeId)
-    if (!node) return
-    node.color =
-      state === 'running' ? '#88FF00' : state === 'failed' ? '#ff0000' : '#FFFFFF00'
-    lgraph.setDirtyCanvas(true, true)
-  }
+  const colorNode = useCallback(
+    (payload: ServerEventPayload['nodeExecutionChanged']) => {
+      const nodes = resolveEditorNodes(payload)
+      if (nodes.length === 0) return
+      if (payload.state === 'running') {
+        // Exactly one node runs at a time (sequential topological execution):
+        // clear the previous green before painting the new one so a lost
+        // terminal event can never leave two greens on canvas.
+        const previous = runningRef.current.filter((node) => !nodes.includes(node))
+        paintNodes(previous, IDLE_COLOR)
+        paintNodes(nodes, RUNNING_COLOR)
+        runningRef.current = nodes
+        return
+      }
+      paintNodes(nodes, payload.state === 'failed' ? FAILED_COLOR : IDLE_COLOR)
+      if (runningRef.current.some((node) => nodes.includes(node))) {
+        runningRef.current = runningRef.current.filter((node) => !nodes.includes(node))
+      }
+    },
+    [paintNodes, resolveEditorNodes]
+  )
 
   useEffect(() => {
     if (!socket) return
@@ -125,12 +247,23 @@ export function useServerEvents({
         console.log('Graph finished: ', payload)
         setProcessingPercentage(100)
         setAttemptState('completed')
+        clearRunningNodes()
         void payload
       },
       questionSet(payload) {
         setQuestion(payload)
       },
       runStateChanged(payload) {
+        // A locally cancelled attempt ignores further UI updates, but a queued
+        // request the server accepts late still occupies a workspace run slot:
+        // capture its run id so the caller can send cancelRun for it.
+        if (
+          payload.requestId !== undefined &&
+          payload.requestId === cancelledRequestRef.current
+        ) {
+          if (payload.runId !== undefined) setCancelledRunId(payload.runId)
+          return
+        }
         // Correlate on the request id whenever it is still the attempt in flight: a run
         // the server refuses outright reports a terminal state without ever queueing.
         if (payload.requestId === requestIdRef.current) {
@@ -138,10 +271,14 @@ export function useServerEvents({
           setRunId(payload.runId)
         } else if (payload.runId !== runIdRef.current) return
         setRunState(payload.state)
-        if (payload.state === 'completed') setAttemptState('completed')
+        if (payload.state === 'completed') {
+          setAttemptState('completed')
+          clearRunningNodes()
+        }
         if (payload.state === 'failed' || payload.state === 'cancelled') {
           setAttemptState('failed')
           setFailureMessage(payload.error?.message)
+          clearRunningNodes()
         }
       },
       nodeExecutionChanged(payload) {
@@ -151,7 +288,7 @@ export function useServerEvents({
           if (index < 0) return [...current, payload]
           return current.map((step, stepIndex) => (stepIndex === index ? payload : step))
         })
-        colorNode(payload.nodeId, payload.state)
+        colorNode(payload)
       },
       outputSet(output) {
         if (output.runId !== runIdRef.current) return
@@ -206,7 +343,7 @@ export function useServerEvents({
         socket.off(eventName, handler)
       }
     }
-  }, [socket, lgraph])
+  }, [socket, lgraph, colorNode, clearRunningNodes])
 
   return {
     outputs,
@@ -224,6 +361,9 @@ export function useServerEvents({
     beginGraphLoad,
     beginAttempt,
     failAttempt,
+    cancelAttempt,
+    cancelledRunId,
+    acknowledgeCancelledRun,
     handleSnackbarClose
   }
 }

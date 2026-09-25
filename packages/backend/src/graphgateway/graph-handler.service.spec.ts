@@ -1,4 +1,4 @@
-import { LGraph } from '@haski/ta-lib';
+import { LGraph, LLMNode } from '@haski/ta-lib';
 import { Socket } from 'socket.io';
 import { XapiService } from '../xapi.service.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
@@ -7,6 +7,7 @@ import {
   ExecutionLimitsService,
 } from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
+import type { RunService } from '../run/run.service.js';
 import { GraphHandlerService } from './graph-handler.service.js';
 
 const client = (id: string, workspaceId: string) =>
@@ -24,24 +25,123 @@ const payload = (requestId: string) => ({
   graph: JSON.stringify(new LGraph().serialize()),
 });
 
+const runRecords = () => ({ record: jest.fn().mockResolvedValue(undefined) });
+
 const service = (
   workspaceConcurrentRuns = DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns,
+  runs = runRecords(),
+  workflows: Partial<WorkflowService> = {
+    getExecutionContent: jest
+      .fn()
+      .mockResolvedValue(JSON.stringify(new LGraph().serialize())),
+  },
 ) =>
   new GraphHandlerService(
-    {
-      getExecutionContent: jest
-        .fn()
-        .mockResolvedValue(JSON.stringify(new LGraph().serialize())),
-    } as unknown as WorkflowService,
+    workflows as unknown as WorkflowService,
     {} as XapiService,
-    {} as ProviderRuntimeService,
+    {
+      defaultModel: jest.fn().mockResolvedValue(null),
+    } as unknown as ProviderRuntimeService,
     {
       get: jest.fn().mockResolvedValue({
         ...DEFAULT_EXECUTION_LIMITS,
         workspaceConcurrentRuns,
       }),
     } as unknown as ExecutionLimitsService,
+    runs as unknown as RunService,
   );
+
+describe('GraphHandlerService default model substitution', () => {
+  const fallback = { providerKey: 'openai', modelId: 'gpt-5' };
+  const handlerWith = (defaultModel: jest.Mock) =>
+    new GraphHandlerService(
+      {
+        getExecutionContent: jest.fn(),
+      } as unknown as WorkflowService,
+      {} as XapiService,
+      { defaultModel } as unknown as ProviderRuntimeService,
+      {
+        get: jest.fn().mockResolvedValue(DEFAULT_EXECUTION_LIMITS),
+      } as unknown as ExecutionLimitsService,
+      runRecords() as unknown as RunService,
+    );
+  const llmGraph = (
+    properties: Record<string, unknown>,
+  ): InstanceType<typeof LGraph> => {
+    const graph = new LGraph();
+    graph.configure({
+      nodes: [
+        {
+          id: 1,
+          type: 'models/llm',
+          pos: [0, 0],
+          properties: {
+            value: '',
+            model: '',
+            model_ref: null,
+            needs_model_selection: true,
+            ...properties,
+          },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    });
+    return graph;
+  };
+  const applyDefault = (
+    handler: GraphHandlerService,
+    graph: InstanceType<typeof LGraph>,
+  ): Promise<void> =>
+    (
+      handler as unknown as {
+        applyDefaultModel: (
+          lgraph: InstanceType<typeof LGraph>,
+        ) => Promise<void>;
+      }
+    ).applyDefaultModel(graph);
+
+  it('fills model nodes without a selection from the deployment default', async () => {
+    const handler = handlerWith(jest.fn().mockResolvedValue(fallback));
+    const graph = llmGraph({});
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toEqual(fallback);
+    expect(node.properties.model).toBe('gpt-5');
+    expect(node.properties.needs_model_selection).toBe(false);
+  });
+
+  it('leaves explicitly configured nodes and stored content alone', async () => {
+    const configured = {
+      model_ref: { providerKey: 'openai', modelId: 'other' },
+      needs_model_selection: false,
+    };
+    const handler = handlerWith(jest.fn().mockResolvedValue(fallback));
+    const graph = llmGraph(configured);
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toEqual(configured.model_ref);
+    expect(node.properties.needs_model_selection).toBe(false);
+  });
+
+  it('leaves unconfigured nodes failing when no default is set', async () => {
+    const handler = handlerWith(jest.fn().mockResolvedValue(null));
+    const graph = llmGraph({});
+
+    await applyDefault(handler, graph);
+
+    const node = graph.findNodesByClass(LLMNode)[0];
+    expect(node.properties.model_ref).toBeNull();
+    expect(node.properties.needs_model_selection).toBe(true);
+  });
+});
 
 describe('GraphHandlerService run ownership', () => {
   it('creates unique run ids, correlates events, and cleans terminal runs', async () => {
@@ -374,5 +474,200 @@ describe('GraphHandlerService run ownership', () => {
     // Only run correlation travels with the output, not the internal run record.
     expect(outputs[0]).not.toHaveProperty('controller');
     expect(outputs[0]).not.toHaveProperty('clientId');
+  });
+});
+
+describe('GraphHandlerService run records (SPEC-0020/FR-004)', () => {
+  // An answer input echoed to a plain output, and a text field feeding a review
+  // flag: the smallest graph that yields a flagged review output without a model.
+  const REVIEWER_REPLY = 'RECOMMENDATION: EDUCATOR_REVIEW\nREASON: Contradictory claims.';
+  const flaggedGraph = {
+    nodes: [
+      {
+        id: 9,
+        type: 'input/answer',
+        pos: [0, 0],
+        outputs: [{ name: 'string', type: 'string', links: [2] }],
+        properties: { value: '' },
+      },
+      {
+        id: 10,
+        type: 'basic/textfield',
+        pos: [0, 0],
+        title: 'Reviewer reply',
+        outputs: [{ name: 'string', type: 'string', links: [1] }],
+        properties: { value: REVIEWER_REPLY },
+      },
+      {
+        id: 11,
+        type: 'output/review-flag',
+        pos: [0, 0],
+        title: 'Needs a tutor? flag',
+        inputs: [{ name: 'signal', type: 'string,boolean', link: 1 }],
+        outputs: [{ name: 'flagged', type: 'boolean', links: [] }],
+        properties: {
+          label: 'Needs a tutor?',
+          flagPattern: 'EDUCATOR_REVIEW',
+          reasonPrefix: 'REASON:',
+          value: '',
+        },
+      },
+      {
+        id: 12,
+        type: 'output/output',
+        pos: [0, 0],
+        title: 'Feedback output',
+        inputs: [{ name: '*', type: '*', link: 2 }],
+        properties: { uniqueId: '12', type: 'text', label: 'Feedback', value: '' },
+      },
+    ],
+    links: [
+      [1, 10, 0, 11, 0, 'string'],
+      [2, 9, 0, 12, 0, 'string'],
+    ],
+    groups: [],
+    config: {},
+    extra: {},
+    version: 0.4,
+  };
+
+  const stateCalls = (socket: Socket) =>
+    jest
+      .mocked(socket.emit)
+      .mock.calls.map(([eventName, eventPayload], index) => ({
+        eventName,
+        eventPayload,
+        order: jest.mocked(socket.emit).mock.invocationCallOrder[index],
+      }))
+      .filter((call) => call.eventName === 'runStateChanged');
+
+  it('records a completed run with its answer and flagged outputs before the terminal event', async () => {
+    const runs = runRecords();
+    const handler = service(undefined, runs);
+    const socket = client('client-1', 'workspace-1');
+
+    const answer = 'One quarter is bigger because four is more than two.';
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-record',
+      workflowId: 'workflow-1',
+      answer,
+      graph: JSON.stringify(flaggedGraph),
+    });
+
+    const states = stateCalls(socket);
+    const completed = states.find((call) => call.eventPayload.state === 'completed');
+    expect(completed).toBeDefined();
+    expect(runs.record).toHaveBeenCalledTimes(1);
+    expect(runs.record.mock.invocationCallOrder[0]).toBeLessThan(completed!.order);
+    expect(runs.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: completed!.eventPayload.runId,
+        workspaceId: 'workspace-1',
+        workflowId: 'workflow-1',
+        outcome: 'COMPLETED',
+        answer,
+        submittedBy: undefined,
+        startedAt: expect.any(Date),
+        finishedAt: expect.any(Date),
+        outputs: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'review',
+            verdict: 'flagged',
+            label: 'Needs a tutor?',
+            value: 'Contradictory claims.',
+            wrapperId: null,
+            sourceId: 11,
+          }),
+          expect.objectContaining({
+            type: 'text',
+            label: 'Feedback',
+            value: answer,
+            sourceId: 12,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('keeps the LTI launch name on the record', async () => {
+    const runs = runRecords();
+    const handler = service(undefined, runs);
+    const socket = client('client-1', 'workspace-1');
+    (socket.handshake as { auth: Record<string, unknown> }).auth = {
+      ltiCookie: { user_id: 'u-1', lis_person_name_full: 'Ada Lovelace' },
+    };
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-lti',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(flaggedGraph),
+    });
+
+    expect(runs.record).toHaveBeenCalledWith(
+      expect.objectContaining({ submittedBy: 'Ada Lovelace' }),
+    );
+  });
+
+  it('still completes the run when the record cannot be written', async () => {
+    const runs = { record: jest.fn().mockRejectedValue(new Error('database away')) };
+    const handler = service(undefined, runs);
+    const socket = client('client-1', 'workspace-1');
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-unrecorded',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(flaggedGraph),
+    });
+
+    expect(runs.record).toHaveBeenCalledTimes(1);
+    expect(stateCalls(socket).map((call) => call.eventPayload.state)).toContain(
+      'completed',
+    );
+  });
+
+  it('records a run that fails during execution, never one that fails before it', async () => {
+    const failing = {
+      nodes: [
+        {
+          id: 1,
+          type: 'models/llm',
+          pos: [0, 0],
+          properties: { value: '', model: '', model_ref: null, needs_model_selection: true },
+        },
+      ],
+      links: [],
+      groups: [],
+      config: {},
+      extra: {},
+      version: 0.4,
+    };
+    const runs = runRecords();
+    const handler = service(undefined, runs);
+    const socket = client('client-1', 'workspace-1');
+
+    await handler.handleRunGraph(socket, {
+      requestId: 'request-failing',
+      workflowId: 'workflow-1',
+      answer: 'An answer long enough to run',
+      graph: JSON.stringify(failing),
+    });
+
+    expect(stateCalls(socket).map((call) => call.eventPayload.state)).toContain('failed');
+    expect(runs.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'FAILED', errorMessage: expect.any(String) }),
+    );
+
+    const rejected = runRecords();
+    const unavailable = service(undefined, rejected, {
+      getExecutionContent: jest.fn().mockRejectedValue(new Error('no such workflow')),
+    });
+    await unavailable.handleRunGraph(client('client-2', 'workspace-1'), {
+      requestId: 'request-missing',
+      workflowId: 'workflow-9',
+      answer: 'An answer long enough to run',
+    });
+    expect(rejected.record).not.toHaveBeenCalled();
   });
 });
