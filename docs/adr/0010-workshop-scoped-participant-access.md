@@ -1,0 +1,5 @@
+# ADR-0010: Workshop-scoped participant access
+
+Status: accepted
+
+Participants obtain a workspace only by joining a workshop or through an LTI launch; the anonymous browser workspace of ADR-0001 is withdrawn, and its tokens are rejected. Workflow templates reach participants only as entries of their workshop: a `WorkshopTemplate` row either pins a `TemplateRevision` or follows `Template.currentRevision`, which is resolved when the participant starts the entry and never pushed into copies already made (ADR-0003 immutability holds for the copy as for the revision). The public template endpoints become workspace-scoped and serve block templates only. A workshop that is closed or past its expiry turns its participant workspaces read-only: `WorkspaceGuard` rejects state-changing HTTP requests and `GraphHandlerService` re-checks the workshop on every run request, because a socket authenticates once at connect time. The join is the only anonymous way to create a workspace and carries the per-address creation throttle.
