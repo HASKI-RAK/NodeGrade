@@ -163,7 +163,9 @@ export const ResultCard = ({
               {title}
             </Typography>
             {passed && <Chip size="small" color="success" label={messages.passed} />}
-            {flagged && <Chip size="small" color="warning" label={messages.needsReview} />}
+            {flagged && (
+              <Chip size="small" color="warning" label={messages.needsReview} />
+            )}
             {clear && <Chip size="small" label={messages.noIssueFound} />}
             {onLocate && (
               <Tooltip title={messages.locateOutputNode(title)}>
