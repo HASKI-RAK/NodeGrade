@@ -11,6 +11,7 @@ import {
   similarityWorkerUnset,
 } from './config/configuration.js';
 import { cookiesInsecure } from './config/cookies.js';
+import { trustProxyHops } from './config/trust-proxy.js';
 import { resolveCorsOrigins } from './config/cors.js';
 import { WebSocketCookieAdapter } from './utils/websocket-cookie.adapter.js';
 
@@ -25,7 +26,11 @@ async function bootstrap() {
 
   // The frontend container proxies to the backend, so the client address only survives
   // if Express is told to trust it. Login throttling and audit fields depend on it.
-  app.set('trust proxy', 1);
+  // TRUST_PROXY is the number of proxies in front of the backend: 1 for the Compose
+  // stack (nginx alone), 2 behind a reverse proxy such as Traefik in front of nginx.
+  // Too low and every client shares the proxy's address; too high and a client can
+  // forge its own.
+  app.set('trust proxy', trustProxyHops());
 
   app.use(cookieParser());
 

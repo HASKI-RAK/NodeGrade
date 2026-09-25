@@ -324,6 +324,21 @@ healthy with no way to create a workshop. So `up` always builds, writes a key in
 once and never rewrites a value that exists, and reports what is still missing after the
 containers are healthy.
 
+## Production stack
+
+Location: `docker-compose.prod.yml`, `stack.env.example`, `.github/workflows/deploy.yml`,
+`packages/backend/src/config/trust-proxy.ts`
+
+The deployed form of the same topology for Portainer behind Traefik. The compose file
+runs the GHCR images the workflow pushes on every push to `main` and never builds; the
+workflow ends by calling the Portainer stack webhook, so a merge into `main` is the
+release. Required settings use `${VAR:?message}` so a stack missing one refuses to start
+by name, the rest default, and the backend additionally loads Portainer's `stack.env`
+through `env_file` so optional backend variables need no compose edit. `trust-proxy.ts`
+reads `TRUST_PROXY`, the number of proxies whose `X-Forwarded-For` entries Express may
+believe: 1 in `docker-compose.yml`, 2 here. `stack.env.example` documents every variable
+the stack reads; README.md, "Deploying with Portainer" has the one-time setup.
+
 ## Browser suite
 
 Location: `e2e/`, `playwright.config.ts`

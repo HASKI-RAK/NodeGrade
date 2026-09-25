@@ -220,6 +220,9 @@ it several minutes; later starts read the cached copy from a Docker volume.
 Both stacks can run at once: their containers, volumes and host ports do not
 overlap.
 
+`docker-compose.prod.yml` is the third file: the deployed stack behind Traefik, running
+prebuilt images from GHCR rather than building. See "Deploying with Portainer" below.
+
 ## Providers and model governance
 
 Providers live in `/admin/providers`: `local` (from `MODEL_WORKER_URL`), `OpenAI`,
@@ -318,6 +321,7 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `BEARER_TOKEN` | Auth for a custom OpenAI-compatible endpoint, when needed. |
 | `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
 | `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
+| `TRUST_PROXY` | Reverse proxies in front of the backend (default 1: the frontend's nginx). `docker-compose.prod.yml` sets 2 for Traefik ahead of nginx. Login throttling and the join throttle key on the client address this resolves. |
 | `RETENTION_ENABLED` | Delete idle browser and ended workshop workspaces after 60 days (default true). |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
 | `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
@@ -342,6 +346,62 @@ across the four comparisons the graph performs, and
 [docs/semantic-equivalence-calibration.md](docs/semantic-equivalence-calibration.md)
 records where the thresholds come from. `models/compare_models.py` and
 `models/calibrate.py` reproduce them.
+
+### Deploying with Portainer
+
+`docker-compose.prod.yml` is the same topology behind Traefik, and it builds nothing:
+it runs the images that `.github/workflows/deploy.yml` pushes to GHCR on every push to
+`main` (`ghcr.io/haski-rak/nodegrade-backend`, `-frontend`, `-models`, tagged `latest`
+and `sha-<commit>`). After the push the workflow calls the Portainer stack webhook, so
+merging `dev` into `main` is the whole release: Portainer re-pulls the repository and
+the images and recreates what changed. Only the frontend joins the Traefik network;
+Postgres, the NLP worker and the backend publish no ports at all.
+
+One-time setup, in this order:
+
+1. **Make the packages pullable.** On the first run GHCR creates the three packages
+   private. Either set each to public in the repository's package settings, or add
+   `ghcr.io` as a registry in Portainer with a token that has `read:packages` and pick
+   it when creating the stack.
+2. **Create the stack from git.** Portainer, *Stacks* > *Add stack* > *Repository*:
+   repository `https://github.com/HASKI-RAK/NodeGrade`, reference `refs/heads/main`,
+   compose path `docker-compose.prod.yml`. Under *Environment variables* enter the
+   values from [`stack.env.example`](stack.env.example); the four required ones are
+   `NODEGRADE_HOST`, `POSTGRES_PASSWORD`, `PROVIDER_ENCRYPTION_KEY` and the
+   `ADMIN_USERNAME`/`ADMIN_PASSWORD` pair, and the stack refuses to start naming
+   whichever is missing. Generate the encryption key once:
+
+   ```bash
+   openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+   ```
+
+   Portainer substitutes `${VAR}` in the compose file from those variables and also
+   writes all of them to a `stack.env` file next to it, which the backend loads through
+   `env_file`. So any backend setting from the table above (`XAPI_*`,
+   `RETENTION_ENABLED`, `WORKSPACE_MAX_WORKFLOWS`, ...) is a new variable in Portainer
+   and no change to the compose file. `stack.env` is optional and gitignored, so the
+   file also runs outside Portainer with plain `docker compose --env-file`.
+3. **Turn on the webhook.** In the stack, enable *GitOps updates*, choose *Webhook*,
+   switch on *Re-pull image* and save. Copy the webhook URL into the repository as the
+   Actions secret `PORTAINER_WEBHOOK_URL`. Without the secret the workflow still pushes
+   the images and ends with a warning instead of a redeploy.
+4. **Deploy once by hand** (*Update the stack* or *Pull and redeploy*). The first start
+   downloads the 2.3 GB embedding model before the worker reports healthy, so the
+   backend, which waits for it, takes several minutes to appear. Later starts read the
+   cached copy from the `model_cache` volume.
+
+From then on every push to `main` runs the workflow, and the deploy job's log shows the
+HTTP status Portainer answered. Portainer answers as soon as it has queued the redeploy,
+so a green job means "asked"; the stack's log in Portainer shows the pull and restart.
+To roll back, set `NODEGRADE_IMAGE_TAG` in the stack to a `sha-` tag from an earlier
+Actions run and redeploy; the next webhook call keeps that pin until you clear it.
+
+Traefik expects the external network `traefik_web`, the entrypoint `websecure` and the
+certificate resolver `le`; `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`,
+`TRAEFIK_CERT_RESOLVER` and `TRAEFIK_ROUTER` change those without touching the file.
+Two proxies stand in front of the backend there (Traefik, then nginx), which is why the
+file sets `TRUST_PROXY=2`; raise it by one for each proxy ahead of Traefik. The `models`
+service runs `bge-m3` and the entailment model on CPU and wants about 4 GB of memory.
 
 ### Choosing a different embedding model
 
