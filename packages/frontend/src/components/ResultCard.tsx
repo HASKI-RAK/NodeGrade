@@ -408,29 +408,31 @@ export const ResultCard = ({
         if (!Array.isArray(output.value)) return null
         return <Prose text={output.value.map(String).join(', ')} />
       }
-      case 'classifications':
+      case 'classifications': {
         if (!Array.isArray(output.value)) return null
+        // Unconnected list inputs arrive as null over the wire; never show an empty chip.
+        const labels = output.value.filter(
+          (classification): classification is string =>
+            typeof classification === 'string' && classification.trim().length > 0
+        )
+        if (labels.length === 0)
+          return <Typography color="text.secondary">{messages.noValue}</Typography>
         return (
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            {output.value
-              // Unconnected list inputs arrive as null over the wire; never show an empty chip.
-              .filter(
-                (classification): classification is string =>
-                  typeof classification === 'string' && classification.trim().length > 0
+            {labels.map((classification, index) => {
+              const tone = toneFor(classification, output.toneMap)
+              return (
+                <Chip
+                  key={`${index}-${classification}`}
+                  label={classification}
+                  color={chipColor(tone)}
+                  variant={tone && tone !== 'neutral' ? 'filled' : 'outlined'}
+                />
               )
-              .map((classification, index) => {
-                const tone = toneFor(classification, output.toneMap)
-                return (
-                  <Chip
-                    key={`${index}-${classification}`}
-                    label={classification}
-                    color={chipColor(tone)}
-                    variant={tone && tone !== 'neutral' ? 'filled' : 'outlined'}
-                  />
-                )
-              })}
+            })}
           </Stack>
         )
+      }
       case 'review': {
         const reason = String(output.value ?? '').trim()
         const text = reason || (flagged ? messages.reviewNoReason : '')
