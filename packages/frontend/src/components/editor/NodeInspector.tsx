@@ -1,24 +1,36 @@
 import {
+  type ChipMapControl,
+  formatKeyMap,
   getNodeDefinition,
   isModelRef,
   MODEL_PARAMETERS,
   type ModelCatalogEntry,
   type ModelRef,
-  type NodePropertyDefinition
+  type NodePropertyDefinition,
+  parseKeyMap,
+  toneKey
 } from '@haski/ta-lib'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Box,
   Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Slider,
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material'
 import type { LGraphNode } from 'litegraph.js'
@@ -76,7 +88,124 @@ const validationMessage = (
   return null
 }
 
-const PropertyEditor = ({
+/** A "?" that opens a short explanation; paragraphs in `text` are blank-line separated. */
+const HelpButton = ({ title, text }: { title: string; text: string }) => {
+  const [open, setOpen] = useState(false)
+  const label = `Help: ${title}`
+  return (
+    <>
+      <Tooltip title={label}>
+        <IconButton size="small" aria-label={label} onClick={() => setOpen(true)}>
+          <HelpOutlineIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogContent>
+          {text.split(/\n\s*\n/).map((paragraph, index) => (
+            <Typography key={index} variant="body2" sx={{ mb: 1.5 }}>
+              {paragraph}
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
+}
+
+/**
+ * Edits a `KEY=value, …` property as chips: one group per allowed value, the keys
+ * mapped to it as deletable chips, and a field that adds a key on Enter. The text
+ * form the node stores is what `parseKeyMap`/`formatKeyMap` read and write, so a
+ * hand-typed map and a chip-edited one are the same thing.
+ */
+const ChipMapEditor = ({
+  label,
+  control,
+  value,
+  onChange
+}: {
+  label: string
+  control: ChipMapControl
+  value: string
+  onChange: (next: string) => void
+}) => {
+  const allowed = control.groups.map((group) => group.value)
+  const map = parseKeyMap(value, allowed)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const add = (group: string) => {
+    const key = toneKey(drafts[group] ?? '')
+    if (!key) return
+    onChange(formatKeyMap({ ...map, [key]: group }))
+    setDrafts((current) => ({ ...current, [group]: '' }))
+  }
+  const remove = (key: string) => {
+    const next = { ...map }
+    delete next[key]
+    onChange(formatKeyMap(next))
+  }
+  return (
+    <Stack spacing={1.5} role="group" aria-label={label}>
+      <Typography variant="subtitle2">{label}</Typography>
+      {control.groups.map((group) => {
+        const keys = Object.entries(map)
+          .filter(([, mapped]) => mapped === group.value)
+          .map(([key]) => key)
+        return (
+          <Box key={group.value}>
+            <Typography variant="body2">{group.label}</Typography>
+            {group.hint && (
+              <Typography variant="caption" color="text.secondary" component="p">
+                {group.hint}
+              </Typography>
+            )}
+            <Stack
+              direction="row"
+              spacing={0.5}
+              useFlexGap
+              alignItems="center"
+              sx={{ flexWrap: 'wrap', mt: 0.5 }}
+            >
+              {keys.map((key) => (
+                <Chip
+                  key={key}
+                  label={key}
+                  size="small"
+                  onDelete={() => remove(key)}
+                  deleteIcon={<span aria-hidden>×</span>}
+                  aria-label={`${key} in ${group.label}`}
+                />
+              ))}
+              <TextField
+                size="small"
+                placeholder={control.placeholder ?? 'Add'}
+                value={drafts[group.value] ?? ''}
+                slotProps={{ htmlInput: { 'aria-label': `Add to ${group.label}` } }}
+                onChange={(event) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [group.value]: event.target.value
+                  }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  add(group.value)
+                }}
+                sx={{ width: 180 }}
+              />
+            </Stack>
+          </Box>
+        )
+      })}
+    </Stack>
+  )
+}
+
+const PropertyControl = ({
   node,
   property,
   history,
@@ -189,6 +318,15 @@ const PropertyEditor = ({
       </TextField>
     )
   }
+  if (control.type === 'chipMap')
+    return (
+      <ChipMapEditor
+        label={property.label}
+        control={control}
+        value={String(value)}
+        onChange={(next) => history.transact(() => commit(next))}
+      />
+    )
   if (control.type === 'toggle')
     return (
       <FormControlLabel
@@ -325,6 +463,26 @@ const PropertyEditor = ({
   )
 }
 
+/** A property control with its "?" beside it when the definition carries help text. */
+const PropertyEditor = (props: {
+  node: LGraphNode
+  property: NodePropertyDefinition
+  history: GraphHistory
+  modelCatalog: ModelCatalogEntry[]
+  defaultModel?: ModelRef | null
+}) => {
+  const { property } = props
+  if (!property.help) return <PropertyControl {...props} />
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="flex-start">
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <PropertyControl {...props} />
+      </Box>
+      <HelpButton title={property.label} text={property.help} />
+    </Stack>
+  )
+}
+
 export const NodeInspector = ({
   selection,
   history,
@@ -427,7 +585,14 @@ export const NodeInspector = ({
   return (
     <Stack spacing={2} p={3} sx={{ overflowY: 'auto' }}>
       <Box>
-        <Typography variant="h6">{definition.title}</Typography>
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Typography variant="h6" sx={{ flexGrow: 1, minWidth: 0 }}>
+            {definition.title}
+          </Typography>
+          {definition.help && (
+            <HelpButton title={definition.title} text={definition.help} />
+          )}
+        </Stack>
         <Typography color="text.secondary" variant="body2">
           {definition.description}
         </Typography>

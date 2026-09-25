@@ -141,6 +141,7 @@ export class GraphHandlerService {
           section: payload.section,
           audience: payload.audience,
           toneMap: payload.toneMap,
+          roles: payload.roles,
           statusKey: payload.statusKey,
           max: payload.max,
           passMark: payload.passMark,

@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-25
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -137,6 +137,15 @@ lists them.
 
 WHEN a node is selected,
 the system SHALL show an inspector panel with the node's editable properties.
+
+WHILE a property is declared with a `chipMap` control,
+the inspector SHALL edit its `KEY=value, …` text as chips: one group per allowed value
+holding the keys mapped to it, each removable, and a field per group that adds a key on
+Enter, writing the same text form back to the property.
+
+WHILE a node definition or a property definition carries help text,
+the inspector SHALL show a "?" beside the node title or the control that opens a dialog
+with that text.
 
 ### FR-007 — Advanced settings hidden by default
 
@@ -383,3 +392,4 @@ And the newer stored state is not silently overwritten
 | 2026-09-15 | Initial specification created                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 2026-09-15 | Added node property metadata model (FR-011, AC-007), editor-wide undo/redo (FR-012, AC-008), autosave with save-state display and failure recovery (FR-013..FR-015, AC-009..AC-011) — closes the persistence gap with SPEC-0008's reload-persistence smoke test                                                                                                                                                                          |
 | 2026-09-15 | Review revision 2: explicit Save removed from the toolbar — save status (Saving…/Saved/Save failed) occupies that position, Save as… remains in overflow (FR-001/FR-002, AC-001); Publish removed (its old editor → student URL semantics are undefined in the new domain; no current spec requires publishing a normal workflow); save conflict from optimistic concurrency surfaced via status and resolution action (FR-013a, AC-012) |
+| 2026-09-25 | FR-006 extended: `chipMap` property control (KEY=value text edited as grouped chips) and "?" help dialogs for nodes and properties in the inspector. |

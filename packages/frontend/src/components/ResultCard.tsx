@@ -9,6 +9,7 @@ import {
   isChecklist,
   parseReport,
   reportHeadline,
+  roleFor,
   toneFor,
   toneKey
 } from '@haski/ta-lib'
@@ -85,19 +86,6 @@ const BorderLinearProgress = styled(LinearProgress)<{ barcolor: string }>(
   })
 )
 
-/** Keys the report card promotes out of the definition list. */
-const EVIDENCE_KEYS = new Set(['EVIDENCE', 'QUOTE'])
-const REASON_KEYS = new Set(['REASON', 'REASONING', 'EXPLANATION'])
-const CALLOUT_KEYS = new Set([
-  'NEXT_STEP',
-  'NEXT_STEPS',
-  'GAP',
-  'HINT',
-  'SUGGESTION',
-  'REVISION',
-  'TIP'
-])
-
 /**
  * One output as the preview and the Submissions inbox show it. A stored run has no
  * run correlation, so those fields are not part of the card's contract.
@@ -162,35 +150,50 @@ const Row = ({ label, text }: { label: string; text: string }) => (
   </Box>
 )
 
+/**
+ * The lines of a report below the headline, each drawn by the role the node's
+ * "Report lines" map gives its key (SPEC-0007/FR-004). Hidden lines are parsed
+ * but not shown; unmapped keys become labelled rows.
+ */
 const ReportBody = ({
   entries,
   prose,
+  roles,
+  statusKey,
   messages
 }: {
   entries: ReportEntry[]
   prose: string[]
+  roles?: string
+  statusKey?: string
   messages: PreviewMessages
 }) => {
-  if (entries.length === 0 && prose.length === 0)
+  const shown = entries.filter(
+    (entry) => roleFor(entry.key, roles, statusKey) !== 'hidden'
+  )
+  if (shown.length === 0 && prose.length === 0)
     return <Typography color="text.secondary">{messages.noValue}</Typography>
   return (
     <Stack spacing={1.25}>
-      {entries.map((entry, index) => {
+      {shown.map((entry, index) => {
         const key = toneKey(entry.key)
         const label = prettify(entry.key)
-        if (EVIDENCE_KEYS.has(key))
-          return <Quote key={`${index}-${key}`} text={entry.value} />
-        if (REASON_KEYS.has(key))
-          return <Prose key={`${index}-${key}`} text={entry.value} />
-        if (CALLOUT_KEYS.has(key))
-          return (
-            <Callout
-              key={`${index}-${key}`}
-              label={key.startsWith('NEXT') ? messages.nextStep : label}
-              text={entry.value}
-            />
-          )
-        return <Row key={`${index}-${key}`} label={label} text={entry.value} />
+        switch (roleFor(entry.key, roles, statusKey)) {
+          case 'quote':
+            return <Quote key={`${index}-${key}`} text={entry.value} />
+          case 'body':
+            return <Prose key={`${index}-${key}`} text={entry.value} />
+          case 'callout':
+            return (
+              <Callout
+                key={`${index}-${key}`}
+                label={key.startsWith('NEXT') ? messages.nextStep : label}
+                text={entry.value}
+              />
+            )
+          default:
+            return <Row key={`${index}-${key}`} label={label} text={entry.value} />
+        }
       })}
       {prose.length > 0 && <Prose text={prose.join('\n')} />}
     </Stack>
@@ -342,7 +345,7 @@ export const ResultCard = ({
       }
       case 'report': {
         const report = parseReport(output.value)
-        const headline = reportHeadline(report, output.statusKey)
+        const headline = reportHeadline(report, output.roles, output.statusKey)
         const tone = headline ? toneFor(headline.value, output.toneMap) : undefined
         accent = tone
         if (headline && headline.value)
@@ -382,6 +385,8 @@ export const ResultCard = ({
           <ReportBody
             entries={report.entries.filter((entry) => entry !== headline)}
             prose={report.prose}
+            roles={output.roles}
+            statusKey={output.statusKey}
             messages={messages}
           />
         )

@@ -1,3 +1,4 @@
+import { DEFAULT_REPORT_ROLES } from '@haski/ta-lib';
 import type { BundledTemplate } from './bundled-template.js';
 import { GraphBuilder, type NodeRef } from './graph-builder.js';
 
@@ -261,8 +262,10 @@ const build = () => {
     );
     // The grader's reply is a `report`: the first-line integer becomes the points
     // chip, EVIDENCE the quotation and GAP the callout (SPEC-0007/FR-004).
+    // The CRITERION line repeats the card's own label, so it is parsed but hidden.
     g.output(`${criterion.title}`, [2210, y + 120], grader, 0, 'report', {
       max: POINTS_PER_CRITERION,
+      roles: `${DEFAULT_REPORT_ROLES}, CRITERION=hidden`,
       section: SECTION_CRITERIA,
     });
     reports.push(grader);

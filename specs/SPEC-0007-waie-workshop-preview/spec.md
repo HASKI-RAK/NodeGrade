@@ -141,11 +141,16 @@ by the output node's label and rendered according to the node's display type:
 - `verdict`: one decision as a chip with an icon — a boolean as "Yes"/"No", a token such
   as `CORRECT` in readable case — coloured by the tone map, and the card carries the
   tone as an accent.
-- `report`: a model reply in `KEY: value` lines. The line named by the node's headline
-  key (or the first line) becomes a coloured headline chip, a leading bare number becomes
-  a points chip out of the scale maximum, `EVIDENCE` renders as a quotation, `REASON` as
-  the body, `NEXT STEP`/`GAP`/`HINT` as a callout, and other keys as labelled rows. Raw
-  `KEY:` prefixes never reach the reader; text without keys renders as prose.
+- `report`: a model reply in `KEY: value` lines. The node's "Report lines" map
+  (`KEY=role, …`, roles `headline`, `quote`, `body`, `callout`, `hidden`) decides how
+  each line is drawn: the first line with the `headline` role becomes a coloured headline
+  chip, a leading bare number becomes a points chip out of the scale maximum, `quote`
+  renders as a quotation, `body` as prose, `callout` as a highlighted box, `hidden` not at
+  all, and unmapped keys as labelled rows. The default map covers the bundled prompts'
+  keys (JUDGMENT, CATEGORY, EVIDENCE, REASON, NEXT STEP, GAP, …); a saved `statusKey`
+  still names the headline. Keys match ignoring case, spaces and underscores, may use any
+  letter, and may be wrapped in markdown, listed or fenced. Raw `KEY:` prefixes never
+  reach the reader; text without keys renders as prose.
 - `checklist`: one chip per item, ticked when met and crossed when not.
 - `measure`: the number on a bar against the scale maximum (default 1) with a caption
   stating that it is evidence, not a grade, and never a pass chip.
@@ -414,3 +419,4 @@ Then all preflight checks are displayed with pass/fail state
 | 2026-09-17 | Implemented: canonical WAIE template shipped, preview Test/Trace tabs in English with workflow-configured answer bounds, workshop preflight and facilitator readiness view |
 | 2026-09-18 | FR-004/AC-002 refined: each result on its own card; editor-only jump from a card to its output node (`outputSet` now carries editor `sourceId`/`wrapperId`) |
 | 2026-09-25 | FR-004 rewritten around display types: `verdict`, `report`, `checklist` and `measure` cards added, `score` gains a scale maximum and a pass mark, cards carry a detail line and section headings (AC-009). FR-011/AC-010 added: educator-only cards, the "View as student" switch and the student view (`outputSet` carries `OutputPresentation`). The three workshop templates use the new cards. |
+| 2026-09-25 | FR-004 `report`: line roles become the node's editable "Report lines" map (`roles`), replacing the fixed key list and the headline key; keys accept any letter and markdown wrapping. |

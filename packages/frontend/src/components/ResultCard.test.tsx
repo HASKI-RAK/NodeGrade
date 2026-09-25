@@ -228,3 +228,38 @@ describe('TaskView results list (SPEC-0007/FR-011)', () => {
     expect(screen.queryByText(/hidden in this view/)).toBeNull()
   })
 })
+
+describe('ResultCard report roles (SPEC-0007/FR-004)', () => {
+  it('draws each line by the role the node maps its key to, and hides hidden ones', () => {
+    card(
+      output(
+        '1',
+        'report',
+        'Bewertung',
+        'URTEIL: KORREKT\nBELEG: "die Erde dreht sich"\nBEGRÜNDUNG: Alles da.\nCRITERION: Rain\nTIPP: Weiter so.',
+        {
+          roles:
+            'URTEIL=headline, BELEG=quote, BEGRÜNDUNG=body, TIPP=callout, CRITERION=hidden',
+          toneMap: 'KORREKT=success'
+        }
+      )
+    )
+    const article = screen.getByRole('article', { name: 'Bewertung' })
+    expect(within(article).getByText('Korrekt')).toBeVisible()
+    expect(within(article).getByText('"die Erde dreht sich"').tagName).toBe('BLOCKQUOTE')
+    expect(within(article).getByText('Alles da.')).toBeVisible()
+    expect(within(article).getByText('Tipp')).toBeVisible()
+    expect(within(article).queryByText('Rain')).toBeNull()
+    expect(within(article).queryByText(/URTEIL/)).toBeNull()
+  })
+
+  it('still honours a saved headline key without a roles map', () => {
+    card(
+      output('1', 'report', 'Diagnosis', 'CATEGORY: MISCONCEPTION\nREASON: r', {
+        statusKey: 'CATEGORY'
+      })
+    )
+    expect(screen.getByText('Misconception')).toBeVisible()
+    expect(screen.getByText('Reason')).toBeVisible()
+  })
+})

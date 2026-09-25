@@ -1,13 +1,17 @@
 import {
+  DEFAULT_REPORT_ROLES,
   DEFAULT_TONE_MAP,
   explainEquivalence,
   type EquivalenceReason,
+  formatKeyMap,
   KeywordCheckNode,
   OutputNode,
   parseReport,
+  parseRoleMap,
   parseToneMap,
   reportHeadline,
   ReviewFlagNode,
+  roleFor,
   toneFor,
 } from '@haski/ta-lib';
 
@@ -107,12 +111,37 @@ describe('parseReport / reportHeadline', () => {
     expect(parseReport(null)).toEqual({ entries: [], prose: [] });
   });
 
-  it('promotes the configured line, or the first one, and never the wrong one', () => {
+  it('promotes the first headline-role line, or the first line, never the wrong one', () => {
     const report = parseReport(ASSESSMENT_REPLY);
-    expect(reportHeadline(report, 'JUDGMENT')?.value).toBe('INCOMPLETE');
-    expect(reportHeadline(report, 'judgment:')?.value).toBe('INCOMPLETE');
-    expect(reportHeadline(report, undefined)?.key).toBe('JUDGMENT');
-    expect(reportHeadline(report, 'CATEGORY')).toBeUndefined();
+    expect(reportHeadline(report, DEFAULT_REPORT_ROLES)?.value).toBe('INCOMPLETE');
+    // The pre-roles statusKey still names the headline.
+    expect(reportHeadline(report, '', 'judgment:')?.value).toBe('INCOMPLETE');
+    // No headline key at all: the first line is promoted.
+    expect(reportHeadline(report, '')?.key).toBe('JUDGMENT');
+    // Headline keys that are absent promote nothing.
+    expect(reportHeadline(report, 'CATEGORY=headline')).toBeUndefined();
+  });
+});
+
+describe('report roles', () => {
+  it('reads KEY=role pairs, drops unknown roles and round-trips through formatKeyMap', () => {
+    const roles = parseRoleMap('EVIDENCE=quote, Next step=callout, ODD=purple');
+    expect(roles).toEqual({ EVIDENCE: 'quote', NEXT_STEP: 'callout' });
+    expect(formatKeyMap(roles)).toBe('EVIDENCE=quote, NEXT_STEP=callout');
+  });
+
+  it('gives every bundled key its role and unmapped keys a row', () => {
+    expect(roleFor('JUDGMENT', DEFAULT_REPORT_ROLES)).toBe('headline');
+    expect(roleFor('Evidence', DEFAULT_REPORT_ROLES)).toBe('quote');
+    expect(roleFor('REASON', DEFAULT_REPORT_ROLES)).toBe('body');
+    expect(roleFor('NEXT STEP', DEFAULT_REPORT_ROLES)).toBe('callout');
+    expect(roleFor('GAP', DEFAULT_REPORT_ROLES)).toBe('callout');
+    expect(roleFor('CRITERION', DEFAULT_REPORT_ROLES)).toBe('row');
+    expect(roleFor('CRITERION', `${DEFAULT_REPORT_ROLES}, CRITERION=hidden`)).toBe(
+      'hidden',
+    );
+    expect(roleFor('BEGRÜNDUNG', 'BEGRÜNDUNG=body')).toBe('body');
+    expect(roleFor('CATEGORY', '', 'CATEGORY')).toBe('headline');
   });
 });
 

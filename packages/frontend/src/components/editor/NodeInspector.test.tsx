@@ -1,5 +1,5 @@
 import { LiteGraph } from '@haski/ta-lib'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -196,5 +196,52 @@ describe('NodeInspector', () => {
     expect(screen.getByText('Participant response.')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Open block' }))
     expect(onOpenBlock).toHaveBeenCalledWith(block)
+  })
+})
+
+describe('NodeInspector chip maps and help (SPEC-0005/FR-006)', () => {
+  const setup = () => {
+    const graph = new LiteGraph.LGraph()
+    const history = new GraphHistory(
+      graph,
+      () => [],
+      () => undefined
+    )
+    const output = LiteGraph.createNode('output/output')
+    output.properties.roles = 'EVIDENCE=quote, REASON=body'
+    render(<NodeInspector selection={[output]} history={history} />)
+    return output
+  }
+
+  it('edits the report lines as chips grouped by role', async () => {
+    const output = setup()
+    await userEvent.click(screen.getByText('Advanced'))
+    const roles = screen.getByRole('group', { name: 'Report lines' })
+    expect(within(roles).getByText('EVIDENCE')).toBeVisible()
+    expect(within(roles).getByText('REASON')).toBeVisible()
+
+    await userEvent.type(
+      within(roles).getByLabelText('Add to Callout box'),
+      'Next step{Enter}'
+    )
+    expect(output.properties.roles).toBe('EVIDENCE=quote, REASON=body, NEXT_STEP=callout')
+    expect(within(roles).getByText('NEXT_STEP')).toBeVisible()
+
+    await userEvent.click(
+      within(roles)
+        .getByLabelText('EVIDENCE in Quotation')
+        .querySelector('.MuiChip-deleteIcon') as HTMLElement
+    )
+    expect(output.properties.roles).toBe('REASON=body, NEXT_STEP=callout')
+  })
+
+  it('opens a help dialog for the node and for a property', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: 'Help: output' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(/KEY: value/)
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: 'Help: Display' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(/report:/)
   })
 })
