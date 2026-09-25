@@ -56,39 +56,32 @@ const build = () => {
 };
 
 describe('TemplateController', () => {
-  it('lists only published templates', async () => {
+  const block = { ...template, kind: 'BLOCK' as const };
+
+  it('lists published blocks only (SPEC-0022/FR-014)', async () => {
     const { gallery, templates } = build();
 
-    const result = await gallery.list({ kind: 'WORKFLOW' });
+    await gallery.list();
 
-    expect(templates.listPublished).toHaveBeenCalledWith('WORKFLOW');
-    expect(result.templates[0].slug).toBe('demo');
+    expect(templates.listPublished).toHaveBeenCalledWith('BLOCK');
   });
 
-  it('resolves a template by slug, published only (FR-017)', async () => {
+  it('resolves a block by slug, published only (FR-017)', async () => {
     const { gallery, templates } = build();
-
-    await gallery.get('demo');
-
-    expect(templates.findBySlug).toHaveBeenCalledWith('demo', true);
-  });
-
-  it('includes content and required node types for the preview', async () => {
-    const { gallery } = build();
+    templates.findBySlug.mockResolvedValue(block);
 
     const result = await gallery.get('demo');
 
+    expect(templates.findBySlug).toHaveBeenCalledWith('demo', true);
     expect(result.revision.content).toBe(revision.content);
     expect(result.revision.requiredNodeTypes).toEqual(['models/llm']);
   });
 
-  it('serves a pinned revision by id', async () => {
+  it('does not serve a workflow template (SPEC-0022/AC-011)', async () => {
     const { gallery, templates } = build();
 
-    const result = await gallery.revision('rev-2');
-
-    expect(templates.getRevision).toHaveBeenCalledWith('rev-2');
-    expect(result.revision.content).toBe(revision.content);
+    await expect(gallery.get('demo')).rejects.toMatchObject({ status: 404 });
+    expect(templates.getCurrentRevision).not.toHaveBeenCalled();
   });
 });
 

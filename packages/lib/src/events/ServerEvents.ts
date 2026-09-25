@@ -77,7 +77,7 @@ export type NodeExecutionState =
   'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
 
 export type TraceError = {
-  code: 'node_failed' | 'timeout' | 'cancelled' | 'rate_limited'
+  code: 'node_failed' | 'timeout' | 'cancelled' | 'rate_limited' | 'workshop_closed'
   message: string
 }
 
@@ -97,7 +97,7 @@ export type RunCorrelation = {
 
 export type GraphOperationFailure = {
   operation: 'load' | 'run'
-  code: 'not-found' | 'load-failed' | 'run-failed' | 'rate-limited'
+  code: 'not-found' | 'load-failed' | 'run-failed' | 'rate-limited' | 'workshop-closed'
   message: string
   retryable: boolean
 }

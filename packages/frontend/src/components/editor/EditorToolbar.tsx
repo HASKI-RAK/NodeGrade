@@ -37,20 +37,22 @@ const labels: Record<SaveStatus, string> = {
   dirty: 'Unsaved changes',
   saving: 'Saving…',
   conflict: 'Save conflict',
-  error: 'Save failed'
+  error: 'Save failed',
+  readonly: 'Read-only'
 }
 
 export const EditorToolbar = ({
   workflowName,
   status,
   student,
+  readOnly = false,
   canSaveAs,
   canReset,
   ltiInstructor,
   developerTools,
   connectionStatus,
   onAdd,
-  onTemplates,
+  onWorkshop,
   onRun,
   onPreview,
   onSaveAs,
@@ -67,13 +69,16 @@ export const EditorToolbar = ({
   workflowName: string
   status: SaveStatus
   student: boolean
+  /** The workshop has ended: nothing may be changed or run (SPEC-0022/FR-011). */
+  readOnly?: boolean
   canSaveAs: boolean
   canReset: boolean
   ltiInstructor: boolean
   developerTools: boolean
   connectionStatus: string
   onAdd: () => void
-  onTemplates: () => void
+  /** Back to the participant's workshop overview; absent outside a workshop. */
+  onWorkshop?: () => void
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
@@ -111,22 +116,24 @@ export const EditorToolbar = ({
           >
             {workflowName}
           </Typography>
-          {!student && (
+          {!student && !readOnly && (
             <Button startIcon={<AddIcon />} onClick={onAdd}>
               Add
             </Button>
           )}
-          {!student && (
+          {!student && onWorkshop && (
             <Button
-              onClick={onTemplates}
+              onClick={onWorkshop}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
-              Templates
+              Workshop
             </Button>
           )}
-          <Button startIcon={<PlayArrowIcon />} onClick={onRun}>
-            Run
-          </Button>
+          {!readOnly && (
+            <Button startIcon={<PlayArrowIcon />} onClick={onRun}>
+              Run
+            </Button>
+          )}
           <Button
             startIcon={<VisibilityIcon />}
             onClick={onPreview}
@@ -164,7 +171,7 @@ export const EditorToolbar = ({
         </Toolbar>
       </AppBar>
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-        {!student && (
+        {!student && !readOnly && (
           <MenuItem
             disabled={!canSaveAs}
             onClick={() => {
@@ -175,7 +182,7 @@ export const EditorToolbar = ({
             Save as…
           </MenuItem>
         )}
-        {!student && canReset && (
+        {!student && !readOnly && canReset && (
           <MenuItem
             onClick={() => {
               setAnchor(null)
@@ -185,7 +192,7 @@ export const EditorToolbar = ({
             Reset to source template…
           </MenuItem>
         )}
-        {!student && (
+        {!student && !readOnly && (
           <MenuItem
             onClick={() => {
               setAnchor(null)
@@ -195,7 +202,7 @@ export const EditorToolbar = ({
             Version history…
           </MenuItem>
         )}
-        {!student && (
+        {!student && !readOnly && (
           <MenuItem
             onClick={() => {
               setAnchor(null)

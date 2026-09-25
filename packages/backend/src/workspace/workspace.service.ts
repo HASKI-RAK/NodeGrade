@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { WorkspaceType } from '../generated/prisma/enums.js';
+import type {
+  WorkshopStatus,
+  WorkspaceType,
+} from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma.service.js';
+import { displayWorkshopCode } from '../workshop/workshop-code.js';
 import {
   IssuedWorkspaceToken,
   hashWorkspaceToken,
@@ -11,13 +15,54 @@ import {
 /** Bounds how often a request may write to a workspace row (ADR-0001 note on hot rows). */
 export const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 
+/** The workshop a participant workspace belongs to, as the participant may see it. */
+export type WorkspaceWorkshop = {
+  code: string;
+  title: string;
+  /** Closed or past its expiry: reads only (SPEC-0022/FR-011). */
+  readOnly: boolean;
+};
+
 export type ResolvedWorkspace = {
   id: string;
   type: WorkspaceType;
   label: string | null;
   workshopId: string | null;
+  workshop?: WorkspaceWorkshop | null;
   publishedProjection?: boolean;
 };
+
+const WORKSHOP_STATE_SELECT = {
+  code: true,
+  title: true,
+  status: true,
+  expiresAt: true,
+} as const;
+
+/** A workshop stops accepting work when closed or once its expiry has passed. */
+export const isWorkshopReadOnly = (
+  workshop: { status: WorkshopStatus; expiresAt: Date | null },
+  now: Date,
+): boolean =>
+  workshop.status === 'CLOSED' ||
+  (workshop.expiresAt !== null && workshop.expiresAt <= now);
+
+const workshopView = (
+  workshop: {
+    code: string;
+    title: string;
+    status: WorkshopStatus;
+    expiresAt: Date | null;
+  } | null,
+  now: Date,
+): WorkspaceWorkshop | null =>
+  workshop
+    ? {
+        code: displayWorkshopCode(workshop.code),
+        title: workshop.title,
+        readOnly: isWorkshopReadOnly(workshop, now),
+      }
+    : null;
 
 export type CreatedWorkspace = ResolvedWorkspace & {
   createdAt: Date;
@@ -32,18 +77,9 @@ export class WorkspaceService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Establishes the ephemeral workspace an anonymous participant gets on first use
-   * (SPEC-0004/FR-003). The token is the only way back into it: nothing else identifies
-   * the caller, and only its hash is stored.
+   * The workspace a workshop join mints (SPEC-0014/FR-004). The token is the only way back
+   * into it: nothing else identifies the caller, and only its hash is stored.
    */
-  async createBrowser(label?: string): Promise<CreatedWorkspace> {
-    const issued = issueWorkspaceToken();
-    const workspace = await this.create('BROWSER', issued, { label });
-
-    this.logger.log(`Created BROWSER workspace ${workspace.id}`);
-    return { ...workspace, token: issued.token };
-  }
-
   async createWorkshop(
     workshopId: string,
     label?: string,
@@ -124,9 +160,12 @@ export class WorkspaceService {
         label: true,
         workshopId: true,
         lastActiveAt: true,
+        workshop: { select: WORKSHOP_STATE_SELECT },
       },
     });
-    if (!workspace) return null;
+    // Anonymous browser workspaces are withdrawn (SPEC-0022/FR-013): a token issued for one
+    // before that no longer opens anything, and retention removes the rows.
+    if (!workspace || workspace.type === 'BROWSER') return null;
 
     await this.touch(workspace.id, workspace.lastActiveAt, now);
 
@@ -137,7 +176,24 @@ export class WorkspaceService {
       type: workspace.type,
       label: workspace.label,
       workshopId: workspace.workshopId,
+      workshop: workshopView(workspace.workshop, now),
     };
+  }
+
+  /**
+   * The workshop state of a workspace, read fresh. A socket resolves its workspace once
+   * at connect time, so a run must not trust that snapshot to know whether the workshop
+   * has since closed (SPEC-0022/FR-012).
+   */
+  async workshopState(
+    workspaceId: string,
+    now: Date = new Date(),
+  ): Promise<WorkspaceWorkshop | null> {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { workshop: { select: WORKSHOP_STATE_SELECT } },
+    });
+    return workshopView(workspace?.workshop ?? null, now);
   }
 
   /**

@@ -159,35 +159,10 @@ export class WorkflowService {
    * moved on (AC-002) or been unpublished or deleted (AC-014a, AC-017).
    */
   /**
-   * Resolves a published template by slug and instantiates its current revision.
-   *
-   * publishedOnly is true because this is the participant-facing path: an unpublished
-   * template must not be reachable by guessing its slug (FR-017). A workshop join binds
-   * to a pinned revision and calls createFromTemplate directly, so it is unaffected by
-   * the template being unpublished later (FR-017a).
+   * Copies a template revision into a workspace, recording where it came from (SPEC-0003/
+   * FR-018). Participants reach it only by starting an entry of their workshop
+   * (SPEC-0022/FR-014); which revision that is was decided by the entry.
    */
-  async createFromTemplateSlug(
-    workspace: ResolvedWorkspace,
-    templateSlug: string,
-    nameOverride?: string,
-  ): Promise<WorkflowDetail> {
-    const template = await this.templates.findBySlug(templateSlug, true);
-    const revision = await this.templates.getCurrentRevision(template.id);
-
-    return this.createFromTemplate(
-      workspace,
-      {
-        templateId: template.id,
-        revisionId: revision.id,
-        revision: revision.revision,
-        name: revision.name,
-        content: revision.content,
-        contentSchema: revision.contentSchema,
-      },
-      nameOverride,
-    );
-  }
-
   async createFromTemplate(
     workspace: ResolvedWorkspace,
     source: {

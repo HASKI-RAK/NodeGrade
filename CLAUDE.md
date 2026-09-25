@@ -3,9 +3,12 @@
 ## Project
 
 NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
-`/admin`, create a workshop from a published template revision, and hand out an
-eight-character code; each participant browser gets an isolated workspace with its own
-workflow copy, edits it in a LiteGraph editor, and runs it against LLM and NLP providers.
+`/admin`, compose a workshop from one or more workflow templates (each pinned to a
+revision or following the newest one), and hand out an eight-character code. The code is
+the only way in for participants — there are no anonymous workspaces outside a workshop
+(LTI launches aside). Each participant browser gets an isolated workshop workspace, starts
+the workshop's templates into its own workflow copies from the workshop overview, edits
+them in a LiteGraph editor, and runs them against LLM and NLP providers.
 
 Yarn 4 workspaces monorepo, TypeScript throughout: NestJS 12 + Prisma 7 + PostgreSQL
 backend, React 19 + Vite 8 + MUI 7 + litegraph.js PWA frontend, a shared graph/event
@@ -36,7 +39,8 @@ things live).
 ```text
 UI page, route, editor panel      → packages/frontend/src/pages/, src/components/editor/
 Frontend server calls             → packages/frontend/src/api/http.ts
-Participant session / tokens      → packages/frontend/src/store/workspaceSession.ts, src/store/workspaceStore.ts
+Participant session / tokens      → packages/frontend/src/store/workspaceStore.ts
+Workshop join and overview (UI)   → packages/frontend/src/pages/WorkshopJoin.tsx, src/components/TemplateCard.tsx
 Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionRegistry.ts)
 Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
@@ -46,6 +50,8 @@ Version history, restore          → packages/backend/src/workflow/workflow-his
 Workspace access, retention       → packages/backend/src/workspace/
 Templates, bundled content        → packages/backend/src/template/
 Workshops and join codes          → packages/backend/src/workshop/
+Workshop participant API          → packages/backend/src/workshop/workshop-participant.service.ts
+Workshop admin UI, entries editor → packages/frontend/src/pages/admin/WorkshopAdmin.tsx, src/pages/admin/adminApi.ts
 Workshop preflight / readiness    → packages/backend/src/workshop/workshop-readiness.service.ts
 Run records, submission history   → packages/backend/src/run/, packages/lib/src/nodes/ReviewFlagNode.ts
 Result cards, output display types→ packages/lib/src/nodes/OutputNode.ts, src/nodes/utils/outputPresentation.ts, packages/frontend/src/components/ResultCard.tsx
@@ -93,6 +99,15 @@ a stale `dist` produces failures that look like code bugs.
 - Workspace authorization comes from the bearer access token only. No handler may take a
   workspace id from a path, query or body; `WorkspaceGuard` resolves it and handlers read
   `@CurrentWorkspace()` (ADR-0001).
+- Participant workspaces are created only by a workshop join
+  (`POST /api/workshops/by-code/:code/join`) or an LTI launch. `BROWSER` workspace tokens
+  are rejected (ADR-0010).
+- Workflow templates reach participants only through their workshop's entries
+  (`/api/workshops/current/**`). `/api/templates` is workspace-scoped and serves `BLOCK`
+  templates only, for the editor palette (SPEC-0022).
+- A CLOSED or expired workshop is read-only for its participants: `WorkspaceGuard` rejects
+  every non-GET/HEAD request with `workshop_closed`, and `GraphHandlerService` re-checks the
+  workshop on every run rather than at socket connect.
 - REST persists workflows with `If-Match`/`ETag` optimistic versions; Socket.IO only runs
   graphs and streams trace events (ADR-0002).
 - Template revisions are immutable. New content means a new revision, never an update

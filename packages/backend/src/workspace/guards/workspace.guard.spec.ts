@@ -67,4 +67,62 @@ describe('WorkspaceGuard', () => {
     expect(resolveByToken).toHaveBeenCalledWith('ngw_token-for-a');
     expect(request.workspace?.id).toBe('ws-a');
   });
+
+  describe('closed workshops (SPEC-0022/FR-011)', () => {
+    const closed: ResolvedWorkspace = {
+      id: 'ws-c',
+      type: 'WORKSHOP',
+      label: 'Workshop',
+      workshopId: 'wk-1',
+      workshop: { code: 'ABCD-EFGH', title: 'Workshop', readOnly: true },
+    };
+
+    it.each(['GET', 'HEAD'])('still serves %s', async (method) => {
+      const { guard } = guardWith(closed);
+
+      await expect(
+        guard.canActivate(
+          contextFor({
+            method,
+            headers: { authorization: 'Bearer ngw_token' },
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
+
+    it.each(['POST', 'PUT', 'PATCH', 'DELETE'])(
+      'refuses %s with workshop_closed',
+      async (method) => {
+        const { guard } = guardWith(closed);
+
+        await expect(
+          guard.canActivate(
+            contextFor({
+              method,
+              headers: { authorization: 'Bearer ngw_token' },
+            }),
+          ),
+        ).rejects.toMatchObject({
+          status: 403,
+          response: { code: 'workshop_closed' },
+        });
+      },
+    );
+
+    it('lets an open workshop write', async () => {
+      const { guard } = guardWith({
+        ...closed,
+        workshop: { ...closed.workshop!, readOnly: false },
+      });
+
+      await expect(
+        guard.canActivate(
+          contextFor({
+            method: 'PUT',
+            headers: { authorization: 'Bearer ngw_token' },
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
+  });
 });

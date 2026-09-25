@@ -223,9 +223,10 @@ model Template {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  revisions TemplateRevision[]
-  workflows Workflow[]
-  workshops Workshop[]
+  revisions       TemplateRevision[]
+  workflows       Workflow[]
+  workshops       Workshop[]
+  workshopEntries WorkshopTemplate[]
 
   @@index([kind, published, deletedAt])
 }
@@ -255,8 +256,9 @@ model TemplateRevision {
 
   createdAt DateTime @default(now())
 
-  workflows Workflow[]
-  workshops Workshop[]
+  workflows       Workflow[]
+  workshops       Workshop[]
+  workshopEntries WorkshopTemplate[]
 
   @@unique([templateId, revision])
   @@index([templateId, revision(sort: Desc)])
@@ -281,10 +283,16 @@ model Workshop {
 
   status WorkshopStatus @default(DRAFT)
 
-  templateId         String
-  template           Template         @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  templateRevisionId String
-  templateRevision   TemplateRevision @relation(fields: [templateRevisionId], references: [id], onDelete: Restrict)
+  /// Legacy single-template reference (SPEC-0014), superseded by `templates`
+  /// (SPEC-0022). Backfilled into WorkshopTemplate, no longer read or written, and
+  /// dropped by a later migration.
+  templateId         String?
+  template           Template?         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateRevisionId String?
+  templateRevision   TemplateRevision? @relation(fields: [templateRevisionId], references: [id], onDelete: Restrict)
+
+  /// The workflow templates participants may start, in display order (SPEC-0022/FR-001).
+  templates WorkshopTemplate[]
 
   expiresAt   DateTime?
   publishedAt DateTime?
@@ -296,6 +304,28 @@ model Workshop {
   workspaces Workspace[]
 
   @@index([status, expiresAt])
+}
+
+/// One workflow template a workshop offers (SPEC-0022/FR-001). A null revision follows
+/// the template's current revision, resolved when a participant starts the entry; a set
+/// revision pins it and survives unpublishing (FR-002).
+model WorkshopTemplate {
+  id         String   @id @default(cuid(2))
+  workshopId String
+  workshop   Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  templateId         String
+  template           Template          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateRevisionId String?
+  templateRevision   TemplateRevision? @relation(fields: [templateRevisionId], references: [id], onDelete: Restrict)
+
+  position  Int
+  createdAt DateTime @default(now())
+
+  @@unique([workshopId, templateId])
+  @@index([workshopId, position])
+  @@index([templateId])
+  @@index([templateRevisionId])
 }
 
 // ---------------------------------------------------------------------------

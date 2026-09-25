@@ -18,6 +18,7 @@ related:
   - SPEC-0002
   - SPEC-0005
   - SPEC-0009
+  - SPEC-0022
 ---
 
 # WAIE workshop experience and preview
@@ -238,10 +239,13 @@ the extractable EN and DE string tables rather than an inline literal.
 
 Traces to: FR-001
 
+Amended by SPEC-0022/FR-014: there is no template gallery; the template reaches
+participants as a workshop entry.
+
 ```gherkin
-Given the template gallery
-When the user browses workflow templates
-Then the canonical WAIE free-text assessment template is available and matches the Input → Assessment → Classification → Feedback structure
+Given a fresh deployment and a workshop with the bundled WAIE template as an entry
+When a participant opens the workshop overview
+Then the canonical WAIE free-text assessment template is available as an entry and matches the Input → Assessment → Classification → Feedback structure
 ```
 
 ### AC-002 — End-to-end test run
@@ -420,3 +424,4 @@ Then all preflight checks are displayed with pass/fail state
 | 2026-09-18 | FR-004/AC-002 refined: each result on its own card; editor-only jump from a card to its output node (`outputSet` now carries editor `sourceId`/`wrapperId`) |
 | 2026-09-25 | FR-004 rewritten around display types: `verdict`, `report`, `checklist` and `measure` cards added, `score` gains a scale maximum and a pass mark, cards carry a detail line and section headings (AC-009). FR-011/AC-010 added: educator-only cards, the "View as student" switch and the student view (`outputSet` carries `OutputPresentation`). The three workshop templates use the new cards. |
 | 2026-09-25 | FR-004 `report`: line roles become the node's editable "Report lines" map (`roles`), replacing the fixed key list and the headline key; keys accept any letter and markdown wrapping. |
+| 2026-09-25 | AC-001 amended for SPEC-0022: the WAIE template is available as a workshop entry, not in a template gallery. |

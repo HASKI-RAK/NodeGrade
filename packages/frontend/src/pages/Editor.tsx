@@ -18,6 +18,7 @@ import {
 import type { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Navigate,
   useBlocker,
   useLocation,
   useNavigate,
@@ -107,6 +108,11 @@ export const Editor = () => {
   const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([])
   const [defaultModel, setDefaultModel] = useState<ModelRef | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // A closed or expired workshop keeps its workflows readable and nothing else
+  // (SPEC-0022/FR-011). The server enforces it; this only stops the editor offering
+  // what the server would refuse.
+  const [readOnly, setReadOnly] = useState(session?.workshop?.readOnly ?? false)
+  const markReadOnly = useCallback(() => setReadOnly(true), [])
   const [connectionSuggestions, setConnectionSuggestions] = useState<
     ConnectionSuggestion[]
   >([])
@@ -143,6 +149,20 @@ export const Editor = () => {
   }, [lgraph, token, workflowId])
 
   useEffect(() => {
+    if (!token) return
+    let active = true
+    void api
+      .workspace(token)
+      .then((current) => {
+        if (active) setReadOnly(current.workshop?.readOnly ?? false)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [token])
+
+  useEffect(() => {
     void api
       .models()
       .then((catalog) => {
@@ -158,17 +178,18 @@ export const Editor = () => {
   useEffect(() => {
     if (!student)
       void api
-        .templates('BLOCK')
+        .templates(token)
         .then(setBlocks)
         .catch(() => setBlocks([]))
-  }, [student])
+  }, [student, token])
 
   const autosave = useAutosave({
     graph: lgraph,
     workflowId,
     token,
     initialVersion: workflow?.version ?? 1,
-    enabled: workflow !== null && !student
+    enabled: workflow !== null && !student && !readOnly,
+    onWorkshopClosed: markReadOnly
   })
   const { history, canUndo, canRedo } = useGraphHistory(lgraph, canvas)
   const { socket, connectionStatus, connected, runGraph, cancelRun } = useSocket({
@@ -188,6 +209,7 @@ export const Editor = () => {
     trace,
     failureMessage,
     snackbar,
+    workshopClosed,
     beginAttempt,
     failAttempt,
     cancelAttempt,
@@ -196,6 +218,9 @@ export const Editor = () => {
     handleSnackbarClose
   } = useServerEvents({ socket, lgraph })
   const runMessages = previewMessages[DEFAULT_PREVIEW_LOCALE]
+  useEffect(() => {
+    if (workshopClosed) markReadOnly()
+  }, [markReadOnly, workshopClosed])
 
   // The Submissions inbox is the editor's; a student launch shares the workspace with
   // every other launch of the same resource link and must not list them (SPEC-0020/FR-007).
@@ -242,7 +267,8 @@ export const Editor = () => {
     })
   }, [autosave.saveNow, autosave.status, ltiMode, session?.id, session?.type, workflowId])
 
-  const unsafeToLeave = ['dirty', 'saving', 'error', 'conflict'].includes(autosave.status)
+  const unsafeToLeave =
+    !readOnly && ['dirty', 'saving', 'error', 'conflict'].includes(autosave.status)
   const blocker = useBlocker(
     ({ nextLocation }) =>
       unsafeToLeave && nextLocation.pathname !== navigationBypass.current
@@ -493,7 +519,7 @@ export const Editor = () => {
     async (block: WorkflowTemplate) => {
       if (!canvas) return
       try {
-        const detail = await api.template(block.slug)
+        const detail = await api.template(block.slug, token)
         let suggestions: ConnectionSuggestion[] = []
         history.transact(() => {
           suggestions = insertBlock({
@@ -523,9 +549,12 @@ export const Editor = () => {
         setNotice(error instanceof Error ? error.message : 'Block could not be inserted.')
       }
     },
-    [canvas, history, lgraph]
+    [canvas, history, lgraph, token]
   )
 
+  // A participant reaches the editor through their workshop; without its session there is
+  // nothing this browser may open (SPEC-0022/FR-013).
+  if (!ltiMode && !session) return <Navigate to="/" replace />
   if (loadError)
     return (
       <Box p={4}>
@@ -550,15 +579,16 @@ export const Editor = () => {
         height: '100dvh',
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr)',
-        gridTemplateRows: 'auto minmax(0, 1fr)',
+        gridTemplateRows: readOnly ? 'auto auto minmax(0, 1fr)' : 'auto minmax(0, 1fr)',
         bgcolor: 'background.default',
         overflow: 'hidden'
       }}
     >
       <EditorToolbar
         workflowName={workflow.name}
-        status={autosave.status}
+        status={readOnly ? 'readonly' : autosave.status}
         student={student}
+        readOnly={readOnly}
         canSaveAs={!!token}
         canReset={!!workflow.sourceTemplateRevisionId && !!token}
         ltiInstructor={ltiMode && !student}
@@ -568,10 +598,10 @@ export const Editor = () => {
           setPaletteOpen((open) => !open)
           if (mobile && !paletteOpen) setRailOpen(false)
         }}
-        onTemplates={() =>
-          navigate(
-            `/templates?returnTo=${encodeURIComponent(location.pathname + location.search)}`
-          )
+        onWorkshop={
+          session?.workshop
+            ? () => navigate(`/workshop/${session.workshop?.code ?? ''}`)
+            : undefined
         }
         onRun={run}
         onPreview={showPreview}
@@ -594,12 +624,18 @@ export const Editor = () => {
         connectionInfo={{
           apiOrigin,
           wsOrigin,
-          workspaceType: session?.type ?? (ltiMode ? 'LTI' : 'Browser'),
+          workspaceType: session?.type ?? 'LTI',
           workflowId
         }}
       />
+      {readOnly && (
+        <Alert severity="info" square role="status">
+          This workshop has ended. You can still read your workflow and its submissions,
+          but you can no longer change or run it.
+        </Alert>
+      )}
       <Box sx={{ minWidth: 0, minHeight: 0, display: 'flex', position: 'relative' }}>
-        {!student && paletteOpen && (
+        {!student && !readOnly && paletteOpen && (
           <NodePalette
             graph={lgraph}
             canvas={canvas}
@@ -643,7 +679,7 @@ export const Editor = () => {
           <Box sx={{ minHeight: 0, flex: 1 }}>
             <Canvas
               lgraph={lgraph}
-              readOnly={student}
+              readOnly={student || readOnly}
               developerTools={developerTools}
               onReady={setCanvas}
               onSelectionChange={selectNodes}
@@ -675,7 +711,7 @@ export const Editor = () => {
               onSubmit={handleSubmit}
               outputs={outputs}
               constraints={answerConstraints}
-              disabled={attemptState === 'running' || runState === 'queued'}
+              disabled={readOnly || attemptState === 'running' || runState === 'queued'}
               runId={runId}
               runState={runState}
               trace={trace}

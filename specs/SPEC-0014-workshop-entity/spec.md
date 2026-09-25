@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-25
 depends_on:
   - SPEC-0013
   - SPEC-0003
@@ -14,6 +14,7 @@ depends_on:
 related:
   - SPEC-0002
   - SPEC-0007
+  - SPEC-0022
 ---
 
 # Workshop entity and join flow
@@ -48,7 +49,8 @@ duplicates the workshop's template revision into it.
 
 ### Out of scope
 
-- Multiple concurrent templates per workshop (one template revision per workshop).
+- Multiple concurrent templates per workshop — superseded: SPEC-0022/FR-001 brings them
+  into scope as a workshop's template entries.
 - Participant-facing workshop analytics or progress dashboards.
 - Workshop scheduling or calendar integration.
 
@@ -83,21 +85,18 @@ Independent value: one-step entry; no navigation or account needed.
 
 ### US-003 — Returning user joins a workshop
 
-As a returning user who already has a personal browser workspace,
-I want joining a workshop to give me a separate workshop workspace,
-so that my existing workflows are not mixed with the workshop exercise.
-
-Priority: P2
-
-Independent value: prevents accidental pollution of pre-existing workflows.
+Superseded by SPEC-0022/FR-013: personal browser workspaces no longer exist, so a
+workshop workspace is the only participant workspace there is to keep apart. A returning
+participant of the same workshop is covered by FR-009.
 
 ## Functional requirements
 
 ### FR-001 — Workshop entity
 
-The system SHALL support workshops consisting of: unique id, title, unique code,
-status (DRAFT | PUBLISHED | CLOSED), a template reference (template id and template
-revision), optional expiry timestamp, and creation/update timestamps.
+Superseded by SPEC-0022/FR-001: a workshop consists of a unique id, title, unique code,
+status (DRAFT | PUBLISHED | CLOSED), one or more ordered template entries (each pinning a
+revision or following the newest one), an optional expiry timestamp, and creation/update
+timestamps; the single template reference is gone.
 
 ### FR-002 — Code identifies one workshop
 
@@ -117,13 +116,13 @@ PUBLISHED and it has not expired.
 
 WHEN a participant joins a workshop,
 the system SHALL establish a participant workspace of type WORKSHOP explicitly
-associated with that workshop, distinct from any pre-existing browser workspace.
+associated with that workshop.
 
 ### FR-005 — Join duplicates the workshop's template revision
 
-WHEN a participant joins a workshop,
-the system SHALL create a workflow in the participant's workshop workspace containing
-a copy of the workshop's referenced template revision and SHALL open it in the editor.
+Superseded by SPEC-0022/FR-007 and FR-008: a join copies and opens an entry only when the
+workshop has exactly one available entry; otherwise the participant lands on the workshop
+overview and starts entries from there (SPEC-0022/FR-009).
 
 ### FR-006 — Workshop management restricted to facilitator
 
@@ -143,9 +142,9 @@ THEN the system SHALL reject its code on subsequent join attempts with a
 
 ### FR-009 — Re-join returns to existing work
 
-WHEN a participant who already joined a workshop joins again from the same browser,
-the system SHALL return them to their existing workshop workspace and workflow rather
-than creating duplicates.
+Superseded by SPEC-0022/FR-006 and FR-009: a re-join from the same browser returns the
+existing workshop workspace whether or not it holds workflows, and starting an entry
+again opens the existing copy rather than creating a duplicate.
 
 ## Non-functional requirements
 
@@ -163,7 +162,7 @@ Verification: load test with 50 concurrent joins; 95% complete within 3 seconds.
 Traces to: FR-001, FR-006
 
 ```gherkin
-Given a facilitator has created a workshop in DRAFT state bound to a template revision
+Given a facilitator has created a workshop in DRAFT state with at least one template entry
 When the facilitator publishes the workshop
 Then the workshop's code becomes valid for joining
 ```
@@ -182,8 +181,10 @@ Then the action is rejected
 
 Traces to: FR-003, FR-004, FR-005
 
+Amended by SPEC-0022/AC-005: the copy is made on join only for a single-entry workshop.
+
 ```gherkin
-Given a PUBLISHED workshop bound to template revision R
+Given a PUBLISHED workshop whose only entry pins template revision R
 When a participant joins via the workshop code
 Then a WORKSHOP-type workspace associated with that workshop is established
 And a workflow containing a copy of revision R is created in it and opened in the editor
@@ -193,20 +194,19 @@ And a workflow containing a copy of revision R is created in it and opened in th
 
 Traces to: FR-004, FR-009
 
-```gherkin
-Given a browser with an existing personal workspace
-When the user joins a workshop
-Then a distinct workshop workspace is established
-And the user's pre-existing workflows are unchanged and not listed in the workshop workspace
-```
+Superseded by SPEC-0022/AC-010: a browser holds no personal workspace any more, so there
+is nothing for a workshop workspace to be kept apart from.
 
 ### AC-005 — Re-join does not duplicate
 
 Traces to: FR-009
 
+Amended by SPEC-0022/AC-007: the workspace is returned on re-join, and starting an entry
+again opens the existing copy.
+
 ```gherkin
-Given a participant has already joined a workshop
-When the participant joins again from the same browser
+Given a participant has already joined a workshop and started one of its entries
+When the participant joins again from the same browser and opens that entry
 Then the same workshop workspace and workflow are returned
 And no duplicate workflow is created
 ```
@@ -235,14 +235,16 @@ Then a "workshop unavailable" state is shown
 
 - Two workshops share the same template → each workshop references it independently;
   closing one does not affect the other.
-- Workshop template revision is unpublished or deleted after publication → join
-  reports the workshop as unavailable rather than failing silently.
-- Expiry passes mid-session → already-joined participants keep working; only new
-  joins are rejected.
+- Workshop template is unpublished or deleted after publication → a pinned entry keeps
+  working; an entry that follows the newest revision is shown unavailable
+  (SPEC-0022/FR-002, FR-003).
+- Expiry passes mid-session → new joins are rejected and already-joined participants
+  keep read access only (SPEC-0022/FR-011, FR-012).
 
 ## Business rules
 
-- A workshop SHALL reference exactly one template revision at a time.
+- Superseded by SPEC-0022/FR-001 and FR-005: a workshop has at least one template entry
+  and at most one entry per template (formerly exactly one template revision).
 - A workshop code SHALL identify exactly one workshop and SHALL be shareable with
   participants (e.g. printed in the tutorial handout).
 - Participant workshop workspaces SHALL be associated with exactly one workshop.
@@ -278,3 +280,4 @@ Then a "workshop unavailable" state is shown
 |---|---|
 | 2026-09-15 | Initial specification created; introduces the previously implicit Workshop as a first-class entity |
 | 2026-09-15 | Review revision: "revoke" removed as a separate concept — closing the workshop invalidates its code (FR-006/FR-008 cover all code invalidation); unpublish/deletion of a referenced template revision never breaks a published workshop per SPEC-0003/FR-017a and FR-003b |
+| 2026-09-25 | SPEC-0022 supersedes FR-001, FR-005, FR-009, US-003, AC-004, the one-revision business rule and the single-template out-of-scope item (workshops hold several pinned or newest-revision entries; no browser workspaces); amends AC-001, AC-003, AC-005, FR-004 and the unpublish and expiry edge cases |

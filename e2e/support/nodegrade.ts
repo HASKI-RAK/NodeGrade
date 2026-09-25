@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
  * The editor's debug bridge (`packages/frontend/src/utils/debugBridge.ts`), exposed only
@@ -121,3 +121,63 @@ export const workshopToken = (page: Page, code: string): Promise<string | undefi
     const raw = localStorage.getItem(key)
     return raw ? (JSON.parse(raw) as { token: string }).token : undefined
   }, `nodegrade.workshop-workspace.${normalizeCode(code)}`)
+
+/**
+ * The facilitator API, signed in with the debug stack's credentials. Mutations carry the
+ * double-submit CSRF token the login returns.
+ */
+export const facilitatorApi = async (request: APIRequestContext) => {
+  const login = await request.post(`${backendUrl}/api/admin/auth/login`, {
+    data: { username: 'debug-admin', password: 'debug-password' }
+  })
+  expect(login.ok()).toBe(true)
+  const { csrfToken } = (await login.json()) as { csrfToken: string }
+  const call = async <T>(method: 'GET' | 'POST' | 'PUT', path: string, data?: unknown) => {
+    const response = await request.fetch(`${backendUrl}/api${path}`, {
+      method,
+      headers: { 'X-CSRF-Token': csrfToken },
+      ...(data === undefined ? {} : { data })
+    })
+    expect(response.ok(), `${method} ${path}: ${response.status()}`).toBe(true)
+    return (await response.json()) as T
+  }
+  return {
+    get: <T>(path: string) => call<T>('GET', path),
+    post: <T>(path: string, data: unknown = {}) => call<T>('POST', path, data),
+    put: <T>(path: string, data: unknown) => call<T>('PUT', path, data)
+  }
+}
+
+type Facilitator = Awaited<ReturnType<typeof facilitatorApi>>
+
+/** The id of a workflow template by slug, and the ids of its revisions, oldest first. */
+export const templateBySlug = async (api: Facilitator, slug: string) => {
+  const { templates } = await api.get<{ templates: { id: string; slug: string }[] }>(
+    '/admin/templates?kind=WORKFLOW'
+  )
+  const template = templates.find((candidate) => candidate.slug === slug)
+  expect(template, `no template ${slug}`).toBeDefined()
+  const { revisions } = await api.get<{ revisions: { id: string; revision: number }[] }>(
+    `/admin/templates/${template!.id}`
+  )
+  return {
+    id: template!.id,
+    revisionIds: [...revisions]
+      .sort((left, right) => left.revision - right.revision)
+      .map((revision) => revision.id)
+  }
+}
+
+/** Creates and publishes a workshop offering the given templates. */
+export const publishWorkshop = async (
+  api: Facilitator,
+  title: string,
+  templates: { templateId: string; templateRevisionId?: string | null }[]
+) => {
+  const { workshop } = await api.post<{ workshop: { id: string; code: string } }>(
+    '/admin/workshops',
+    { title, templates }
+  )
+  await api.post(`/admin/workshops/${workshop.id}/publish`)
+  return workshop
+}

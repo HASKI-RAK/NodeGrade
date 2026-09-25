@@ -13,11 +13,25 @@ const graph = await readFile(
   new URL('../../../tools/debug/demo-graph.json', import.meta.url),
   'utf8',
 );
-const token = `ngw_${Buffer.alloc(32, 1).toString('base64url')}`;
-const tokenHash = createHash('sha256').update(token).digest('hex');
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: databaseUrl }),
 });
+
+/** Leaves the workshop with exactly one entry, pinned to the given revision (SPEC-0022). */
+const pinOnlyEntry = async (
+  workshopId: string,
+  templateId: string,
+  templateRevisionId: string,
+) => {
+  await prisma.workshopTemplate.deleteMany({
+    where: { workshopId, templateId: { not: templateId } },
+  });
+  await prisma.workshopTemplate.upsert({
+    where: { workshopId_templateId: { workshopId, templateId } },
+    update: { templateRevisionId, position: 0 },
+    create: { workshopId, templateId, templateRevisionId, position: 0 },
+  });
+};
 
 try {
   const template = await prisma.template.upsert({
@@ -50,40 +64,19 @@ try {
     where: { code: 'WAVE2026' },
     update: {
       status: 'PUBLISHED',
-      templateId: template.id,
-      templateRevisionId: revision.id,
+      templateId: null,
+      templateRevisionId: null,
+      expiresAt: null,
       closedAt: null,
     },
     create: {
       code: 'WAVE2026',
       title: 'Debug workshop',
       status: 'PUBLISHED',
-      templateId: template.id,
-      templateRevisionId: revision.id,
       publishedAt: new Date(),
     },
   });
-  const browser = await prisma.workspace.upsert({
-    where: { tokenHash },
-    update: { label: 'Debug browser workspace' },
-    create: {
-      type: 'BROWSER',
-      label: 'Debug browser workspace',
-      tokenHash,
-    },
-  });
-  await prisma.workflow.upsert({
-    where: { workspaceId_slug: { workspaceId: browser.id, slug: 'demo' } },
-    update: { content: graph },
-    create: {
-      workspaceId: browser.id,
-      slug: 'demo',
-      name: 'Demo',
-      content: graph,
-      sourceTemplateId: template.id,
-      sourceTemplateRevisionId: revision.id,
-    },
-  });
+  await pinOnlyEntry(workshop.id, template.id, revision.id);
   const lti = await prisma.workspace.upsert({
     where: { ltiKey: 'debug|demo|1' },
     update: { label: 'Debug LTI workspace' },
@@ -165,19 +158,20 @@ try {
     where: { code: 'WAIE2026' },
     update: {
       status: 'PUBLISHED',
-      templateId: waieTemplate.id,
-      templateRevisionId: waieRevision.id,
+      templateId: null,
+      templateRevisionId: null,
+      expiresAt: null,
       closedAt: null,
     },
     create: {
       code: 'WAIE2026',
       title: 'WAIE free-text assessment workshop',
       status: 'PUBLISHED',
-      templateId: waieTemplate.id,
-      templateRevisionId: waieRevision.id,
       publishedAt: new Date(),
     },
   });
+
+  await pinOnlyEntry(waieWorkshop.id, waieTemplate.id, waieRevision.id);
 
   // The deterministic worker doubles as the deployment default in the debug stack,
   // so graphs without an explicit model selection exercise the fallback path.
@@ -195,7 +189,7 @@ try {
   });
 
   console.log(
-    `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}; browser workspace token ${token}`,
+    `Seeded debug workshops ${workshop.code} and ${waieWorkshop.code}`,
   );
 } finally {
   await prisma.$disconnect();
