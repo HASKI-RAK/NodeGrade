@@ -3,11 +3,29 @@ import {
   DEFAULT_HIGH_THRESHOLD as EQUIVALENCE_HIGH_THRESHOLD,
   DEFAULT_KEYWORD_THRESHOLD as KEYWORD_SIMILARITY_THRESHOLD,
   DEFAULT_LOW_THRESHOLD as EQUIVALENCE_LOW_THRESHOLD,
+  DEFAULT_PASS_MARK,
   DEFAULT_REASON_PREFIX,
+  DEFAULT_TONE_MAP,
   KATALYST_MODEL_QWEN_FLASH,
+  type OutputAudience,
+  type OutputType,
   PROVIDER_KEY_KATALYST,
 } from '@haski/ta-lib';
 import type { GraphContent, GraphNode } from '../template-content.js';
+
+/** Presentation an `output()` call stores on the node; see `OutputNodeProperties`. */
+export type OutputOptions = {
+  /** Wired to the node's second input and shown under the card body. */
+  detail?: { source: NodeRef; slot?: number };
+  section?: string;
+  audience?: OutputAudience;
+  toneMap?: string;
+  statusKey?: string;
+  /** Top of a score or measure scale; 0 keeps the type's default (100 or 1). */
+  max?: number;
+  /** Score pass chip threshold; 0 or less shows no chip. */
+  passMark?: number;
+};
 
 /**
  * Declarative construction of bundled graph content.
@@ -91,6 +109,7 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     outputs: [
       slot('present keywords', 'string'),
       slot('missing keywords', 'string'),
+      slot('checklist', '*'),
     ],
   },
   'text/semantic-equivalence': {
@@ -99,6 +118,7 @@ const NODE_SLOTS: Record<string, SlotTable> = {
       slot('equivalent', 'boolean'),
       slot('similarity', 'number'),
       slot('verdict', 'string'),
+      slot('explanation', 'string'),
     ],
   },
   'models/sentence-transformer': {
@@ -109,7 +129,10 @@ const NODE_SLOTS: Record<string, SlotTable> = {
     inputs: [slot('[number]'), slot('[number]')],
     outputs: [slot('number')],
   },
-  'output/output': { inputs: [slot('*')], outputs: [] },
+  'output/output': {
+    inputs: [slot('value', '*'), slot('detail', 'string')],
+    outputs: [],
+  },
   // Mirrors `ReviewFlagNode`: `addIn(['string', 'boolean'], 'signal')`, so the stored
   // slot type is the comma-joined form `onConfigure` restores on load.
   'output/review-flag': {
@@ -688,22 +711,52 @@ export class GraphBuilder {
     return node;
   }
 
+  /**
+   * One result card. `type` picks the card (SPEC-0007/FR-004); the options carry the
+   * presentation the node stores: a `detail` source wired to the second input, the
+   * section the results list groups the card under, the audience, the tone map for
+   * verdict and headline chips, the headline line of a report, and the scale of a
+   * score or measure.
+   */
   output(
     label: string,
     pos: [number, number],
     source: NodeRef,
     sourceSlot = 0,
-    type: 'text' | 'score' | 'classifications' = 'text',
+    type: OutputType = 'text',
+    options: OutputOptions = {},
   ): NodeRef {
+    const {
+      detail,
+      section = '',
+      audience = 'everyone',
+      toneMap = DEFAULT_TONE_MAP,
+      statusKey = '',
+      max = 0,
+      passMark = DEFAULT_PASS_MARK,
+    } = options;
     const node = this.add({
       type: 'output/output',
       title: `${label} output`,
       pos,
-      size: [410, 80],
-      properties: { uniqueId: '', type, label, value: '' },
-      widgetsValues: [label, type],
+      size: [410, 100],
+      properties: {
+        uniqueId: '',
+        type,
+        label,
+        value: '',
+        detail: '',
+        section,
+        audience,
+        toneMap,
+        statusKey,
+        max,
+        passMark,
+      },
+      widgetsValues: [label, type, audience === 'educator'],
     });
     this.link(source, sourceSlot, node, 0);
+    if (detail) this.link(detail.source, detail.slot ?? 0, node, 1);
     return node;
   }
 
@@ -721,19 +774,33 @@ export class GraphBuilder {
       sourceSlot?: number;
       flagPattern?: string;
       reasonPrefix?: string;
+      reasonOnlyWhenFlagged?: boolean;
+      audience?: OutputAudience;
+      section?: string;
     } = {},
   ): NodeRef {
     const {
       sourceSlot = 0,
       flagPattern = DEFAULT_FLAG_PATTERN,
       reasonPrefix = DEFAULT_REASON_PREFIX,
+      reasonOnlyWhenFlagged = false,
+      audience = 'everyone',
+      section = '',
     } = options;
     const node = this.add({
       type: 'output/review-flag',
       title: `${label} flag`,
       pos,
       size: [410, 110],
-      properties: { label, flagPattern, reasonPrefix, value: '' },
+      properties: {
+        label,
+        flagPattern,
+        reasonPrefix,
+        reasonOnlyWhenFlagged,
+        audience,
+        section,
+        value: '',
+      },
       widgetsValues: [label, flagPattern, reasonPrefix],
     });
     this.link(source, sourceSlot, node, 0);

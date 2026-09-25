@@ -13,9 +13,9 @@ type MixedInputCanvas = {
   __mixedInputGlyphInstalled?: boolean
 }
 
-const acceptsTextAndMessage = (type: unknown): boolean => {
-  const types = String(type).split(',')
-  return types.includes('message') && types.includes('string')
+export const acceptsTextAndMessage = (type: unknown): boolean => {
+  const types = new Set(String(type).split(','))
+  return types.has('message') && types.has('string')
 }
 
 const inputLabels = (name: string, label?: string | null): [string, string] => {
@@ -53,12 +53,7 @@ export const installMixedInputGlyph = (canvas: LGraphCanvas): void => {
       })
     }
 
-    if (
-      runtimeCanvas.live_mode ||
-      node.flags?.collapsed ||
-      (runtimeCanvas.ds?.scale ?? 1) < 0.6
-    )
-      return
+    if (runtimeCanvas.live_mode || node.flags?.collapsed) return
 
     const position: [number, number] = [0, 0]
     for (const { input, index } of mixedInputs) {

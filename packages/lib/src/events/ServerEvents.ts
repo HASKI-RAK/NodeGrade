@@ -13,7 +13,59 @@ export type SerializedGraph = serializedLGraph<
   SerializedLGraphGroup
 >
 
-export type OutputType = 'text' | 'score' | 'classifications' | 'review'
+/**
+ * How the preview renders an output (SPEC-0007/FR-004):
+ * - `text`: prose as written.
+ * - `score`: a number on a bar against `max`, with a pass chip at `passMark`.
+ * - `classifications`: a list of labels as chips, coloured by the tone map.
+ * - `review`: a tutor cue with a flagged/clear verdict (SPEC-0020/FR-002).
+ * - `verdict`: one decision — a boolean or a token such as CORRECT — as a toned chip.
+ * - `report`: `KEY: value` lines from a model reply, with a headline chip, the
+ *   evidence as a quotation and the next step as a callout.
+ * - `checklist`: items that are each met or not, as ticked and crossed chips.
+ * - `measure`: a number on a scale that is evidence, never a grade.
+ */
+export type OutputType =
+  | 'text'
+  | 'score'
+  | 'classifications'
+  | 'review'
+  | 'verdict'
+  | 'report'
+  | 'checklist'
+  | 'measure'
+
+/** Colour a card gives a verdict, headline or chip. */
+export type OutputTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
+
+/** Who a card is for: learners and educators, or educators only. */
+export type OutputAudience = 'everyone' | 'educator'
+
+/** One row of a `checklist` output. */
+export type ChecklistItem = { label: string; ok: boolean }
+
+export type OutputValue = string | number | boolean | string[] | ChecklistItem[]
+
+/**
+ * Presentation an output node attaches to its value. Everything is optional: a
+ * card without it renders as it always has.
+ */
+export type OutputPresentation = {
+  /** Secondary text under the body; wired from the node's `detail` input. */
+  detail?: string
+  /** Heading the results list groups the card under. */
+  section?: string
+  /** `educator` hides the card from the student view. */
+  audience?: OutputAudience
+  /** `TOKEN=tone, …` giving verdicts, headlines and chips their colour. */
+  toneMap?: string
+  /** `report` only: the `KEY:` line that becomes the headline chip. */
+  statusKey?: string
+  /** `score` and `measure`: the top of the scale; unset means 100 or 1. */
+  max?: number
+  /** `score` only: the pass chip's threshold; zero or less means no chip. */
+  passMark?: number
+}
 
 /** Verdict a `review` output carries: a human should look, or nothing was found. */
 export type ReviewVerdict = 'flagged' | 'clear'
@@ -74,12 +126,13 @@ export type ServerEventPayload = {
   }
   graphFinished: RunCorrelation & { graph: string }
   graphOperationFailed: GraphOperationFailure & Partial<RunCorrelation>
-  outputSet: RunCorrelation & {
+  outputSet: RunCorrelation &
+    OutputPresentation & {
     /** Id of the emitting node in the compiled execution graph. */
     uniqueId: string
     type: OutputType
     label: string
-    value: string | number | string[]
+    value: OutputValue
     /** Only on `review` outputs: whether the run needs a tutor (SPEC-0020/FR-002). */
     verdict?: ReviewVerdict
     /** Editor id of the innermost block wrapper, when the node ran inside one. */

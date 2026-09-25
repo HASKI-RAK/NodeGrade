@@ -13,6 +13,7 @@ import { installGroupTitleDrag } from '@/utils/groupTitleDrag'
 import { installGroupTitleStyle } from '@/utils/groupTitleStyle'
 import { installMixedInputGlyph } from '@/utils/mixedInputGlyph'
 import { installNodeConnectionHighlight } from '@/utils/nodeConnectionHighlight'
+import { installNodeSlotText } from '@/utils/nodeSlotText'
 import { hideStockSubgraphChrome } from '@/utils/subgraphChrome'
 
 type CanvasProps = {
@@ -53,6 +54,7 @@ const Canvas = (props: CanvasProps) => {
         installGroupTitleDrag(canvas)
         installGroupTitleStyle(canvas)
         installMixedInputGlyph(canvas)
+        installNodeSlotText(canvas)
         installNodeConnectionHighlight(canvas)
         // The breadcrumb above the canvas owns block navigation; LiteGraph's
         // own banner and Graph Inputs/Outputs panels would duplicate it.

@@ -90,6 +90,8 @@ describe('workshop templates', () => {
           // The second strings-to-array input is optional: a one-element list
           // leaves it empty, as the answer-classifier block does.
           if (node.type === 'utils/strings-to-array' && slotIndex === 1) return;
+          // An output card's `detail` line is optional too.
+          if (node.type === 'output/output' && slotIndex === 1) return;
           expect(fed.has(`${node.id}:${slotIndex}`)).toBe(true);
           expect(input.link).not.toBeNull();
         });
@@ -183,16 +185,65 @@ describe('workshop templates', () => {
 
     it('produces evidence outputs but no score output', () => {
       const outputs = nodesOfType(template, 'output/output');
-      expect(outputs.map((node) => node.properties?.label)).toEqual(
+      const byLabel = Object.fromEntries(
+        outputs.map((node) => [node.properties?.label, node.properties]),
+      );
+      expect(Object.keys(byLabel)).toEqual(
         expect.arrayContaining([
-          'Expected words found',
-          'Expected words not found',
-          'Similarity to reference — not a grade',
+          'Expected words',
+          'Similarity to the reference',
           'Conceptual assessment',
+          'Means the same as the reference',
+          'Decided by',
         ]),
       );
-      expect(outputs.every((node) => node.properties?.type === 'text')).toBe(
-        true,
+      expect(outputs.some((node) => node.properties?.type === 'score')).toBe(
+        false,
+      );
+      // Each branch gets the card that fits its evidence (SPEC-0007/FR-004).
+      expect(byLabel['Expected words']?.type).toBe('checklist');
+      expect(byLabel['Similarity to the reference']?.type).toBe('measure');
+      expect(byLabel['Conceptual assessment']).toEqual(
+        expect.objectContaining({ type: 'report', statusKey: 'JUDGMENT' }),
+      );
+      expect(byLabel['Means the same as the reference']?.type).toBe('verdict');
+      // The stage code is for facilitators; learners get the explanation instead.
+      expect(byLabel['Decided by']?.audience).toBe('educator');
+      const verdictCard = outputs.find(
+        (node) => node.properties?.label === 'Means the same as the reference',
+      ) as Node;
+      const detailLink = linksOf(template).find(
+        ([, , , targetId, targetSlot]) =>
+          targetId === verdictCard.id && targetSlot === 1,
+      ) as Link;
+      const [, originId, originSlot] = detailLink;
+      expect(
+        template.content.nodes.find((node) => node.id === originId)?.type,
+      ).toBe('text/semantic-equivalence');
+      expect(originSlot).toBe(3);
+    });
+
+    it('groups the cards by branch and keeps the tutor cue out of the student view', () => {
+      const sections = new Set(
+        [
+          ...nodesOfType(template, 'output/output'),
+          ...nodesOfType(template, 'output/review-flag'),
+        ].map((node) => node.properties?.section),
+      );
+      expect(sections).toEqual(
+        new Set([
+          'A · Expected words',
+          'B · Similarity to the reference',
+          'C · Conceptual assessment',
+          'D · Same meaning as the reference',
+        ]),
+      );
+      const [flag] = nodesOfType(template, 'output/review-flag');
+      expect(flag?.properties).toEqual(
+        expect.objectContaining({
+          audience: 'educator',
+          reasonOnlyWhenFlagged: true,
+        }),
       );
     });
 
@@ -266,12 +317,14 @@ describe('workshop templates', () => {
       const upstream = upstreamOf(template, total);
       for (const extractor of extractors)
         expect(upstream.has(extractor.id)).toBe(true);
-      // Eight points, not a percentage: shown as text so the score card's pass
-      // threshold and progress bar (both on a 0-100 scale) do not misread it.
+      // Eight points, not a percentage: a score card on the rubric's own scale
+      // with no pass mark, so the bar reads in points and awards no chip.
       const totalOutput = nodesOfType(template, 'output/output').find(
-        (node) => node.properties?.label === 'Proposed points / 8',
+        (node) => node.properties?.label === 'Proposed points',
       ) as Node;
-      expect(totalOutput.properties?.type).toBe('text');
+      expect(totalOutput.properties).toEqual(
+        expect.objectContaining({ type: 'score', max: 8, passMark: 0 }),
+      );
       expect(upstreamOf(template, totalOutput).has(total.id)).toBe(true);
     });
 
@@ -314,6 +367,31 @@ describe('workshop templates', () => {
       for (const grader of graders) expect(upstream.has(grader.id)).toBe(true);
       for (const math of nodesOfType(template, 'math/math-operation'))
         expect(upstream.has(math.id)).toBe(false);
+    });
+
+    it('shows each criterion as a report card with a points chip out of two', () => {
+      const reports = nodesOfType(template, 'output/output').filter(
+        (node) => node.properties?.section === 'Rubric criteria',
+      );
+      expect(reports.map((node) => node.properties?.label)).toEqual([
+        'Evaporation',
+        'Condensation',
+        'Rain',
+        'Collection',
+      ]);
+      for (const report of reports)
+        expect(report.properties).toEqual(
+          expect.objectContaining({ type: 'report', max: 2 }),
+        );
+    });
+
+    it('keeps the tutor cue out of the student view and drops the duplicate text card', () => {
+      const [flag] = nodesOfType(template, 'output/review-flag');
+      expect(flag?.properties?.audience).toBe('educator');
+      const labels = nodesOfType(template, 'output/output').map(
+        (node) => node.properties?.label,
+      );
+      expect(labels).not.toContain('Review recommendation');
     });
 
     it('asks each grader for the awarded integer on the first line', () => {
@@ -380,20 +458,25 @@ describe('workshop templates', () => {
       );
     });
 
-    it('publishes answer type, diagnosis, draft feedback and review recommendation', () => {
+    it('publishes answer type, diagnosis and draft feedback, and flags for the tutor', () => {
       const outputs = nodesOfType(template, 'output/output');
       expect(outputs.map((node) => node.properties?.label)).toEqual([
         'Answer type',
         'Diagnosis',
         'Draft student feedback',
-        'Review recommendation',
       ]);
       expect(outputs.map((node) => node.properties?.type)).toEqual([
         'classifications',
-        'text',
-        'text',
+        'report',
         'text',
       ]);
+      // The diagnosis is the educator's evidence; the student gets chip and feedback.
+      expect(outputs[1]?.properties).toEqual(
+        expect.objectContaining({ statusKey: 'CATEGORY', audience: 'educator' }),
+      );
+      expect(outputs[2]?.properties?.audience).toBe('everyone');
+      const [flag] = nodesOfType(template, 'output/review-flag');
+      expect(flag?.properties?.audience).toBe('educator');
     });
 
     it('turns the CATEGORY line into the classification chip without a second model', () => {
