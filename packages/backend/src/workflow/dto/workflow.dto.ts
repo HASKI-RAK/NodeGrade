@@ -18,21 +18,6 @@ export class CreateWorkflowDto {
   content!: string;
 }
 
-export class CreateFromTemplateDto {
-  /** The template to instantiate. Its current revision is the one copied. */
-  @IsString()
-  @MinLength(1)
-  @MaxLength(60)
-  templateSlug!: string;
-
-  /** Defaults to the template's own name. */
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  name?: string;
-}
-
 export class UpdateWorkflowDto {
   @IsOptional()
   @IsString()

@@ -527,4 +527,34 @@ describe('useServerEvents', () => {
     act(() => result.current.beginAttempt('request-next'))
     expect(lgraph.getNodeById(9)?.color).not.toBe('#88FF00')
   })
+
+  it('reports a run refused because the workshop ended (SPEC-0022/FR-012)', () => {
+    const { socket, emit } = createSocket()
+    const lgraph = new LGraph()
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
+
+    act(() => result.current.beginAttempt('request-1'))
+    act(() => {
+      emit('runStateChanged', {
+        requestId: 'request-1',
+        runId: 'run-1',
+        workflowId: 'wf-1',
+        state: 'failed',
+        timestamp: '2026-09-25T10:00:00.000Z',
+        error: { code: 'workshop_closed', message: 'This workshop has ended.' }
+      })
+      emit('graphOperationFailed', {
+        operation: 'run',
+        code: 'workshop-closed',
+        message: 'This workshop has ended.',
+        retryable: false,
+        runId: 'run-1',
+        workflowId: 'wf-1',
+        timestamp: '2026-09-25T10:00:00.000Z'
+      })
+    })
+
+    expect(result.current.workshopClosed).toBe(true)
+    expect(result.current.attemptState).toBe('failed')
+  })
 })

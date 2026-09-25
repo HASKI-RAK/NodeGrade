@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-25
 depends_on:
   - SPEC-0004
   - SPEC-0013
@@ -14,6 +14,7 @@ related:
   - SPEC-0002
   - SPEC-0007
   - SPEC-0014
+  - SPEC-0022
 ---
 
 # Template subsystem
@@ -46,8 +47,11 @@ workflow as one undoable operation.
 - Template revisions: a monotonic revision per template, where each modification
   creates a new immutable revision record; workflows and workshops reference the
   revision they were created from.
-- Template gallery browsing with preview.
-- "Use template" → duplicate into the user's workspace as a new editable workflow.
+- Template gallery browsing with preview — superseded by SPEC-0022/FR-014: workflow
+  templates are offered, with a structure preview, only as entries of the participant's
+  workshop.
+- "Use template" → duplicate into the user's workspace as a new editable workflow —
+  now "Start" on a workshop entry (SPEC-0022/FR-009).
 - "Reset to template" recovery action during a workshop (restores the revision the
   workflow was created from).
 - Block templates with declared external interfaces (inputs/outputs) and
@@ -66,10 +70,10 @@ workflow as one undoable operation.
 
 - Facilitator (admin): authors, modifies, publishes, and unpublishes templates; the
   only role allowed to change template definitions.
-- Participant (anonymous): duplicates the workshop template, inserts blocks; cannot
-  modify template definitions.
-- Expert user: browses templates and blocks for general use; cannot modify template
-  definitions.
+- Participant (anonymous): starts the templates their workshop offers, inserts blocks;
+  cannot modify template definitions.
+- Expert user: no longer a separate actor — without a public gallery, templates reach
+  users only through a workshop (SPEC-0022/FR-014) or an LTI launch.
 
 ## User scenarios
 
@@ -147,20 +151,20 @@ resolvable for workflows and workshops created from them.
 
 ### FR-004 — Template gallery
 
-WHEN a user opens the template gallery,
-the system SHALL list available templates with name, description, and category, and
-SHALL allow filtering by type (workflow / block).
+Superseded by SPEC-0022/FR-008 and FR-014: there is no template gallery. A participant's
+workshop overview lists the workshop's entries with name, description and category, and
+the editor's palette lists published blocks.
 
 ### FR-005 — Template preview
 
-WHEN a user selects a template in the gallery,
-the system SHALL show a preview of the template's structure before use.
+Superseded by SPEC-0022/FR-008: the structure preview is offered per entry on the
+workshop overview (`GET /api/workshops/current/entries/:entryId/structure`).
 
 ### FR-006 — Use template creates a copy
 
-WHEN a user activates "Use template" for a workflow template,
-the system SHALL create a new workflow in the user's workspace containing a copy of
-the template graph, and SHALL open it in the editor.
+Superseded by SPEC-0022/FR-007 and FR-009: a copy of a workflow template is made only by
+starting a workshop entry (or automatically for a single-entry workshop), and starting the
+same entry again opens the existing copy.
 
 ### FR-007 — Templates are immutable to users
 
@@ -221,20 +225,23 @@ the system SHALL apply the change to the canonical template set.
 
 ### FR-016 — Published templates visible to all
 
-WHILE a template is published,
-the system SHALL offer it in the template gallery to all users.
+Superseded by SPEC-0022/FR-014: publishing no longer offers a template to everyone. A
+published block is offered in the editor palette to workspace holders, and a published
+workflow template can be followed by newest-revision workshop entries.
 
 ### FR-017 — Unpublished templates hidden
 
 WHILE a template is not published,
-the system SHALL NOT offer it in the template gallery to non-facilitator users.
+the system SHALL NOT offer it to non-facilitator users, neither as a block in the
+palette nor through a workshop entry that follows its newest revision.
 
 ### FR-017a — Unpublish does not break referenced revisions
 
-WHEN a facilitator unpublishes a template or a revision referenced by an existing
-published workshop,
-THEN the workshop SHALL remain functional and resolvable to its referenced revision;
-unpublishing SHALL only hide the template from the gallery.
+WHEN a facilitator unpublishes a template that an existing published workshop pins to a
+revision,
+THEN the workshop entry SHALL remain functional and resolvable to its pinned revision.
+A workshop entry that follows the template's newest revision is unavailable while the
+template is unpublished (SPEC-0022/FR-003).
 
 ### FR-018 — Workflow records source revision
 
@@ -275,10 +282,12 @@ ms.
 
 Traces to: FR-006, FR-007, FR-018
 
+Amended by SPEC-0022/AC-005 and AC-007: "Use template" is starting a workshop entry.
+
 ```gherkin
-Given a published workflow template
-When the user activates "Use template"
-Then a new workflow owned by the user's workspace is created from the template and opened in the editor
+Given a published workshop with an entry of a workflow template
+When the participant starts that entry
+Then a new workflow owned by the participant's workspace is created from the entry's revision and opened in the editor
 And the workflow records the source template id and revision
 And the template definition itself is unchanged
 ```
@@ -339,11 +348,13 @@ Then the block's nodes appear within the visible viewport area
 
 Traces to: FR-004, FR-005
 
+Amended by SPEC-0022/AC-006: the gallery is replaced by the workshop overview.
+
 ```gherkin
-Given multiple templates of both types exist
-When the user opens the template gallery
-Then each template shows name, description, and category, and can be filtered by type
-And selecting a template shows a structural preview
+Given a published workshop with several workflow template entries
+When a participant opens the workshop overview
+Then each entry shows its name, description, and category
+And previewing an entry shows its structure
 ```
 
 ### AC-008 — Non-facilitator cannot modify templates
@@ -361,10 +372,14 @@ And the template definition is unchanged
 
 Traces to: FR-015, FR-016
 
+Amended by SPEC-0022/AC-003 and AC-011: publishing makes a template available to
+workshop entries and the block palette, not to a public gallery.
+
 ```gherkin
 Given a facilitator has created a template in unpublished state
 When the facilitator publishes the template
-Then the template appears in the gallery for all users
+Then a block template appears in the editor palette of every workspace
+And a workshop entry following a workflow template's newest revision becomes available to its participants
 ```
 
 ### AC-010 — Unpublished template hidden from participants
@@ -373,9 +388,9 @@ Traces to: FR-017
 
 ```gherkin
 Given a template is unpublished
-When a non-facilitator user opens the template gallery
-Then the template is not listed
-And when the facilitator opens the gallery, the template is listed with its unpublished state
+When a participant lists templates or opens a workshop with a newest-revision entry of it
+Then the template is not listed and the entry is shown as unavailable
+And when the facilitator opens template administration, the template is listed with its unpublished state
 ```
 
 ### AC-011 — Facilitator authenticates via admin session
@@ -427,10 +442,10 @@ And the existing workflow still references revision R
 Traces to: FR-003a, FR-003b, FR-017a
 
 ```gherkin
-Given a published workshop bound to template revision R
+Given a published workshop with an entry pinned to template revision R
 When the facilitator modifies the template to revision R+1 and later unpublishes the template
 Then reset on a workflow created from revision R still restores the exact content of revision R
-And the workshop remains joinable and functional
+And the workshop remains joinable and its pinned entry startable
 And the facilitator cannot delete revision R while it is referenced
 ```
 
@@ -506,7 +521,8 @@ And the workflow's reset action still restores the exact content of revision R
 
 ## Success criteria
 
-- A participant can go from gallery → own editable WAIE workflow in under 30 seconds.
+- A participant can go from workshop code → own editable WAIE workflow in under 30
+  seconds.
 - A broken participant graph can be restored to the exact template revision it
   started from in one action.
 
@@ -518,3 +534,4 @@ And the workflow's reset action still restores the exact content of revision R
 | 2026-09-15 | Added facilitator (admin) role: template authoring/publication restricted to facilitator (FR-012..FR-015, AC-008..AC-010) |
 | 2026-09-15 | Facilitator authentication decided: env-based admin username/password, supplyable via docker compose (FR-016..FR-017, AC-011..AC-012, constraint added) |
 | 2026-09-15 | Resolved contradiction: templates are persisted server-side entities; bundled templates are seed data (FR-002, AC-013). Added revisions (FR-003, FR-018, AC-002, AC-014), block external interfaces + connection suggestions (FR-019/020, AC-015), canonical block library (FR-021, AC-016). Facilitator auth re-pointed to SPEC-0013. Renumbered FR-004..FR-021 and AC traces. |
+| 2026-09-25 | SPEC-0022 supersedes the public gallery and "Use template" (FR-004, FR-005, FR-006, FR-016): workflow templates reach participants only as workshop entries, template endpoints serve blocks only. FR-017 and FR-017a reworded (pinned entries survive unpublishing; newest-revision entries need a published template); AC-001, AC-007, AC-009, AC-010, AC-014a, actors and success criteria amended |

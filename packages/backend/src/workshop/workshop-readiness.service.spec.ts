@@ -10,21 +10,36 @@ import {
 } from './workshop-readiness.service.js';
 import { WorkshopService } from './workshop.service.js';
 
-const workshopRow = (
-  overrides: Partial<{
-    template: { published: boolean; deletedAt: Date | null };
-    templateRevision: { id: string; name: string; content: string } | null;
-  }> = {},
+const revisionRow = (
+  overrides: Partial<{ id: string; name: string; content: string }> = {},
 ) => ({
-  id: 'shop-1',
-  status: 'PUBLISHED' as const,
-  template: { published: true, deletedAt: null },
-  templateRevision: {
-    id: 'rev-1',
-    name: 'WAIE free-text assessment',
-    content: JSON.stringify(waieAssessmentTemplate.content),
-  },
+  id: 'rev-1',
+  templateId: 'tpl-1',
+  revision: 1,
+  name: 'WAIE free-text assessment',
+  content: JSON.stringify(waieAssessmentTemplate.content),
+  contentSchema: 2,
   ...overrides,
+});
+
+const entryRow = (id = 'entry-1', name = 'WAIE free-text assessment') => ({
+  id,
+  position: 0,
+  templateId: `tpl-${id}`,
+  templateRevisionId: 'rev-1',
+  template: {
+    id: `tpl-${id}`,
+    slug: `slug-${id}`,
+    kind: 'WORKFLOW' as const,
+    name,
+    description: null,
+    category: null,
+    tags: [],
+    published: true,
+    deletedAt: null,
+    currentRevision: 1,
+  },
+  templateRevision: { id: 'rev-1', revision: 1 },
 });
 
 const catalog = (overrides: Partial<ModelCatalog> = {}): ModelCatalog => ({
@@ -51,24 +66,43 @@ describe('WorkshopReadinessService', () => {
   const findUnique = jest.fn();
   const catalogOf = jest.fn();
   const resolve = jest.fn();
+  const resolveEntryRevision = jest.fn();
   let service: WorkshopReadinessService;
 
   const detailOf = async (id: ReadinessCheckId) => {
     const result = await service.byId('shop-1');
-    return result.checks.find((check) => check.id === id);
+    return [...result.checks, ...result.entries[0].checks].find(
+      (check) => check.id === id,
+    );
   };
 
+  const revisionIs = (
+    overrides: Partial<{ id: string; name: string; content: string }>,
+  ) =>
+    resolveEntryRevision.mockResolvedValue({
+      ok: true,
+      revision: revisionRow(overrides),
+    });
+
   beforeEach(async () => {
-    findUnique.mockReset().mockResolvedValue(workshopRow());
+    findUnique
+      .mockReset()
+      .mockResolvedValue({ id: 'shop-1', templates: [entryRow()] });
     catalogOf.mockReset().mockResolvedValue(catalog());
     resolve.mockReset().mockResolvedValue({ id: 'shop-1' });
+    resolveEntryRevision
+      .mockReset()
+      .mockResolvedValue({ ok: true, revision: revisionRow() });
 
     const module = await Test.createTestingModule({
       providers: [
         WorkshopReadinessService,
         { provide: PrismaService, useValue: { workshop: { findUnique } } },
         { provide: ProviderRuntimeService, useValue: { catalog: catalogOf } },
-        { provide: WorkshopService, useValue: { resolve } },
+        {
+          provide: WorkshopService,
+          useValue: { resolve, resolveEntryRevision },
+        },
       ],
     }).compile();
     service = module.get(WorkshopReadinessService);
@@ -80,11 +114,82 @@ describe('WorkshopReadinessService', () => {
     expect(result.status).toBe('PASS');
     expect(result.checks.map((check) => check.id)).toEqual([
       'backend',
+      'templates',
+    ]);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      entryId: 'entry-1',
+      templateName: 'WAIE free-text assessment',
+      status: 'PASS',
+    });
+    expect(result.entries[0].checks.map((check) => check.id)).toEqual([
       'template',
       'node_types',
       'models',
     ]);
-    expect(result.checks.every((check) => check.status === 'PASS')).toBe(true);
+    expect(
+      [...result.checks, ...result.entries[0].checks].every(
+        (check) => check.status === 'PASS',
+      ),
+    ).toBe(true);
+  });
+
+  it('passes the workshop when one of two entries fails (SPEC-0022/AC-013)', async () => {
+    findUnique.mockResolvedValue({
+      id: 'shop-1',
+      templates: [entryRow('entry-1'), entryRow('entry-2', 'Future workflow')],
+    });
+    resolveEntryRevision.mockImplementation((entry: { id: string }) =>
+      Promise.resolve({
+        ok: true,
+        revision:
+          entry.id === 'entry-2'
+            ? revisionRow({
+                content: JSON.stringify({
+                  nodes: [{ id: 1, type: 'input/telepathy' }],
+                }),
+              })
+            : revisionRow(),
+      }),
+    );
+
+    const result = await service.byId('shop-1');
+
+    expect(result.status).toBe('PASS');
+    expect(result.checks[1]).toMatchObject({
+      id: 'templates',
+      status: 'PASS',
+      detail: '1 of 2 template(s) ready.',
+    });
+    expect(result.entries.map((entry) => entry.status)).toEqual([
+      'PASS',
+      'FAIL',
+    ]);
+  });
+
+  it('fails the workshop when no entry is ready', async () => {
+    resolveEntryRevision.mockResolvedValue({
+      ok: false,
+      reason: 'The template is not published.',
+    });
+
+    const result = await service.byId('shop-1');
+
+    expect(result.status).toBe('FAIL');
+    expect(result.checks[1]).toMatchObject({
+      id: 'templates',
+      status: 'FAIL',
+      detail: expect.stringContaining('The template is not published.'),
+    });
+  });
+
+  it('fails a workshop that offers no template', async () => {
+    findUnique.mockResolvedValue({ id: 'shop-1', templates: [] });
+
+    const result = await service.byId('shop-1');
+
+    expect(result.status).toBe('FAIL');
+    expect(result.entries).toEqual([]);
   });
 
   it('fails when no model is allowed or no provider is reachable (AC-007)', async () => {
@@ -104,7 +209,7 @@ describe('WorkshopReadinessService', () => {
     const result = await service.byId('shop-1');
 
     expect(result.status).toBe('FAIL');
-    expect(result.checks.find((check) => check.id === 'models')).toMatchObject({
+    expect(await detailOf('models')).toMatchObject({
       status: 'FAIL',
       detail: expect.stringContaining('UNREACHABLE'),
     });
@@ -127,15 +232,11 @@ describe('WorkshopReadinessService', () => {
       model_ref: null,
       needs_model_selection: true,
     };
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-unconfigured',
           name: 'Unconfigured workflow',
           content: JSON.stringify(content),
-        },
-      }),
-    );
+        });
 
     expect(await detailOf('models')).toMatchObject({
       status: 'FAIL',
@@ -152,15 +253,11 @@ describe('WorkshopReadinessService', () => {
         model_ref: null,
         needs_model_selection: true,
       };
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-defaulted',
           name: 'Defaulted workflow',
           content: JSON.stringify(content),
-        },
-      }),
-    );
+        });
     catalogOf.mockResolvedValue(
       catalog({
         defaultModel: { providerKey: 'openrouter', modelId: 'openrouter/free' },
@@ -181,15 +278,11 @@ describe('WorkshopReadinessService', () => {
       model_ref: null,
       needs_model_selection: true,
     };
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-defaulted-stale',
           name: 'Stale default workflow',
           content: JSON.stringify(content),
-        },
-      }),
-    );
+        });
     catalogOf.mockResolvedValue(
       catalog({
         defaultModel: { providerKey: 'openrouter', modelId: 'vanished' },
@@ -222,10 +315,11 @@ describe('WorkshopReadinessService', () => {
     });
   });
 
-  it('fails when the template is unpublished or deleted', async () => {
-    findUnique.mockResolvedValue(
-      workshopRow({ template: { published: false, deletedAt: null } }),
-    );
+  it('fails an entry whose revision cannot be resolved', async () => {
+    resolveEntryRevision.mockResolvedValue({
+      ok: false,
+      reason: 'The template is not published.',
+    });
 
     expect(await detailOf('template')).toMatchObject({
       status: 'FAIL',
@@ -234,17 +328,13 @@ describe('WorkshopReadinessService', () => {
   });
 
   it('fails when the template needs a node type this build does not register', async () => {
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-2',
           name: 'Future workflow',
           content: JSON.stringify({
             nodes: [{ id: 1, type: 'input/telepathy' }],
           }),
-        },
-      }),
-    );
+        });
 
     expect(await detailOf('node_types')).toMatchObject({
       status: 'FAIL',
@@ -253,11 +343,7 @@ describe('WorkshopReadinessService', () => {
   });
 
   it('reports unreadable template content as a failing check', async () => {
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: { id: 'rev-3', name: 'Broken', content: 'not json' },
-      }),
-    );
+    revisionIs({ id: 'rev-3', name: 'Broken', content: 'not json' });
 
     expect(await detailOf('node_types')).toMatchObject({ status: 'FAIL' });
   });
@@ -290,15 +376,11 @@ describe('WorkshopReadinessService', () => {
       ],
       links: [],
     };
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-nested',
           name: 'Nested workflow',
           content: JSON.stringify(content),
-        },
-      }),
-    );
+        });
 
     expect(await detailOf('node_types')).toMatchObject({ status: 'PASS' });
     expect(await detailOf('models')).toMatchObject({ status: 'PASS' });
@@ -327,15 +409,11 @@ describe('WorkshopReadinessService', () => {
       ],
       links: [],
     };
-    findUnique.mockResolvedValue(
-      workshopRow({
-        templateRevision: {
+    revisionIs({
           id: 'rev-nested-bad',
           name: 'Nested workflow',
           content: JSON.stringify(content),
-        },
-      }),
-    );
+        });
 
     expect(await detailOf('node_types')).toMatchObject({
       status: 'FAIL',

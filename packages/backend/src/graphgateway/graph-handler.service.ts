@@ -30,7 +30,10 @@ import {
 import { XapiService } from '../xapi.service.js';
 import { LtiCookie } from '../utils/LtiCookie.js';
 import { WorkflowService } from '../workflow/workflow.service.js';
-import type { ResolvedWorkspace } from '../workspace/workspace.service.js';
+import {
+  WorkspaceService,
+  type ResolvedWorkspace,
+} from '../workspace/workspace.service.js';
 import { ExecutionLimitsService } from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 import {
@@ -76,6 +79,7 @@ export class GraphHandlerService {
     private readonly modelRuntime: ProviderRuntimeService,
     private readonly limits: ExecutionLimitsService,
     private readonly runs: RunService,
+    private readonly workspaces: WorkspaceService,
   ) {}
 
   /**
@@ -225,8 +229,6 @@ export class GraphHandlerService {
     ).length;
     if (inFlight < workspaceConcurrentRuns) return false;
 
-    const runId = randomUUID();
-    const timestamp = new Date().toISOString();
     const message =
       workspaceConcurrentRuns === 1
         ? 'A run is already in progress. Wait for it to finish and try again.'
@@ -234,24 +236,74 @@ export class GraphHandlerService {
     this.logger.warn(
       `Run rejected: workspace ${workspaceId} is at its concurrency limit`,
     );
+    this.rejectRun(client, payload, {
+      traceCode: 'rate_limited',
+      operationCode: 'rate-limited',
+      message,
+      retryable: true,
+    });
+    return true;
+  }
+
+  /**
+   * A closed or expired workshop runs nothing more (SPEC-0022/FR-012). Read fresh on every
+   * run: the socket's workspace was resolved when it connected, possibly before the
+   * facilitator closed the workshop.
+   */
+  private async isWorkshopClosed(
+    client: Socket,
+    workspace: ResolvedWorkspace,
+    payload: ClientEventPayload['runGraph'],
+  ): Promise<boolean> {
+    if (!workspace.workshopId) return false;
+    const workshop = await this.workspaces.workshopState(workspace.id);
+    if (!workshop?.readOnly) return false;
+
+    this.logger.warn(
+      `Run rejected: the workshop of workspace ${workspace.id} has ended`,
+    );
+    this.rejectRun(client, payload, {
+      traceCode: 'workshop_closed',
+      operationCode: 'workshop-closed',
+      message: 'This workshop has ended. Runs are no longer possible.',
+      retryable: false,
+    });
+    return true;
+  }
+
+  /**
+   * Reports a run that was refused before it started. No run exists yet, so the generic
+   * run-failure path would misreport it.
+   */
+  private rejectRun(
+    client: Socket,
+    payload: ClientEventPayload['runGraph'],
+    rejection: {
+      traceCode: 'rate_limited' | 'workshop_closed';
+      operationCode: 'rate-limited' | 'workshop-closed';
+      message: string;
+      retryable: boolean;
+    },
+  ): void {
+    const runId = randomUUID();
+    const timestamp = new Date().toISOString();
     emitEvent(client, 'runStateChanged', {
       requestId: payload.requestId,
       runId,
       workflowId: payload.workflowId,
       state: 'failed',
       timestamp,
-      error: { code: 'rate_limited', message },
+      error: { code: rejection.traceCode, message: rejection.message },
     });
     emitEvent(client, 'graphOperationFailed', {
       operation: 'run',
-      code: 'rate-limited',
-      message,
-      retryable: true,
+      code: rejection.operationCode,
+      message: rejection.message,
+      retryable: rejection.retryable,
       runId,
       workflowId: payload.workflowId,
       timestamp,
     });
-    return true;
   }
 
   cancelRun(client: Socket, payload: ClientEventPayload['cancelRun']): void {
@@ -412,6 +464,7 @@ export class GraphHandlerService {
       if (!workspace) {
         throw new Error('A workspace-authenticated socket is required.');
       }
+      if (await this.isWorkshopClosed(client, workspace, payload)) return;
       if (await this.isWorkspaceSaturated(client, workspace.id, payload))
         return;
       run = {

@@ -1,22 +1,26 @@
 import type { LGraph } from 'litegraph.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { api, ApiError } from '@/api/http'
+import { api, ApiError, isWorkshopClosedError } from '@/api/http'
 
-export type SaveStatus = 'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error'
+export type SaveStatus =
+  'loading' | 'saved' | 'dirty' | 'saving' | 'conflict' | 'error' | 'readonly'
 
 export function useAutosave({
   graph,
   workflowId,
   token,
   initialVersion,
-  enabled
+  enabled,
+  onWorkshopClosed
 }: {
   graph: LGraph
   workflowId: string
   token: string | null
   initialVersion: number
   enabled: boolean
+  /** The server refused the save because the workshop ended (SPEC-0022/FR-011). */
+  onWorkshopClosed?: () => void
 }) {
   const [status, setStatus] = useState<SaveStatus>(enabled ? 'saved' : 'loading')
   const version = useRef(initialVersion)
@@ -55,6 +59,11 @@ export function useAutosave({
       setStatus('saved')
       return 'saved'
     } catch (error) {
+      if (isWorkshopClosedError(error)) {
+        setStatus('readonly')
+        onWorkshopClosed?.()
+        return 'readonly'
+      }
       const next =
         error instanceof ApiError && error.status === 409 ? 'conflict' : 'error'
       setStatus(next)
@@ -62,7 +71,7 @@ export function useAutosave({
     } finally {
       saving.current = false
     }
-  }, [enabled, graph, status, token, workflowId])
+  }, [enabled, graph, onWorkshopClosed, status, token, workflowId])
 
   useEffect(() => {
     if (!enabled) return

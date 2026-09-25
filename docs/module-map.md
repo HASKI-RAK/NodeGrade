@@ -10,7 +10,11 @@ Responsibilities:
 
 - issue and resolve opaque workspace access tokens (only the SHA-256 hash is stored)
 - scope every participant operation to one workspace
-- `BROWSER`, `WORKSHOP` and `LTI` workspace kinds
+- `WORKSHOP` and `LTI` workspace kinds; `BROWSER` is legacy — its tokens are rejected and
+  retention still sweeps the old rows (SPEC-0022/FR-013)
+- read-only state of a closed or expired workshop: `resolveByToken` carries it and the
+  guard rejects non-GET/HEAD requests with `workshop_closed`
+- workspace creation throttle for workshop joins (`workspace-creation-throttle.ts`)
 - retention sweeps and last-active bookkeeping
 
 Primary entry points:
@@ -18,8 +22,8 @@ Primary entry points:
 - `workspace.service.ts`, `workspace-token.ts`
 - `guards/workspace.guard.ts`, `decorators/current-workspace.decorator.ts`
 - `retention.service.ts` (plain `setInterval`, public `sweep(now)`)
-- frontend: `store/workspaceSession.ts` (memoized bootstrap), `store/workspaceStore.ts`
-  (localStorage)
+- frontend: `store/workspaceStore.ts` (localStorage: one token per joined workshop plus
+  the active one; legacy browser sessions are dropped on read)
 
 Used by: every participant-facing controller, the Socket.IO run handler, the editor UI.
 
@@ -34,7 +38,9 @@ Responsibilities:
 - workflow CRUD inside a workspace; identity is `(workspaceId, slug)`
 - optimistic concurrency through `If-Match`/`ETag`
 - draft `content` versus `publishedContent` projection (ADR-0007)
-- creation and reset from a template revision
+- creation from content, and from a template revision when a workshop entry is started
+  (`createFromTemplate`; there is no participant-facing copy endpoint), and reset to the
+  revision a copy was made from
 - version history: a `WorkflowVersion` row per state the workflow leaves, coalesced on
   save and forced before a reset or restore, with a per-workflow cap (newest 20)
 
@@ -55,7 +61,11 @@ Location: `packages/backend/src/template/`
 Responsibilities:
 
 - `WORKFLOW` and `BLOCK` templates with immutable revisions
-- publish/unpublish and soft delete, gallery listing
+- publish/unpublish and soft delete; there is no public gallery — `template.controller.ts`
+  (`/api/templates`) is workspace-scoped and serves published `BLOCK` templates for the
+  palette, and workflow templates reach participants only as workshop entries
+- refusing to delete the current revision a newest-revision workshop entry follows
+  (`revision_current_in_use`); workshop pins count as references
 - block interface declarations used for palette insertion
 - seeding bundled templates on boot
 
@@ -84,20 +94,35 @@ Tests: `packages/backend/src/template/**/*.spec.ts`
 
 Location: `packages/backend/src/workshop/`
 
-Responsibilities: workshop lifecycle (`DRAFT`/`PUBLISHED`/`CLOSED`), join-code generation
-and normalization, minting a workspace plus workflow copy on join, and the entry preflight
-and facilitator readiness checks (backend, template, node types, provider/model health).
+Responsibilities:
 
-Primary entry points: `workshop.service.ts`, `workshop.controller.ts`, `workshop-code.ts`,
-`workshop-readiness.service.ts`
+- workshop lifecycle (`DRAFT`/`PUBLISHED`/`CLOSED`), join-code generation and
+  normalization
+- template entries (`WorkshopTemplate`): ordered, one per workflow template, pinned to a
+  revision or following the newest one; created with the workshop and replaced through
+  `PUT /api/admin/workshops/:id/templates`
+- the participant surface: join (`POST /api/workshops/by-code/:code/join`, rate-limited
+  per address, re-join returns the workspace, a single-entry workshop auto-starts), the
+  overview (`GET /api/workshops/current`), an entry's structure preview and the
+  idempotent start (`.../current/entries/:entryId/structure`, `.../start`)
+- entry preflight and facilitator readiness, per entry (backend, template, node types,
+  provider/model health)
 
-Depends on: Prisma, templates, providers (model catalog for the readiness check).
+Primary entry points: `workshop.service.ts` (admin side, `resolveEntryRevision`),
+`workshop-participant.service.ts`, `workshop.controller.ts` (`WorkshopController`,
+`WorkshopParticipantController`, admin controller), `workshop-entries.ts` (entry
+select/serialize/mode), `workshop-code.ts`, `workshop-readiness.service.ts`
 
-Related UI: `packages/frontend/src/pages/WorkshopJoin.tsx`,
-`packages/frontend/src/utils/workshopCode.ts`, the readiness panel in
-`packages/frontend/src/pages/admin/AdminPage.tsx`
+Depends on: Prisma, templates, workflows (copying an entry), workspaces (creation
+throttle), providers (model catalog for the readiness check).
 
-Tests: `packages/backend/src/workshop/**/*.spec.ts`
+Related UI: `packages/frontend/src/pages/WorkshopJoin.tsx` (join and overview),
+`packages/frontend/src/components/TemplateCard.tsx`,
+`packages/frontend/src/utils/workshopCode.ts`,
+`packages/frontend/src/pages/admin/WorkshopAdmin.tsx` (entries editor, readiness panel)
+
+Tests: `packages/backend/src/workshop/**/*.spec.ts`,
+`packages/backend/test/workshop-templates.int-spec.ts`
 
 ## Facilitator authentication
 
@@ -241,14 +266,17 @@ The preview's question and answer-length bounds come from the open graph through
 
 Tests: `packages/frontend/src/**/*.test.tsx`, `packages/frontend/src/**/*.test.ts`
 
-## Entry, gallery and admin UI
+## Entry, workshop overview and admin UI
 
 Location: `packages/frontend/src/pages/`, routes in `packages/frontend/src/routes.tsx`
 
-Primary entry points: `StartPage.tsx` (`/`), `WorkshopJoin.tsx` (`/workshop/:code`),
-`WorkflowListPage.tsx`, `TemplatesPage.tsx`, `admin/AdminPage.tsx`
-(`/admin/workshops`, `/admin/providers`, `/admin/templates`), `admin/TemplateAdmin.tsx`,
-`lti/LtiRegister.tsx`, `NotFoundPage.tsx`
+Primary entry points: `StartPage.tsx` (`/`: code entry, a link back to the last joined
+workshop, the facilitator link), `WorkshopJoin.tsx` (`/workshop/:code`: join and the
+workshop overview with template cards and "My workflows"), `components/TemplateCard.tsx`,
+`admin/AdminPage.tsx` (`/admin/workshops`, `/admin/providers`, `/admin/templates`),
+`admin/WorkshopAdmin.tsx`, `admin/TemplateAdmin.tsx`, `admin/adminApi.ts` (CSRF-carrying
+admin requests), `lti/LtiRegister.tsx`, `NotFoundPage.tsx`. The former `/templates` and
+`/workflows` routes redirect to the active workshop's overview, or to `/`.
 
 Server access: `api/http.ts` only. Runtime config: `utils/config.ts` +
 `public/config/env.*.json`.
@@ -299,10 +327,13 @@ Location: `tools/debug/`, `docker-compose.debug.yml`, `docs/debugging.md`
 
 `stack.mjs` drives Compose (`up|serve|down|status|logs|reset`) on the 15xxx/18000 port
 range with a fake model and embedding worker (`fake-model.mjs`), seeded demo graph
-(`demo-graph.json`) and two published workshop codes: `WAVE-2026` on the demo graph and
-`WAIE-2026` on the bundled WAIE template. `packages/backend/scripts/seed-debug.ts` writes
-both before the server starts, using the bundled content byte for byte so the bootstrap
-seeder recognises its own hash and appends no revision.
+(`demo-graph.json`) and two published single-entry workshop codes: `WAVE-2026` on the demo
+graph and `WAIE-2026` on the bundled WAIE template, each pinned to one revision.
+`packages/backend/scripts/seed-debug.ts` writes both, plus an LTI demo workspace, before
+the server starts, using the bundled content byte for byte so the bootstrap seeder
+recognises its own hash and appends no revision. No participant workspace is seeded; the
+e2e suite gets one by joining, and the stack sets `WORKSPACE_CREATE_MAX` high enough that
+those joins are never throttled.
 
 `fake-model.mjs` stands in for every endpoint of the NLP worker as well as the
 text-generation one: `/sentence_embedding` and `/similarity` from a hashed bag of words,
@@ -353,7 +384,10 @@ Playwright in Chromium and Firefox against the debug stack, which it boots via
 workshop-entry helpers and the typed `window.__NODEGRADE_DEBUG__` bridge;
 `conference-smoke.spec.ts` walks the conference happy path end to end,
 `workspace-isolation.spec.ts` proves two sessions under one workshop code stay separate,
-and `debug-stack.spec.ts` covers the deterministic model contract and autosave. No test
+`workshop-templates.spec.ts` covers a multi-template workshop overview, read-only closing
+and the code-only start page (its facilitator-side setup goes through the
+`facilitatorApi`, `templateBySlug` and `publishWorkshop` helpers), and
+`debug-stack.spec.ts` covers the deterministic model contract and autosave. No test
 may reach a cloud provider: the stack ships no provider credential, and the suite asserts
 the catalog offers only the local worker.
 

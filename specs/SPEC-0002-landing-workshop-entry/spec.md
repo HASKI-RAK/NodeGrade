@@ -6,12 +6,13 @@ status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-25
 depends_on:
   - SPEC-0004
   - SPEC-0014
 related:
   - SPEC-0003
+  - SPEC-0022
 ---
 
 # Landing page and workshop entry
@@ -27,19 +28,21 @@ workshop, forcing verbal setup during the session.
 
 ### Desired outcome
 
-Users landing on `/` see a real start screen with distinct entries for the workshop,
-template gallery, new workflow, and continuing an existing workflow. The conference URL
-opens the workshop experience directly.
+Users landing on `/` see a real start screen. Since SPEC-0022 its only participant entry
+is the workshop code (plus a way back to the workshop last joined in this browser); the
+template gallery, new-workflow and open-workflow entries were withdrawn. The conference
+URL opens the workshop experience directly.
 
 ## Scope
 
 ### In scope
 
-- Start page rendered at `/` with four entry actions.
+- Start page rendered at `/` with the workshop code entry (four entry actions until
+  SPEC-0022).
 - Dedicated workshop landing route (e.g. `/workshop/waie`) that opens the workshop
   experience directly.
-- Client-side routing between start page, workshop page, template gallery, editor, and
-  workflow listing.
+- Client-side routing between start page, workshop page and editor; the former template
+  gallery and workflow listing routes redirect to the workshop overview (SPEC-0022).
 - Removal of the developer-oriented redirect behavior currently tied to the WebSocket
   reconnect action.
 
@@ -54,7 +57,8 @@ opens the workshop experience directly.
 - Participant (anonymous): needs a frictionless path into the workshop workflow.
 - Facilitator (admin): owns the workshop and its code; the only role that can create or
   publish a workshop code.
-- Expert user: needs direct access to create/open workflows.
+- Expert user: formerly given direct access to create/open workflows; since SPEC-0022
+  works through a workshop like any participant.
 
 ## User scenarios
 
@@ -70,31 +74,21 @@ Independent value: removes the main source of verbal coordination at session sta
 
 ### US-002 — Start from the product entry
 
-As an expert user,
-I want a start page with New workflow and Open workflow actions,
-so that I can use NodeGrade outside a workshop without understanding its URL scheme.
-
-Priority: P2
-
-Independent value: makes `/` a genuine product entry point for all users.
+Superseded by SPEC-0022/FR-013: NodeGrade is not used outside a workshop or an LTI
+launch, so the start page offers no New workflow or Open workflow action.
 
 ### US-003 — Browse templates before editing
 
-As a participant,
-I want to reach a template gallery from the start page,
-so that I can choose a starting workflow visually.
-
-Priority: P2
-
-Independent value: makes the template capability discoverable (see SPEC-0003).
+Superseded by SPEC-0022/FR-014: templates are chosen on the workshop overview from the
+entries the workshop offers, not from a gallery on the start page.
 
 ## Functional requirements
 
 ### FR-001 — Start page entry actions
 
-WHEN a user opens the application root,
-the system SHALL present entry actions for: Start workshop, Templates, New workflow,
-and Open workflow (My workflows).
+Superseded by SPEC-0022/FR-013 and FR-014: the application root presents the workshop
+code entry (Start workshop), a link back to the workshop last joined in this browser, and
+the facilitator link; Templates, New workflow and Open workflow are withdrawn.
 
 ### FR-001a — Start workshop behavior
 
@@ -110,14 +104,13 @@ code, following the join flow defined in SPEC-0014.
 
 ### FR-003 — New workflow creation
 
-WHEN a user activates New workflow from the start page,
-the system SHALL create a new empty workflow in the user's workspace and open it in the
-editor.
+Superseded by SPEC-0022/FR-013: there is no New workflow action on the start page, since
+no workspace exists before a workshop join.
 
 ### FR-004 — Open existing workflows
 
-WHEN a user activates Open workflow,
-the system SHALL list only workflows belonging to the user's workspace.
+Superseded by SPEC-0022/FR-008: Open workflow is the "My workflows" list on the workshop
+overview, which shows only workflows belonging to the participant's workspace.
 
 ### FR-005 — No URL-derived identity assumption
 
@@ -153,10 +146,13 @@ interactive entry actions are present within 2 seconds.
 
 Traces to: FR-001
 
+Amended by SPEC-0022/AC-010.
+
 ```gherkin
 Given a fresh browser session
 When the user opens the application root
-Then the start page is displayed with Start workshop, Templates, New workflow, and Open workflow actions
+Then the start page is displayed with the workshop code entry and the facilitator link
+And no Templates, New workflow, or Open workflow action is offered
 ```
 
 ### AC-002 — Conference URL opens workshop
@@ -173,20 +169,19 @@ Then the workshop landing page for that workshop is shown directly
 
 Traces to: FR-003
 
-```gherkin
-Given the user is on the start page
-When the user activates New workflow
-Then a new workflow exists in the user's workspace and the editor opens with an empty canvas
-```
+Superseded by SPEC-0022/AC-010: the start page has no New workflow action and creates no
+workspace.
 
 ### AC-004 — Workflow list is workspace-scoped
 
 Traces to: FR-004, SPEC-0004/FR-001
 
+Amended by SPEC-0022/AC-006: the list is "My workflows" on the workshop overview.
+
 ```gherkin
 Given workflows exist in other workspaces
-When the user activates Open workflow
-Then only workflows from the user's own workspace are listed
+When the participant opens their workshop overview
+Then only workflows from the participant's own workspace are listed under My workflows
 ```
 
 ### AC-005 — Unknown route shows not-found page
@@ -259,3 +254,4 @@ Then the workshop is not accessible and a "workshop unavailable" state is shown
 | 2026-09-15 | Added facilitator (admin) ownership of workshop codes: creation restricted to facilitator, revocation support (FR-007..FR-009, AC-006..AC-007) |
 | 2026-09-16 | Implemented: start page code entry now resolves through the `/workshop/:code` join route so FR-001a and FR-002 share one flow; `/editor` and `/student` without a workflow redirect to the start page (FR-005); workspace bootstrap failures are retryable (edge case); `POST /api/workspaces` token and `GET /api/workspaces/me` response shapes corrected in the HTTP client, which had been dropping the workspace token |
 | 2026-09-15 | Review revision: workshop code lifecycle FRs (FR-007..FR-009) removed — normatively defined by SPEC-0014 (avoids drift); AC-006 replaced with Start-workshop code-entry behavior (FR-001a), AC-007 now traces to SPEC-0014/FR-008; SPEC-0014 added to frontmatter depends_on |
+| 2026-09-25 | SPEC-0022 makes the workshop code the only entry: FR-001, FR-003, FR-004, US-002, US-003 and AC-003 superseded; AC-001 and AC-004 amended (code-only start page, "My workflows" on the workshop overview); intent, scope and actors amended |

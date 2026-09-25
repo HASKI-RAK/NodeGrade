@@ -8,12 +8,13 @@ import {
 } from '../provider/execution-limits.service.js';
 import { ProviderRuntimeService } from '../provider/provider-runtime.service.js';
 import type { RunService } from '../run/run.service.js';
+import type { WorkspaceService } from '../workspace/workspace.service.js';
 import { GraphHandlerService } from './graph-handler.service.js';
 
-const client = (id: string, workspaceId: string) =>
+const client = (id: string, workspaceId: string, workshopId?: string) =>
   ({
     id,
-    data: { workspace: { id: workspaceId } },
+    data: { workspace: { id: workspaceId, workshopId: workshopId ?? null } },
     handshake: { auth: {} },
     emit: jest.fn(),
   }) as unknown as Socket;
@@ -27,6 +28,11 @@ const payload = (requestId: string) => ({
 
 const runRecords = () => ({ record: jest.fn().mockResolvedValue(undefined) });
 
+const openWorkshops = () =>
+  ({
+    workshopState: jest.fn().mockResolvedValue(null),
+  }) as unknown as WorkspaceService;
+
 const service = (
   workspaceConcurrentRuns = DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns,
   runs = runRecords(),
@@ -35,6 +41,7 @@ const service = (
       .fn()
       .mockResolvedValue(JSON.stringify(new LGraph().serialize())),
   },
+  workspaces: WorkspaceService = openWorkshops(),
 ) =>
   new GraphHandlerService(
     workflows as unknown as WorkflowService,
@@ -49,6 +56,7 @@ const service = (
       }),
     } as unknown as ExecutionLimitsService,
     runs as unknown as RunService,
+    workspaces,
   );
 
 describe('GraphHandlerService default model substitution', () => {
@@ -64,6 +72,7 @@ describe('GraphHandlerService default model substitution', () => {
         get: jest.fn().mockResolvedValue(DEFAULT_EXECUTION_LIMITS),
       } as unknown as ExecutionLimitsService,
       runRecords() as unknown as RunService,
+      openWorkshops(),
     );
   const llmGraph = (
     properties: Record<string, unknown>,
@@ -213,6 +222,65 @@ describe('GraphHandlerService run ownership', () => {
     ]);
     // The refused attempt must not occupy a slot of its own.
     expect(activeRuns.size).toBe(1);
+  });
+
+  it('refuses a run once the workshop has closed, checked per run (SPEC-0022/FR-012)', async () => {
+    const workshopState = jest.fn().mockResolvedValue({
+      code: 'ABCD-EFGH',
+      title: 'Workshop',
+      readOnly: true,
+    });
+    const getExecutionContent = jest.fn();
+    const handler = service(
+      DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns,
+      runRecords(),
+      { getExecutionContent },
+      { workshopState } as unknown as WorkspaceService,
+    );
+    const socket = client('client-1', 'workspace-1', 'workshop-1');
+
+    await handler.handleRunGraph(socket, payload('request-1'));
+
+    expect(workshopState).toHaveBeenCalledWith('workspace-1');
+    expect(getExecutionContent).not.toHaveBeenCalled();
+    const emitted = jest.mocked(socket.emit).mock.calls;
+    expect(
+      emitted
+        .filter(([eventName]) => eventName === 'runStateChanged')
+        .map(([, eventPayload]) => eventPayload),
+    ).toEqual([
+      expect.objectContaining({
+        state: 'failed',
+        error: expect.objectContaining({ code: 'workshop_closed' }),
+      }),
+    ]);
+    expect(
+      emitted
+        .filter(([eventName]) => eventName === 'graphOperationFailed')
+        .map(([, eventPayload]) => eventPayload),
+    ).toEqual([
+      expect.objectContaining({
+        code: 'workshop-closed',
+        retryable: false,
+      }),
+    ]);
+  });
+
+  it('does not look up workshop state for a workspace outside a workshop', async () => {
+    const workspaces = openWorkshops();
+    const handler = service(
+      DEFAULT_EXECUTION_LIMITS.workspaceConcurrentRuns,
+      runRecords(),
+      undefined,
+      workspaces,
+    );
+
+    await handler.handleRunGraph(
+      client('client-1', 'workspace-1'),
+      payload('request-1'),
+    );
+
+    expect(workspaces.workshopState).not.toHaveBeenCalled();
   });
 
   it('runs concurrently up to the workspace limit', async () => {

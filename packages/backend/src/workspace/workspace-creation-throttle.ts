@@ -3,15 +3,16 @@ import { positiveNumber } from '../common/env.js';
 import { SlidingWindow } from '../common/sliding-window.js';
 
 export const DEFAULT_WINDOW_MS = 60 * 60 * 1000;
-export const DEFAULT_MAX_WORKSPACES = 30;
+export const DEFAULT_MAX_WORKSPACES = 100;
 
 /**
- * Caps how many workspaces one address may mint (escalation E3).
+ * Caps how many workspaces one address may mint by joining workshops (escalation E3,
+ * SPEC-0022/FR-015).
  *
- * Workspace creation is necessarily unauthenticated — it is where a participant's only
- * credential comes from — so without this it is an open endpoint for filling the
- * database. The limit is far above what a real participant reaches: a workshop room
- * shares one NAT address, so the window has to tolerate 50 people arriving at once.
+ * The join is necessarily unauthenticated — it is where a participant's only credential
+ * comes from — so without this it is an open endpoint for filling the database. The limit
+ * is far above what a real participant reaches: a workshop room shares one NAT address,
+ * and a facilitator may run two sessions in an hour (NFR-001).
  */
 @Injectable()
 export class WorkspaceCreationThrottle {

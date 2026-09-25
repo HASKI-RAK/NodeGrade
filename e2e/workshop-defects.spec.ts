@@ -9,40 +9,6 @@ import {
   WAIE_WORKSHOP_CODE
 } from './support/nodegrade'
 
-// The gallery shows the three conference workshops and nothing else, however many
-// templates the deployment publishes (VISIBLE_TEMPLATE_SLUGS in TemplatesPage).
-const workshopHeading = /^Workshop [123] · /
-
-test('template gallery lists the workshops, filters kinds and previews graph structure', async ({
-  page
-}) => {
-  await page.goto('/')
-  await page.getByRole('link', { name: 'Templates' }).click()
-  await expect(page.getByRole('heading', { name: 'Templates' })).toBeVisible()
-  await expect(page.getByText('Workshop', { exact: true }).first()).toBeVisible()
-
-  await expect(page.getByRole('heading', { name: workshopHeading })).toHaveCount(3)
-  await expect(page.getByRole('heading', { name: 'Feedback generator' })).toHaveCount(0)
-  await expect(
-    page.getByRole('heading', { name: 'WAIE free-text assessment' })
-  ).toHaveCount(0)
-
-  // Every workshop is a workflow, so the block filter leaves the gallery empty.
-  await page.getByRole('combobox', { name: 'Template type' }).click()
-  await page.getByRole('option', { name: 'Blocks' }).click()
-  await expect(page.getByText('No templates match this type.')).toBeVisible()
-  await expect(page.getByRole('heading', { name: workshopHeading })).toHaveCount(0)
-
-  await page.getByRole('combobox', { name: 'Template type' }).click()
-  await page.getByRole('option', { name: 'Workflows' }).click()
-  await expect(page.getByRole('heading', { name: workshopHeading })).toHaveCount(3)
-
-  await page.getByRole('button', { name: 'Preview structure' }).first().click()
-  const structure = page.getByLabel('Template structure')
-  await expect(structure).toBeVisible()
-  await expect(structure).toContainText(/\d+ nodes · \d+ connections/)
-})
-
 test('template-derived workflow resets to its pinned source revision', async ({
   page
 }) => {
@@ -98,7 +64,7 @@ test('node palette keeps desktop editor controls within the viewport', async ({
   await expect(page.getByRole('button', { name: 'More editor actions' })).toBeInViewport()
 })
 
-test('facilitator manages template lifecycle and gallery visibility', async ({
+test('facilitator manages template lifecycle and publication', async ({
   page
 }, testInfo) => {
   const frontendOrigin = `http://localhost:${process.env.NODEGRADE_DEBUG_FRONTEND_PORT ?? '15173'}`
@@ -106,13 +72,19 @@ test('facilitator manages template lifecycle and gallery visibility', async ({
   const runId = `${Date.now()}-${testInfo.workerIndex}`
   const slug = `qa-template-${suffix}-${runId}`
   const name = `QA template ${testInfo.project.name} ${runId}`
-  // The gallery page lists only the three workshops, so publication is checked at
-  // the public listing it reads instead of in its rendered cards. The debug frontend
-  // is a Vite server with no /api proxy, so the listing is read from the backend.
+  // There is no public gallery to look at (SPEC-0022/FR-014), so publication is read
+  // from the facilitator listing with the session cookie the sign-in below sets. The
+  // debug frontend is a Vite server with no /api proxy and signs in against the backend
+  // under `localhost`, which is where that cookie lives.
+  const adminBackend = backendUrl.replace('127.0.0.1', 'localhost')
   const publishedSlugs = async () => {
-    const response = await page.request.get(`${backendUrl}/api/templates`)
-    const body = (await response.json()) as { templates: { slug: string }[] }
-    return body.templates.map((template) => template.slug)
+    const response = await page.request.get(`${adminBackend}/api/admin/templates`)
+    const body = (await response.json()) as {
+      templates: { slug: string; published: boolean }[]
+    }
+    return body.templates
+      .filter((template) => template.published)
+      .map((template) => template.slug)
   }
 
   await page.goto(`${frontendOrigin}/admin/templates`)

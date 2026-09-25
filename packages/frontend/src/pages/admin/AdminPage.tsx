@@ -18,19 +18,13 @@ import {
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-import { apiRequest, type WorkshopReadiness } from '@/api/http'
+import { apiRequest } from '@/api/http'
 
+import { adminPost, adminPut } from './adminApi'
 import { TemplateAdmin } from './TemplateAdmin'
+import { WorkshopAdmin } from './WorkshopAdmin'
 
 type Session = { enabled: boolean; authenticated: boolean }
-type Workshop = {
-  id: string
-  title: string
-  code: string
-  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED'
-}
-type Template = { id: string; name: string }
-type Revision = { id: string; name: string; revision: number }
 type PolicyMode = 'DENY_ALL' | 'ALLOWLIST' | 'ALLOW_ALL'
 type Provider = {
   id: string
@@ -60,27 +54,6 @@ const policyModes: { value: PolicyMode; label: string }[] = [
   { value: 'ALLOWLIST', label: 'Allowlist — only the models I pick' },
   { value: 'ALLOW_ALL', label: 'Allow all — every catalog model' }
 ]
-
-const csrf = () =>
-  document.cookie
-    .split('; ')
-    .find((part) => part.startsWith('ng_admin_csrf='))
-    ?.split('=')
-    .slice(1)
-    .join('=')
-
-const adminPost = <T,>(path: string, body: unknown = {}) =>
-  apiRequest<T>(path, {
-    method: 'POST',
-    headers: { 'X-CSRF-Token': decodeURIComponent(csrf() ?? '') },
-    body
-  })
-const adminPut = <T,>(path: string, body: unknown) =>
-  apiRequest<T>(path, {
-    method: 'PUT',
-    headers: { 'X-CSRF-Token': decodeURIComponent(csrf() ?? '') },
-    body
-  })
 
 export const AdminPage = () => {
   const location = useLocation()
@@ -712,175 +685,5 @@ const ExecutionLimitsCard = ({ onSaved }: { onSaved: (message: string) => void }
         </Stack>
       </CardContent>
     </Card>
-  )
-}
-
-/**
- * The facilitator's readiness view (SPEC-0007/FR-010, AC-008): the same preflight a
- * participant hits on entry, run on demand before the room fills up.
- */
-const ReadinessPanel = ({ workshopId }: { workshopId: string }) => {
-  const [readiness, setReadiness] = useState<WorkshopReadiness | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const check = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const { data } = await apiRequest<WorkshopReadiness>(
-        `/admin/workshops/${workshopId}/readiness`
-      )
-      setReadiness(data)
-    } catch (readinessError) {
-      setError(
-        readinessError instanceof Error
-          ? readinessError.message
-          : 'Readiness check failed.'
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Stack spacing={1} mt={1}>
-      <Box>
-        <Button disabled={busy} onClick={() => void check()}>
-          Check readiness
-        </Button>
-      </Box>
-      {readiness && (
-        <Stack spacing={0.5} aria-label="Workshop readiness">
-          {readiness.checks.map((entry) => (
-            <Stack direction="row" spacing={1} alignItems="center" key={entry.id}>
-              <Chip
-                size="small"
-                color={entry.status === 'PASS' ? 'success' : 'error'}
-                label={entry.status === 'PASS' ? 'Pass' : 'Fail'}
-              />
-              <Typography variant="body2">
-                {entry.label}: {entry.detail}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
-      )}
-      {error && <Typography color="error">{error}</Typography>}
-    </Stack>
-  )
-}
-
-const WorkshopAdmin = () => {
-  const [workshops, setWorkshops] = useState<Workshop[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [revisions, setRevisions] = useState<Revision[]>([])
-  const [title, setTitle] = useState('WAIE workshop')
-  const [templateId, setTemplateId] = useState('')
-  const [revisionId, setRevisionId] = useState('')
-  const refresh = () =>
-    apiRequest<{ workshops: Workshop[] }>('/admin/workshops').then(({ data }) =>
-      setWorkshops(data.workshops)
-    )
-  useEffect(() => {
-    void refresh()
-    void apiRequest<{ templates: Template[] }>('/admin/templates').then(({ data }) => {
-      setTemplates(data.templates)
-      if (data.templates[0]) setTemplateId(data.templates[0].id)
-    })
-  }, [])
-  useEffect(() => {
-    if (!templateId) return
-    void apiRequest<{ revisions: Revision[] }>(`/admin/templates/${templateId}`).then(
-      ({ data }) => {
-        setRevisions(data.revisions)
-        if (data.revisions[0]) setRevisionId(data.revisions[0].id)
-      }
-    )
-  }, [templateId])
-  const create = async () => {
-    await adminPost('/admin/workshops', { title, templateRevisionId: revisionId })
-    await refresh()
-  }
-  return (
-    <Box>
-      <Typography variant="h4">Workshop administration</Typography>
-      <Card sx={{ my: 3 }}>
-        <CardContent>
-          <Stack spacing={2}>
-            <TextField
-              label="Title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <TextField
-              select
-              label="Template"
-              value={templateId}
-              onChange={(event) => setTemplateId(event.target.value)}
-            >
-              {templates.map((template) => (
-                <MenuItem key={template.id} value={template.id}>
-                  {template.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Revision"
-              value={revisionId}
-              onChange={(event) => setRevisionId(event.target.value)}
-            >
-              {revisions.map((revision) => (
-                <MenuItem key={revision.id} value={revision.id}>
-                  {revision.name} (r{revision.revision})
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button
-              variant="contained"
-              disabled={!revisionId}
-              onClick={() => void create()}
-            >
-              Create workshop
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-      <Stack spacing={2}>
-        {workshops.map((workshop) => (
-          <Card key={workshop.id}>
-            <CardContent>
-              <Typography variant="h6">{workshop.title}</Typography>
-              <Typography>
-                {workshop.code} · {workshop.status}
-              </Typography>
-              <Stack direction="row" spacing={1} mt={1}>
-                {workshop.status === 'DRAFT' && (
-                  <Button
-                    onClick={async () => {
-                      await adminPost(`/admin/workshops/${workshop.id}/publish`)
-                      await refresh()
-                    }}
-                  >
-                    Publish
-                  </Button>
-                )}
-                {workshop.status === 'PUBLISHED' && (
-                  <Button
-                    color="warning"
-                    onClick={async () => {
-                      await adminPost(`/admin/workshops/${workshop.id}/close`)
-                      await refresh()
-                    }}
-                  >
-                    Close
-                  </Button>
-                )}
-              </Stack>
-              <ReadinessPanel workshopId={workshop.id} />
-            </CardContent>
-          </Card>
-        ))}
-      </Stack>
-    </Box>
   )
 }

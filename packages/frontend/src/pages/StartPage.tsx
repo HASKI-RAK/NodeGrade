@@ -17,24 +17,23 @@ import {
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { api } from '@/api/http'
 import { ColorSchemeMenuItems } from '@/components/ColorSchemeMenuItems'
-import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
-import { ensureWorkspaceSession } from '@/store/workspaceSession'
+import { workspaceStore } from '@/store/workspaceStore'
 import { useColorScheme } from '@/theme/colorScheme'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
-const EMPTY_GRAPH =
-  '{"last_node_id":0,"last_link_id":0,"nodes":[],"links":[],"groups":[],"config":{},"extra":{},"version":0.4}'
-
+/**
+ * The way in is a workshop code (SPEC-0022/FR-013): nothing here creates a workspace or
+ * lists templates. A participant who already joined a workshop in this browser is offered
+ * the way back to it.
+ */
 export const StartPage = () => {
   const navigate = useNavigate()
-  const { session, error, retry } = useWorkspaceSession()
   const { preference } = useColorScheme()
   const [code, setCode] = useState('')
-  const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [appearanceAnchor, setAppearanceAnchor] = useState<HTMLElement | null>(null)
+  const [active] = useState(() => workspaceStore.active()?.workshop ?? null)
 
   // Code entry and the conference deep link resolve through the same route, so the join
   // flow (SPEC-0014) has exactly one implementation to keep correct.
@@ -47,30 +46,6 @@ export const StartPage = () => {
     }
     setMessage(null)
     navigate(`/workshop/${normalized}`)
-  }
-
-  const create = async () => {
-    setMessage(null)
-    setCreating(true)
-    try {
-      // The entry actions are usable before the bootstrap finishes; the click waits for
-      // the same shared promise the hook is already on.
-      const active = session ?? (await ensureWorkspaceSession())
-      const workflow = await api.createWorkflow(
-        active.token,
-        'Untitled workflow',
-        EMPTY_GRAPH
-      )
-      navigate(`/editor/${workflow.id}`)
-    } catch (createError) {
-      setMessage(
-        createError instanceof Error
-          ? createError.message
-          : 'Could not create a workflow.'
-      )
-    } finally {
-      setCreating(false)
-    }
   }
 
   return (
@@ -127,16 +102,23 @@ export const StartPage = () => {
           </Stack>
         </CardContent>
       </Card>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mt={3}>
-        <Button variant="outlined" onClick={() => void create()} disabled={creating}>
-          New workflow
-        </Button>
-        <Button variant="outlined" component={Link} to="/workflows">
-          Open workflow
-        </Button>
-        <Button variant="outlined" component={Link} to="/templates">
-          Templates
-        </Button>
+      {active && (
+        <Card sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Continue where you left off
+            </Typography>
+            <Button
+              variant="outlined"
+              component={Link}
+              to={`/workshop/${normalizeWorkshopCode(active.code)}`}
+            >
+              {active.title}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      <Stack direction="row" mt={3}>
         <Button variant="text" component={Link} to="/admin">
           Facilitator
         </Button>
@@ -144,19 +126,6 @@ export const StartPage = () => {
       {message && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {message}
-        </Alert>
-      )}
-      {error && (
-        <Alert
-          severity="error"
-          sx={{ mt: 2 }}
-          action={
-            <Button color="inherit" size="small" onClick={retry}>
-              Retry
-            </Button>
-          }
-        >
-          {error}
         </Alert>
       )}
     </Box>

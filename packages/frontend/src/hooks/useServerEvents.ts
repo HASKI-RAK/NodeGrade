@@ -39,6 +39,8 @@ export interface UseServerEventsResult {
     severity: AlertColor
     open: boolean
   }
+  /** A run was refused because the participant's workshop has ended (SPEC-0022/FR-012). */
+  workshopClosed: boolean
   beginGraphLoad: () => void
   beginAttempt: (requestId?: string) => void
   failAttempt: (message: string) => void
@@ -64,6 +66,7 @@ export function useServerEvents({
   >(undefined)
   const [maxInputChars, setMaxInputChars] = useState<number | undefined>(undefined)
   const [image, setImage] = useState<string | undefined>()
+  const [workshopClosed, setWorkshopClosed] = useState(false)
   const [processingPercentage, setProcessingPercentage] = useState<number>(0)
   const [graphState, setGraphState] = useState<GraphState>('idle')
   const [attemptState, setAttemptState] = useState<AttemptState>('idle')
@@ -312,6 +315,7 @@ export function useServerEvents({
       },
       graphOperationFailed(payload) {
         if (payload.operation === 'run' && payload.runId !== runIdRef.current) return
+        if (payload.code === 'workshop-closed') setWorkshopClosed(true)
         setFailureMessage(payload.message)
         if (payload.operation === 'load') {
           setGraphState(payload.code === 'not-found' ? 'not-found' : 'failed')
@@ -358,6 +362,7 @@ export function useServerEvents({
     runState,
     trace,
     snackbar,
+    workshopClosed,
     beginGraphLoad,
     beginAttempt,
     failAttempt,

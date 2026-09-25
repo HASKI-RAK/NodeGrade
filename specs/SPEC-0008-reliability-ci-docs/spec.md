@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-15
-updated: 2026-09-17
+updated: 2026-09-25
 depends_on:
   - SPEC-0002
   - SPEC-0003
@@ -14,7 +14,8 @@ depends_on:
   - SPEC-0006
   - SPEC-0007
   - SPEC-0014
-related: []
+related:
+  - SPEC-0022
 ---
 
 # Reliability, CI and documentation
@@ -89,9 +90,10 @@ and the browser smoke test, and SHALL fail the check if any step fails.
 
 ### FR-002 — Conference happy path smoke test
 
-The smoke test SHALL cover: opening the application root, choosing the WAIE workshop
-entry, duplicating the template, loading the editor, modifying the rubric, running an
-example, observing a result, reloading, and finding the workflow still present.
+The smoke test SHALL cover: opening the application root, entering the WAIE workshop
+code, joining the workshop (whose single entry is copied and opened in the editor, per
+SPEC-0022/FR-007), modifying the rubric, running an example, observing a result,
+reloading, and finding the workflow still present.
 
 ### FR-003 — Root test script coverage
 
@@ -153,7 +155,7 @@ Traces to: FR-002
 ```gherkin
 Given the application is running
 When the smoke test executes
-Then it performs the full conference flow from landing page through template duplication, rubric edit, run, result, reload persistence
+Then it performs the full conference flow from landing page through workshop join and template copy, rubric edit, run, result, reload persistence
 ```
 
 ### AC-003 — Root test runs both packages
@@ -263,3 +265,4 @@ Then the platform prevents merging the PR
 | 2026-09-15 | Added deterministic test provider for E2E (FR-006, AC-006), workspace isolation E2E (FR-007, AC-007), branch protection requirement (FR-008, AC-008). FR ordering corrected. Dependencies extended with SPEC-0014. |
 | 2026-09-15 | Review revision 2: frontmatter depends_on aligned with prose Dependencies (added SPEC-0006 and SPEC-0014) |
 | 2026-09-17 | Implemented. AC-007 no longer names a literal slug: the slug under test is whatever joining a workshop derives from the template revision name, and the requirement is that two workspaces may hold the same one. |
+| 2026-09-25 | FR-002/AC-002 reworded for SPEC-0022: the smoke test enters by workshop code and the join copies the workshop's single entry; no gallery or separate duplication step. |

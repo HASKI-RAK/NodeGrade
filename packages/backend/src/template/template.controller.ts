@@ -1,51 +1,40 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { TemplateQueryDto } from './dto/template.dto.js';
+import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
+import { WorkspaceScoped } from '../workspace/decorators/current-workspace.decorator.js';
 import { serializeRevision, serializeTemplate } from './template.serializer.js';
 import { TemplateService } from './template.service.js';
 
 /**
- * The template gallery as everyone sees it (SPEC-0003/FR-004, FR-016).
+ * The block library the editor's palette inserts from (SPEC-0003/FR-013).
  *
- * Unauthenticated: a participant browses templates before they have done anything at
- * all, and published templates are public by definition. Nothing here can modify a
- * template — FR-014's restriction lives on the admin controller, not on a role check
- * scattered through read paths.
+ * Workspace-scoped and blocks only (SPEC-0022/FR-014): workflow templates reach a
+ * participant solely as entries of their workshop, so neither their grading content nor
+ * the provider budget behind them is open to anyone who finds the URL. Nothing here can
+ * modify a template — FR-014's restriction lives on the admin controller.
  */
 @Controller('templates')
+@WorkspaceScoped()
 export class TemplateController {
   constructor(private readonly templates: TemplateService) {}
 
   @Get()
-  async list(@Query() query: TemplateQueryDto) {
-    const templates = await this.templates.listPublished(query.kind);
+  async list() {
+    const templates = await this.templates.listPublished('BLOCK');
     return { templates: templates.map(serializeTemplate) };
   }
 
-  /** Metadata plus the current revision's content, which is what a preview needs. */
+  /** Metadata plus the current revision's content, which is what an insert needs. */
   @Get(':slug')
   async get(@Param('slug') slug: string) {
     const template = await this.templates.findBySlug(slug, true);
+    if (template.kind !== 'BLOCK')
+      throw new NotFoundException({
+        code: 'template_not_found',
+        message: 'Template not found.',
+      });
     const revision = await this.templates.getCurrentRevision(template.id);
 
     return {
       template: serializeTemplate(template),
-      revision: serializeRevision(revision, {
-        includeContent: true,
-        requiredNodeTypes: this.templates.requiredNodeTypes(revision.content),
-      }),
-    };
-  }
-
-  /**
-   * A pinned revision, resolvable regardless of the template's current visibility.
-   *
-   * This is what makes a workshop bound to revision R keep working after the template
-   * is unpublished or deleted (FR-017a, AC-014a, AC-017).
-   */
-  @Get('revisions/:revisionId')
-  async revision(@Param('revisionId') revisionId: string) {
-    const revision = await this.templates.getRevision(revisionId);
-    return {
       revision: serializeRevision(revision, {
         includeContent: true,
         requiredNodeTypes: this.templates.requiredNodeTypes(revision.content),
