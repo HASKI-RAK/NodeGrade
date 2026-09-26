@@ -190,6 +190,12 @@ const TaskView = forwardRef<
   TaskViewHandle,
   {
     onSubmit: (answer: string) => void
+    /**
+     * The answer, when the host owns it. The editor does, because this view unmounts
+     * whenever its rail switches to the inspector, and a typed answer must outlive that.
+     */
+    answer?: string
+    onAnswerChange?: (answer: string) => void
     outputs?: Record<string, ServerEventPayload['outputSet']>
     question: string
     questionImage?: string
@@ -227,6 +233,8 @@ const TaskView = forwardRef<
   (
     {
       onSubmit,
+      answer: hostAnswer,
+      onAnswerChange,
       outputs,
       question,
       questionImage,
@@ -249,7 +257,9 @@ const TaskView = forwardRef<
   ) => {
     const messages = previewMessages[locale]
     const [tab, setTab] = useState<PreviewTab>('test')
-    const [answer, setAnswer] = useState('')
+    const [ownAnswer, setOwnAnswer] = useState('')
+    const answer = hostAnswer ?? ownAnswer
+    const setAnswer = onAnswerChange ?? setOwnAnswer
     const [error, setError] = useState<string | null>(null)
     const answerRef = useRef<HTMLInputElement>(null)
     const running = runState === 'queued' || runState === 'running'

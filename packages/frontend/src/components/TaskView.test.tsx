@@ -177,6 +177,38 @@ describe('TaskView', () => {
     expect(onSubmit).toHaveBeenCalledWith('short')
   })
 
+  it('keeps a host-owned answer after a run and across an unmount', async () => {
+    const onSubmit = vi.fn()
+    const user = userEvent.setup()
+    // The editor unmounts the preview whenever a canvas click opens the inspector.
+    const Rail = () => {
+      const [answer, setAnswer] = useState('')
+      const [preview, setPreview] = useState(true)
+      return (
+        <>
+          <button onClick={() => setPreview((open) => !open)}>Toggle</button>
+          {preview && (
+            <TaskView
+              question="Question"
+              onSubmit={onSubmit}
+              answer={answer}
+              onAnswerChange={setAnswer}
+            />
+          )}
+        </>
+      )
+    }
+    render(<Rail />)
+
+    await user.type(screen.getByLabelText('Your answer'), 'My first try')
+    await user.click(screen.getByRole('button', { name: 'Run assessment' }))
+    await user.click(screen.getByRole('button', { name: 'Toggle' }))
+    await user.click(screen.getByRole('button', { name: 'Toggle' }))
+
+    expect(onSubmit).toHaveBeenCalledWith('My first try')
+    expect(screen.getByLabelText('Your answer')).toHaveValue('My first try')
+  })
+
   it('runs an empty answer when the workflow sets a minimum of zero (AC-006)', async () => {
     const onSubmit = vi.fn()
     const user = userEvent.setup()
