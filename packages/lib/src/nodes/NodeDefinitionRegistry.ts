@@ -41,7 +41,7 @@ import { StringsToArray } from './StringToArray'
 import { Textfield } from './Textfield'
 import { TFIDF } from './TF-IDF'
 import { CountNode } from './utils/CountNode'
-import { Watch } from './Watch'
+import { Watch, WATCH_MIN_HEIGHT } from './Watch'
 
 export interface DefinedNodeConstructor {
   new (): LiteGraphNode
@@ -133,7 +133,9 @@ const entries: readonly Entry[] = [
   {
     node: Watch,
     category: 'Essential',
-    description: 'Inspect a value while a workflow runs.'
+    description: 'Inspect a value while a workflow runs.',
+    tags: ['debug', 'inspect'],
+    help: 'Wire any output into the watch and run the workflow. The node shows the value with its type (string, number, boolean, message, image, lists and objects), and the run trace lists it in full. The value is not saved with the workflow.'
   },
   {
     node: Textfield,
@@ -614,6 +616,14 @@ export function compactNodeWidgets(node: LiteGraphNode): void {
     if (Reflect.get(node, '__compactDefinitionApplied')) return
     Reflect.set(node, '__compactDefinitionApplied', true)
     applyWrappedText(node, WRAPPED_TEXT_NODES[node.type])
+    return
+  }
+  // The watch draws its value in the body; keep the height the author gave it
+  // so a node resized to read a long value does not shrink again on load.
+  if (node.type === Watch.getPath()) {
+    Reflect.set(node, 'widgets', [])
+    Reflect.set(node, 'serialize_widgets', false)
+    node.size = [Math.max(node.size[0], 180), Math.max(node.size[1], WATCH_MIN_HEIGHT)]
     return
   }
   Reflect.set(node, 'widgets', [])
