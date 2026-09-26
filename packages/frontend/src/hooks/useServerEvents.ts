@@ -1,4 +1,4 @@
-import { ServerEventPayload } from '@haski/ta-lib'
+import { ServerEventPayload, Watch, WATCH_DETAIL_NAME } from '@haski/ta-lib'
 import { AlertColor } from '@mui/material'
 import { LGraph, type LGraphNode } from 'litegraph.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -139,6 +139,15 @@ export function useServerEvents({
     runningRef.current = []
   }, [paintNodes])
 
+  /** Watch nodes showing a value from the current attempt. */
+  const watchedRef = useRef<Set<Watch>>(new Set())
+
+  /** A new attempt starts blank, so a watch the run skips cannot show a stale value. */
+  const clearWatchedValues = useCallback(() => {
+    for (const node of watchedRef.current) node.clearValue()
+    watchedRef.current.clear()
+  }, [])
+
   const beginAttempt = useCallback(
     (requestId?: string) => {
       requestIdRef.current = requestId
@@ -153,8 +162,9 @@ export function useServerEvents({
       setOutputs(undefined)
       setProcessingPercentage(0)
       clearAllHighlights()
+      clearWatchedValues()
     },
-    [clearAllHighlights]
+    [clearAllHighlights, clearWatchedValues]
   )
 
   const failAttempt = useCallback(
@@ -240,6 +250,25 @@ export function useServerEvents({
     [paintNodes, resolveEditorNodes]
   )
 
+  /**
+   * The graph runs on the server, so a watch node in the editor never executes:
+   * its value arrives as the trace row the server-side watch recorded.
+   */
+  const showWatchedValue = useCallback(
+    (payload: ServerEventPayload['nodeExecutionChanged']) => {
+      if (payload.state !== 'completed' || payload.nodeType !== Watch.getPath()) return
+      const row = payload.outputs?.find((output) => output.name === WATCH_DETAIL_NAME)
+      if (!row) return
+      for (const node of resolveEditorNodes(payload)) {
+        if (!(node instanceof Watch)) continue
+        node.showValue({ type: row.type, value: row.value, truncated: row.truncated })
+        watchedRef.current.add(node)
+      }
+      lgraph.setDirtyCanvas(true, true)
+    },
+    [lgraph, resolveEditorNodes]
+  )
+
   useEffect(() => {
     if (!socket) return
 
@@ -292,6 +321,7 @@ export function useServerEvents({
           return current.map((step, stepIndex) => (stepIndex === index ? payload : step))
         })
         colorNode(payload)
+        showWatchedValue(payload)
       },
       outputSet(output) {
         if (output.runId !== runIdRef.current) return
@@ -347,7 +377,7 @@ export function useServerEvents({
         socket.off(eventName, handler)
       }
     }
-  }, [socket, lgraph, colorNode, clearRunningNodes])
+  }, [socket, lgraph, colorNode, clearRunningNodes, showWatchedValue])
 
   return {
     outputs,

@@ -34,6 +34,7 @@ import { NodeInspector } from '@/components/editor/NodeInspector'
 import { NodePalette } from '@/components/editor/NodePalette'
 import { WorkflowHistoryDialog } from '@/components/editor/WorkflowHistoryDialog'
 import TaskView, { type TaskViewHandle } from '@/components/TaskView'
+import { useAnswerDraft } from '@/hooks/useAnswerDraft'
 import { useAutosave } from '@/hooks/useAutosave'
 import { useGraphHistory } from '@/hooks/useGraphHistory'
 import { useServerEvents } from '@/hooks/useServerEvents'
@@ -102,6 +103,7 @@ export const Editor = () => {
     student ? 'preview' : 'inspector'
   )
   const [railOpen, setRailOpen] = useState(true)
+  const [answer, setAnswer] = useAnswerDraft(workflowId)
   const [developerTools, setDeveloperTools] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [blocks, setBlocks] = useState<WorkflowTemplate[]>([])
@@ -709,6 +711,8 @@ export const Editor = () => {
               question={workflowForm.question || question}
               questionImage={image}
               onSubmit={handleSubmit}
+              answer={answer}
+              onAnswerChange={setAnswer}
               outputs={outputs}
               constraints={answerConstraints}
               disabled={readOnly || attemptState === 'running' || runState === 'queued'}
