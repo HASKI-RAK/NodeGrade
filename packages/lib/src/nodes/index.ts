@@ -160,6 +160,14 @@ export {
 } from './ReviewFlagNode'
 export { DEFAULT_LINE_PREFIX, extractLine } from './ExtractLineNode'
 export {
+  describeWatchHeader,
+  describeWatchType,
+  formatWatchValue,
+  WATCH_DETAIL_NAME,
+  WATCH_MIN_HEIGHT,
+  type WatchedValue
+} from './Watch'
+export {
   compactNodeWidgets,
   getDefinedNodeConstructors,
   getNodeDefinition,

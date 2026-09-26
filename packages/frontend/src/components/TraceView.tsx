@@ -416,7 +416,14 @@ const TraceStepItem = ({
             ))}
             {(step.outputs ?? []).map((output) => (
               <Stack key={output.slot} spacing={0.5}>
-                <Typography variant="caption">{output.name}</Typography>
+                <Stack direction="row" spacing={1} alignItems="baseline">
+                  <Typography variant="caption">{output.name}</Typography>
+                  {output.type && output.type !== '*' && (
+                    <Typography variant="caption" color="text.secondary">
+                      {output.type}
+                    </Typography>
+                  )}
+                </Stack>
                 <TraceValue value={output.value} />
                 {output.truncated && (
                   <Typography variant="caption">Output truncated at 64 KiB.</Typography>

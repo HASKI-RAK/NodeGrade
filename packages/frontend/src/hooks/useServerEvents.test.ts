@@ -1,4 +1,4 @@
-import '@haski/ta-lib'
+import { LiteGraph, Watch } from '@haski/ta-lib'
 
 import { act, renderHook } from '@testing-library/react'
 import { LGraph } from 'litegraph.js'
@@ -556,5 +556,58 @@ describe('useServerEvents', () => {
 
     expect(result.current.workshopClosed).toBe(true)
     expect(result.current.attemptState).toBe('failed')
+  })
+
+  it('shows a watch value from the trace and clears it on the next attempt', () => {
+    const { socket, emit } = createSocket()
+    const lgraph = new LGraph()
+    const watch = LiteGraph.createNode(Watch.getPath()) as Watch
+    lgraph.add(watch)
+    const { result } = renderHook(() => useServerEvents({ socket, lgraph }))
+
+    act(() => result.current.beginAttempt('request-watch'))
+    act(() =>
+      emit('runStateChanged', {
+        requestId: 'request-watch',
+        runId: 'run-watch',
+        workflowId: 'workflow-1',
+        state: 'running',
+        timestamp: '2026-09-26T00:00:00.000Z'
+      })
+    )
+    // The server compiles the graph and renumbers it, so only sourceId points
+    // at the editor watch.
+    act(() =>
+      emit('nodeExecutionChanged', {
+        runId: 'run-watch',
+        workflowId: 'workflow-1',
+        nodeId: 99,
+        nodeTitle: 'watch',
+        nodeType: 'basic/watch',
+        state: 'completed',
+        timestamp: '2026-09-26T00:00:01.000Z',
+        outputs: [
+          {
+            slot: 0,
+            name: 'value',
+            type: 'message',
+            value: { role: 'user', content: 'Hi' },
+            truncated: false
+          }
+        ],
+        wrapperId: null,
+        sourceId: watch.id,
+        wrapperPath: []
+      })
+    )
+    expect(watch.watched).toEqual({
+      type: 'message',
+      value: { role: 'user', content: 'Hi' },
+      truncated: false
+    })
+    expect(watch.properties).not.toHaveProperty('value')
+
+    act(() => result.current.beginAttempt('request-next'))
+    expect(watch.watched).toBeUndefined()
   })
 })
