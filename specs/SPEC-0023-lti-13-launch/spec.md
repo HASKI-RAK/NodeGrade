@@ -63,9 +63,9 @@ Registration are named as the next steps on the same key pair.
   Role Provisioning (deferred, FR-010 and FR-011).
 - Deep Linking and Dynamic Registration (deferred, FR-009 and FR-012).
 - Persisting platform registrations in the database or editing them in the admin UI.
-- The LTI Platform Storage (postMessage) fallback for browsers that block the state
-  cookie in an iframe; launches open in a new window, where the cookie is first-party
-  (docs/lti.md).
+- Embedded (iframe) launches and the LTI Platform Storage (postMessage) fallback for the
+  state cookie; launches open in a new window, where both cookies are first-party
+  (deferred, FR-013).
 
 ## Actors
 
@@ -244,6 +244,18 @@ Verification: deferred. The frontend page and the registration types in
 `packages/lti/src/lti/toolRegistration.ts` exist; registrations have to leave the
 environment for the database first.
 
+### FR-013 — Embedded launch session (deferred)
+
+WHEN a platform launches NodeGrade inside its own page (an iframe),
+the system SHALL establish the session without a first-party cookie: either a
+`SameSite=None` launch session with a CSRF defence of its own, or a one-time code in the
+redirect that the frontend exchanges for a bearer token.
+
+Verification: deferred. The launch cookie is `SameSite=Lax` (`config/cookies.ts`), so
+registrations open NodeGrade in a new window (docs/lti.md, "Launches open in a new
+window"; `/lti/config?format=canvas` sets `windowTarget` `_blank`), and the frontend
+tells an embedded visitor to open it in its own window.
+
 ## Non-functional requirements
 
 ### NFR-001 — Nothing secret in the logs
@@ -361,6 +373,9 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti-tool-config.spec.ts`,
   turn the launch into a request generator against the platform.
 - The platform launches without a context claim → the workspace key carries an empty
   context id; the resource link id is required.
+- The platform embeds NodeGrade in its page → the `SameSite=Lax` launch cookie does not
+  reach the frontend; the registration opens NodeGrade in a new window instead, and the
+  frontend says so to an embedded visitor (FR-013).
 - The platform's key set endpoint is down → the launch answers 502
   `lti_platform_keys_unavailable` and the person retries from the course.
 - One issuer hosts several tenants (Canvas) → one registration per client id; the login
@@ -409,6 +424,7 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti-tool-config.spec.ts`,
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fix: launches open in a new window because the launch cookie is first-party only; an embedded launch session is FR-013 (deferred). `LTI_TOOL_URL` documented as the override for a proxy that rewrites the origin; the frontend's nginx passes the `Host` header with its port to `/lti/`. |
 | 2026-10-01 | Review fix: `GET /lti/config?format=canvas` answers the JSON Canvas's developer key form imports, with one new-tab placement (FR-006, AC-006). |
 | 2026-10-01 | Review fix: `/lti/login` is throttled per address (`LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS`) and a forced key set refresh is honoured at most once a minute per key set (FR-002, FR-003, AC-002). |
 | 2026-10-01 | Review fix: 1.1 role URNs are read by namespace, so an institution `Instructor` no longer opens the editor (FR-005, AC-005). |

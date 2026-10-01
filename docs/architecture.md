@@ -52,7 +52,7 @@ and delegate to a service, which is the only layer that touches Prisma.
 | Participant (`/api/workspaces/me`, `/api/workflows/**` incl. `from-template`, `/api/templates` (both kinds), `/api/workshops/current/**`, Socket.IO) | browser, workshop participant, LTI launch | `Authorization: Bearer <workspace token>`, or the LTI launch cookie | `WorkspaceGuard` |
 | Direct entry (`POST /api/workspaces`) | any browser | none; mints the browser's token | none — rate-limited per address |
 | Workshop entry (`/api/workshops/by-code/:code`, `.../preflight`, `.../join`) | anyone holding a code | none; `join` accepts the workshop's bearer token for a re-join | none — `join` is rate-limited per address |
-| LTI platform (`/lti/login`, `/lti/launch`, `/lti/basiclogin`; `/lti/config`, `/lti/jwks` public) | the LMS and the browser it sends | an id_token signed by a registered platform answering a login this server started, or an OAuth 1.0a signature | none — the launch is the authentication and ends in the launch cookie |
+| LTI platform (`/lti/login`, `/lti/launch`, `/lti/basiclogin`; `/lti/config`, `/lti/jwks` public) | the LMS and the browser it sends | an id_token signed by a registered platform answering a login this server started, in the browser that started it (per-login state cookie), or an OAuth 1.0a signature over the configured consumer secret | none — the launch is the authentication and ends in the launch cookie; `/lti/login` is throttled per address |
 | Facilitator (`/api/admin/**`, `/api/providers`, `/api/benchmark/run`) | admin UI | session cookie + `X-CSRF-Token` | `AdminSessionGuard` |
 
 A bearer token cannot be set by a cross-site form post, which keeps CSRF handling off the
@@ -218,9 +218,12 @@ sequenceDiagram
     T-->>B: 302 FRONTEND_URL/editor|student/:id?lti=1 (+ lti_nodegrade_cookie)
 ```
 
-The LTI 1.1 basic launch (`POST /lti/basiclogin`, OAuth 1.0a) joins the same path at
-`establishLaunch`. Both set the launch cookie `WorkspaceGuard` and the socket adapter
-accept in place of a bearer token. Routes: `/lti/config` (registration JSON),
+The LTI 1.1 basic launch (`POST /lti/basiclogin`, OAuth 1.0a, refused while the consumer
+credentials are unset) joins the same path at `establishLaunch`, where `ltiWorkspaceKey`
+keeps 1.1 keys as they were and puts 1.3 keys in the `lti13:` namespace with client and
+deployment id. Both set the launch cookie `WorkspaceGuard` and the socket adapter accept
+in place of a bearer token; it is `SameSite=Lax`, so a registration opens NodeGrade in a
+new window rather than inside the LMS page. Routes: `/lti/config` (registration JSON),
 `/lti/login`, `/lti/launch`, `/lti/jwks` (tool keys), `/lti/basiclogin`; all outside the
 `api` prefix, proxied whole by the frontend's nginx. `docs/lti.md` has the protocol, the
 registration steps and the roadmap.

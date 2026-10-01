@@ -113,9 +113,14 @@ a stale `dist` produces failures that look like code bugs.
   `/api/workshops/current/**` (SPEC-0022, ADR-0010).
 - LTI: the tool verifies, it never signs a launch. A 1.3 launch is accepted only when its
   id_token verifies against the platform's JWKS, answers a login this server started
-  (state and nonce, used once) and names a deployment of a platform in `LTI_PLATFORMS`;
-  the 1.1 basic launch is verified with OAuth 1.0a. Both end in the same
-  `lti_nodegrade_cookie` and `ltiKey` through `LtiService.establishLaunch` (SPEC-0023).
+  (state and nonce, used once; the per-login state cookie is required while cookies are
+  secure) and names a deployment of a platform in `LTI_PLATFORMS`; the 1.1 basic launch
+  is verified with OAuth 1.0a and refused while `LTI_CONSUMER_KEY`/`LTI_CONSUMER_SECRET`
+  are unset (`LTI_11_ALLOW_UNSIGNED` is for local testing only). Both end in the same
+  `lti_nodegrade_cookie` and `ltiKey` through `LtiService.establishLaunch`, with 1.3 keys
+  in the `lti13:` namespace (`ltiWorkspaceKey`) so no 1.1 post can address a 1.3
+  workspace. Launches open in a new window: the launch cookie is first-party only
+  (SPEC-0023).
 - A CLOSED or expired workshop is read-only for its participants: `WorkspaceGuard` rejects
   every non-GET/HEAD request with `workshop_closed`, and `GraphHandlerService` re-checks the
   workshop on every run rather than at socket connect.

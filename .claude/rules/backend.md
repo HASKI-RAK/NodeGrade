@@ -41,5 +41,8 @@ paths:
   and validate with the `@haski/lti` readers, because the whitelisting `ValidationPipe`
   would reject the extra fields platforms send. Platform registrations come from
   `LTI_PLATFORMS` through `config/lti-platforms.ts`, never from a request or the database.
-  Rebuild `@haski/lti` (`yarn workspace @haski/lti build`) before trusting a backend
-  typecheck or test after touching `packages/lti`.
+  Derive an LTI workspace key only through `ltiWorkspaceKey` (1.1 keys unchanged, 1.3 keys
+  in the `lti13:` namespace), name the OIDC state cookie through `ltiStateCookieName`,
+  and log nothing from a launch beyond what `describeLaunch` returns. Rebuild `@haski/lti`
+  (`yarn workspace @haski/lti build`) before trusting a backend typecheck or test after
+  touching `packages/lti`.

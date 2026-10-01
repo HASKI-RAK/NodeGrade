@@ -163,6 +163,17 @@ consumer key, and honouring that claim (roadmap) is how a migrated course maps o
 Open `GET https://<your host>/lti/config` first; it lists the URLs below for your
 deployment.
 
+### Launches open in a new window
+
+Register every placement so that it opens NodeGrade in its own window or tab: Moodle's
+*Default launch container: New window*, Canvas placements with *Open in a new tab*
+(`windowTarget: _blank`, which `/lti/config?format=canvas` sets). The launch ends in the
+cookie `lti_nodegrade_cookie`, which is `SameSite=Lax`: a first-party cookie that the
+browser sends only when NodeGrade is the page itself. Embedded in the course page,
+NodeGrade is a third party, the cookie never reaches the frontend, and the editor finds
+no session; the frontend tells an embedded visitor to open NodeGrade in its own window.
+The roadmap below names what an embedded launch would need.
+
 ### Moodle (LTI Advantage)
 
 Site administration → Plugins → Activity modules → External tool → Manage tools →
@@ -178,7 +189,7 @@ Site administration → Plugins → Activity modules → External tool → Manag
 | Initiate login URL | `https://<host>/lti/login` |
 | Redirection URI(s) | `https://<host>/lti/launch` |
 | Custom parameters | optional, e.g. `activityname=default` |
-| Default launch container | New window or Embed, as you prefer |
+| Default launch container | New window (see "Launches open in a new window") |
 | Privacy: share launcher's name and email | yes, so the editor shows who launched |
 
 Save, then open *View configuration details* on the tool's card and copy into
@@ -236,7 +247,7 @@ registration and Canvas always sends `client_id` on the login.
 |---|---|
 | `LTI_PLATFORMS` | JSON array of registrations: `issuer`, `clientId`, `deploymentIds`, `authorizationEndpoint`, `tokenEndpoint`, `jwksUri`, optional `name`. Validated at startup; a bad entry stops the backend with a line naming the entry and the field. Unset means no 1.3 platform. |
 | `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`; literal `\n` is accepted). `/lti/jwks` serves its public half with a stable `kid`. Needed by the services below, not by the launch. |
-| `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin (set by the debug stack to the backend port). |
+| `LTI_TOOL_URL` | Public base URL of the `/lti` routes. Without it the tool URLs derive from the request origin (`trust proxy` and the frontend's nginx, which passes the `Host` header with its port, make that the public scheme, host and port); set it when a proxy rewrites the origin the platform called, and to the backend port on the debug stack. |
 | `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. While either is unset, `POST /lti/basiclogin` answers 503 `lti_11_not_configured`. |
 | `LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS` | Login initiations one address may start per window; defaults 60 per 60000 ms. Each initiation records a pending login for ten minutes, so the cap keeps one address from evicting everyone else's. |
 | `LTI_11_ALLOW_UNSIGNED` | `true` accepts unsigned 1.1 launches while the credentials are unset, for a local test platform without a secret. Whoever posts the form then picks the course, the role and the person, and every launch logs a warning. Never set it on a deployment. |
@@ -289,9 +300,12 @@ Everything below rides on the launch and on the tool key pair of `/lti/jwks`.
    already carries `LtiPlatform` and `LtiClientRegistration` models from that skeleton
    (`packages/backend/prisma/schema.prisma`), unused so far; `LtiPlatformRegistry` is the
    place to read them from.
-5. **Platform storage.** When a browser blocks the state cookie inside the LMS iframe, the
-   LTI Platform Storage profile keeps `state` through `postMessage` to the platform; the
-   server-side login record makes this optional for NodeGrade.
+5. **Embedded launches.** Launching inside the LMS page needs a session that no
+   first-party cookie carries: either a `SameSite=None` launch session with a CSRF
+   defence of its own, or a one-time code in the redirect that the frontend exchanges
+   for a bearer token (SPEC-0023/FR-013). The login half would use the LTI Platform
+   Storage profile, which keeps `state` through `postMessage` to the platform where the
+   browser withholds the state cookie in an iframe.
 6. **1.1 to 1.3 migration claim.** A platform migrated from 1.1 sends
    `https://purl.imsglobal.org/spec/lti/claim/lti1p1` with the old `user_id` and
    `oauth_consumer_key` (plus `oauth_consumer_key_sign`, an HMAC over the launch that
