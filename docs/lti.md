@@ -54,8 +54,11 @@ point in time (`exp`).
 ### The library (`packages/lti`)
 
 - `claims.ts`: the claim URIs, message types, version, the role vocabulary and
-  `isEditorRole` (context `Instructor` and its sub-roles, `Administrator` of the context,
-  the institution or the system; short names and 1.1 URNs for platforms that send them).
+  `isEditorRole`: context `Instructor` and its sub-roles, `Administrator` of the context,
+  the institution or the system. The 1.1 URNs are read by namespace the same way:
+  `urn:lti:role:ims/lis/Instructor` (and `Instructor/...`) or `Administrator` and an
+  `instrole`/`sysrole` `Administrator` edit, an institution or system `Instructor` stays
+  a learner, and the bare names `Instructor` and `Administrator` are accepted.
 - `platform.ts`: `LtiPlatformRegistration` — what the tool records per platform.
 - `oidc.ts`: `readOidcLoginRequest` and `buildOidcAuthorizationUrl`.
 - `launch.ts`: `verifyIdToken` and `mapLaunchClaims`. Verification uses `jsonwebtoken`

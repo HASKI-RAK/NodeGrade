@@ -250,6 +250,11 @@ describe('LtiService', () => {
       ['urn:lti:role:ims/lis/Learner', false],
       ['Learner,Instructor', true],
       ['urn:lti:role:ims/lis/Administrator', true],
+      ['urn:lti:role:ims/lis/Instructor/PrimaryInstructor', true],
+      ['urn:lti:instrole:ims/lis/Administrator', true],
+      // A learner here who teaches elsewhere: the institution role does not promote.
+      ['urn:lti:role:ims/lis/Learner,urn:lti:instrole:ims/lis/Instructor', false],
+      ['urn:lti:role:ims/lis/Learner, urn:lti:sysrole:ims/lis/Administrator', true],
     ])('maps roles "%s" to isEditor %s', async (roles, isEditor) => {
       const { service } = build();
 

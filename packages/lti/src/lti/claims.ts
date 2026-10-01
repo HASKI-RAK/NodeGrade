@@ -114,21 +114,24 @@ export interface LtiIdTokenClaims {
   [claim: string]: unknown
 }
 
-/** The bare role of a short name or a 1.1 URN such as `urn:lti:role:ims/lis/Instructor`. */
-const asRoleName = (role: string): string => {
-  const separator = Math.max(role.lastIndexOf('#'), role.lastIndexOf('/'))
-  return separator === -1 ? role : role.slice(separator + 1)
-}
+/** LTI 1.1 role URN roots (LTI 1.1 implementation guide, appendix A; LIS vocabularies). */
+const LTI_11_ROLE_URN = {
+  context: 'urn:lti:role:ims/lis/',
+  institution: 'urn:lti:instrole:ims/lis/',
+  system: 'urn:lti:sysrole:ims/lis/'
+} as const
 
 /**
- * Whether a role URI grants the editor view, matching what the 1.1 launch grants to
- * `Instructor` and `Administrator`.
+ * Whether a role grants the editor view.
  *
- * A context (membership) role is what the launch is about; `membership/Instructor#…`
- * sub-roles such as teaching assistants edit as well. Institution and system
- * administrators edit because they administer the platform the course lives in. An
- * institution-level `Instructor` only says what the person is elsewhere, so it does
- * not. Short names and the 1.1 URNs are accepted for platforms that send those.
+ * A context (membership) role is what the launch is about: `Instructor`, its sub-roles
+ * (`membership/Instructor#TeachingAssistant` in 1.3, `role:ims/lis/Instructor/...` in
+ * 1.1) and the context `Administrator` edit. Institution and system administrators edit
+ * because they administer the platform the course lives in. An institution-level
+ * `Instructor` only says what the person is elsewhere, so it does not, in either
+ * vocabulary: someone who teaches another course and learns in this one stays a learner
+ * here. Bare `Instructor` and `Administrator` are accepted for platforms that send short
+ * names; every other URN or URI is not an editor.
  */
 export function isEditorRole(role: string): boolean {
   if (role === LTI_ROLE.instructor || role === LTI_ROLE.contextAdministrator) return true
@@ -136,6 +139,15 @@ export function isEditorRole(role: string): boolean {
   if (role === LTI_ROLE.institutionAdministrator || role === LTI_ROLE.systemAdministrator)
     return true
   if (role.startsWith('http://') || role.startsWith('https://')) return false
-  const name = asRoleName(role)
-  return name === 'Instructor' || name === 'Administrator'
+  if (role.startsWith(LTI_11_ROLE_URN.context)) {
+    const name = role.slice(LTI_11_ROLE_URN.context.length)
+    return name === 'Instructor' || name === 'Administrator' || name.startsWith('Instructor/')
+  }
+  if (role.startsWith('urn:')) {
+    return (
+      role === `${LTI_11_ROLE_URN.institution}Administrator` ||
+      role === `${LTI_11_ROLE_URN.system}Administrator`
+    )
+  }
+  return role === 'Instructor' || role === 'Administrator'
 }

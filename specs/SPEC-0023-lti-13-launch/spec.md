@@ -169,7 +169,11 @@ the system SHALL verify it with OAuth 1.0a HMAC-SHA1 against `LTI_CONSUMER_KEY` 
 `LTI_CONSUMER_SECRET`, SHALL refuse the launch with 503 `lti_11_not_configured` while
 either is unset unless `LTI_11_ALLOW_UNSIGNED` is `true` (local testing; one warning per
 unsigned launch), SHALL establish the session through FR-004, and SHALL log one line per
-launch saying that LTI 1.1 is deprecated.
+launch saying that LTI 1.1 is deprecated. A 1.1 editor is a context role
+`urn:lti:role:ims/lis/Instructor` (or an `Instructor/...` sub-role) or
+`urn:lti:role:ims/lis/Administrator`, an `urn:lti:instrole:` or `urn:lti:sysrole:`
+`Administrator`, or the bare name `Instructor` or `Administrator`; an institution or
+system `Instructor` stays a learner, as it does under FR-004.
 
 ### FR-006 — Tool configuration for registration
 
@@ -314,6 +318,7 @@ Then the same cookie and redirect as a 1.3 launch follow and the log carries one
 And a launch with a wrong signature is refused with lti_oauth_invalid
 And with either credential unset the launch is refused with 503 lti_11_not_configured, unless LTI_11_ALLOW_UNSIGNED is true
 And a 1.1 launch naming a 1.3 issuer as its consumer key resolves a 1.1 key, never the lti13: key of that platform
+And roles urn:lti:role:ims/lis/Learner,urn:lti:instrole:ims/lis/Instructor open the student view
 ```
 
 Tests: `lti/lti.controller.spec.ts`, `lti/lti-oauth.spec.ts`, `lti/lti.service.spec.ts`.
@@ -389,6 +394,7 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fix: 1.1 role URNs are read by namespace, so an institution `Instructor` no longer opens the editor (FR-005, AC-005). |
 | 2026-10-01 | Review fix: the state cookie is named per login and required while cookies are secure (`lti_state_cookie_missing`); only `COOKIE_INSECURE` stacks accept the login record alone (FR-002, FR-003, AC-002, AC-004). |
 | 2026-10-01 | Review fixes: the 1.1 launch is refused without consumer credentials unless `LTI_11_ALLOW_UNSIGNED` is set (FR-005, AC-005); 1.3 workspace keys carry the `lti13:` namespace with client and deployment id, and a 1.1 key never does (FR-004, SPEC-0004/FR-008). |
 | 2026-10-01 | Initial specification and implementation: `@haski/lti` claims, OIDC login, id_token verification and claim mapping; backend `LtiModule` with `/lti/config`, `/lti/login`, `/lti/launch`, `/lti/jwks`, the shared `LtiService.establishLaunch` and the deprecated `/lti/basiclogin`; `LTI_PLATFORMS`, `LTI_TOOL_PRIVATE_KEY`, `LTI_TOOL_URL`; tests under `packages/backend/src/lti/` and `config/lti-platforms.spec.ts`; Deep Linking, AGS, NRPS and Dynamic Registration deferred. |

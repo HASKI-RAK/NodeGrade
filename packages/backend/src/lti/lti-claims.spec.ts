@@ -31,7 +31,12 @@ describe('isEditorRole', () => {
     LTI_ROLE.institutionAdministrator,
     LTI_ROLE.systemAdministrator,
     'Instructor',
+    'Administrator',
+    'urn:lti:role:ims/lis/Instructor',
+    'urn:lti:role:ims/lis/Instructor/PrimaryInstructor',
     'urn:lti:role:ims/lis/Administrator',
+    'urn:lti:instrole:ims/lis/Administrator',
+    'urn:lti:sysrole:ims/lis/Administrator',
   ])('grants the editor to %s', (role) => {
     expect(isEditorRole(role)).toBe(true);
   });
@@ -43,6 +48,11 @@ describe('isEditorRole', () => {
     `${LTI_ROLE_VOCABULARY.institution}#Student`,
     'Learner',
     'urn:lti:role:ims/lis/Learner',
+    'urn:lti:role:ims/lis/Mentor',
+    'urn:lti:instrole:ims/lis/Instructor',
+    'urn:lti:instrole:ims/lis/Staff',
+    'urn:lti:sysrole:ims/lis/SysAdmin',
+    'urn:lti:sysrole:ims/lis/Instructor',
   ])('keeps %s on the student view', (role) => {
     expect(isEditorRole(role)).toBe(false);
   });
