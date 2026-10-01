@@ -17,11 +17,12 @@ import {
 /**
  * The conference happy path, protected on every pull request (SPEC-0008/FR-002, AC-002).
  *
- * It walks what a workshop actually does, in order: open the application root, enter the
- * handout code, receive a private copy of the WAIE template, change the rubric, run an
- * example answer, read the result, reload, and find the work still there. Every model call
- * goes to the deterministic worker, so the assertions are about NodeGrade rather than
- * about what a language model felt like saying (FR-006).
+ * It walks what a workshop actually does, in order: open the application root, follow the
+ * title bar to the workshop hub, enter the handout code, receive a private copy of the
+ * WAIE template, change the rubric, run an example answer, read the result, reload, and
+ * find the work still there. Every model call goes to the deterministic worker, so the
+ * assertions are about NodeGrade rather than about what a language model felt like
+ * saying (FR-006).
  */
 
 const EDITED_RUBRIC = [

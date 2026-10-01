@@ -67,9 +67,14 @@ export const joinWorkshop = async (page: Page, code = DEBUG_WORKSHOP_CODE) => {
   await waitForEditor(page)
 }
 
-/** The landing-page half: type the handout code and press Join (SPEC-0002/FR-001). */
+/**
+ * The landing-page half: open the application root, follow the title bar to the workshop
+ * hub, type the handout code and press Join (SPEC-0002/FR-001a, FR-008).
+ */
 export const joinFromLandingPage = async (page: Page, code = WAIE_WORKSHOP_CODE) => {
   await page.goto('/')
+  await page.getByRole('link', { name: 'Workshop', exact: true }).click()
+  await page.waitForURL(/\/workshop$/)
   await page.getByTestId('workshop-code').fill(code)
   await page.getByTestId('join-workshop').click()
   await waitForEditor(page)
