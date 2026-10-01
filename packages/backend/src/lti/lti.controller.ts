@@ -10,13 +10,13 @@ import {
   Res,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 import {
   crossSiteCookieOptions,
   sessionCookieOptions,
 } from '../config/cookies.js';
-import { LTI_COOKIE_NAME } from './lti-cookie.js';
+import { LTI_COOKIE_NAME, ltiStateCookieName } from './lti-cookie.js';
 import { LtiLaunchService } from './lti-launch.service.js';
 import { LOGIN_STATE_TTL_MS } from './lti-login-state.store.js';
 import { unsignedBasicLaunchAllowed, verifyLtiOAuth } from './lti-oauth.js';
@@ -24,8 +24,6 @@ import { ltiToolConfiguration, toolBaseUrl } from './lti-tool-config.js';
 import { LtiToolKeys } from './lti-tool-keys.js';
 import { LtiService, type EstablishedLaunch } from './lti.service.js';
 import { LtiBasicLaunchValidationPipe } from './pipes/lti-validation.pipe.js';
-
-export const LTI_STATE_COOKIE_NAME = 'lti_nodegrade_state';
 
 /** The launch cookie outlives a lesson, not a day. */
 const LAUNCH_COOKIE_MAX_AGE_MS = 5 * 60 * 60 * 1000;
@@ -87,12 +85,20 @@ export class LtiController {
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
+    const cookieName =
+      typeof body.state === 'string'
+        ? ltiStateCookieName(body.state)
+        : undefined;
     const launch = await this.launches.launch({
       idToken: body.id_token,
       state: body.state,
-      stateCookie: cookieOf(request, LTI_STATE_COOKIE_NAME),
+      stateCookie:
+        cookieName === undefined ? undefined : cookieOf(request, cookieName),
     });
-    response.clearCookie(LTI_STATE_COOKIE_NAME, { path: '/lti' });
+    // The login is answered, so its cookie has nothing left to bind.
+    if (cookieName !== undefined) {
+      response.clearCookie(cookieName, this.stateCookieOptions());
+    }
     this.finish(response, launch);
   }
 
@@ -151,11 +157,20 @@ export class LtiController {
       toolBaseUrl(request),
     );
     response.cookie(
-      LTI_STATE_COOKIE_NAME,
+      ltiStateCookieName(state),
       state,
-      crossSiteCookieOptions(LOGIN_STATE_TTL_MS, '/lti'),
+      this.stateCookieOptions(),
     );
     response.redirect(302, redirectUrl);
+  }
+
+  /**
+   * The state cookie travels with the platform's cross-site form post, so it is
+   * SameSite=None (Secure) and lives only as long as the login it binds. Clearing a
+   * cookie needs the same attributes, which is why both calls share them.
+   */
+  private stateCookieOptions(): CookieOptions {
+    return crossSiteCookieOptions(LOGIN_STATE_TTL_MS, '/lti');
   }
 
   /** Both launch kinds end here: the same cookie, the same redirect. */

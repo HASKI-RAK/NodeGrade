@@ -3,6 +3,17 @@ import { LtiCookie } from '../utils/LtiCookie.js';
 
 export const LTI_COOKIE_NAME = 'lti_nodegrade_cookie';
 
+/**
+ * The OIDC state cookie is named per login (SPEC-0023/FR-002): a person who opens two
+ * course links at once has two logins in flight, and one shared name would let the
+ * second login overwrite the first one's state before its launch arrives. The state is
+ * base64url, so it is a valid cookie-name token.
+ */
+export const LTI_STATE_COOKIE_PREFIX = 'lti_nodegrade_state_';
+
+export const ltiStateCookieName = (state: string): string =>
+  `${LTI_STATE_COOKIE_PREFIX}${state}`;
+
 /** Guards against a hostile client sending a multi-megabyte cookie value. */
 const MAX_COOKIE_LENGTH = 10000;
 

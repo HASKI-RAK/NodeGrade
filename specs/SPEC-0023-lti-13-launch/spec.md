@@ -48,7 +48,8 @@ Registration are named as the next steps on the same key pair.
 
 - Platform registrations from configuration (`LTI_PLATFORMS`), validated at startup.
 - OIDC third-party initiated login at `/lti/login` (GET and POST) with a server-side,
-  single-use login record and a cross-site state cookie.
+  single-use login record and a per-login cross-site state cookie that binds the launch
+  to the browser that started it.
 - The id_token launch at `POST /lti/launch`: signature, issuer, audience, expiry, nonce,
   message type, version and deployment checks; claim mapping to NodeGrade's launch input.
 - One shared launch tail for 1.1 and 1.3: workspace by `ltiKey`, first workflow, cookie,
@@ -63,7 +64,8 @@ Registration are named as the next steps on the same key pair.
 - Deep Linking and Dynamic Registration (deferred, FR-009 and FR-012).
 - Persisting platform registrations in the database or editing them in the admin UI.
 - The LTI Platform Storage (postMessage) fallback for browsers that block the state
-  cookie in an iframe; the server-side login record covers the launch today.
+  cookie in an iframe; launches open in a new window, where the cookie is first-party
+  (docs/lti.md).
 
 ## Actors
 
@@ -123,7 +125,8 @@ the system SHALL require `iss` and `login_hint`, SHALL resolve the registration 
 and, when present, `client_id`, SHALL refuse an unknown issuer or client, an ambiguous
 issuer without `client_id`, and an `lti_deployment_id` the registration does not list,
 SHALL record a login with a fresh `state` and `nonce` for ten minutes, SHALL set the
-state in a cross-site cookie, and SHALL redirect to the platform's authorization endpoint
+state in a cross-site cookie named for that login (`lti_nodegrade_state_<state>`, path
+`/lti`, the same ten minutes), and SHALL redirect to the platform's authorization endpoint
 with `scope=openid`, `response_type=id_token`, `response_mode=form_post`, `prompt=none`,
 `client_id`, `redirect_uri` (the launch URL), `login_hint`, `state`, `nonce` and, when
 given, `lti_message_hint`.
@@ -132,7 +135,11 @@ given, `lti_message_hint`.
 
 WHEN a platform posts `id_token` and `state` to `/lti/launch`,
 the system SHALL consume the login record for `state` exactly once, SHALL require the
-state cookie to match when the browser sent one, SHALL verify the token's signature with
+cookie named for `state` to be present and equal to it while cookies are secure (401
+`lti_state_cookie_missing` or `lti_state_mismatch`, the message telling the person to
+start the tool from the course again in its own window), SHALL accept the record alone
+only when `COOKIE_INSECURE` is set, logging a warning, SHALL clear that cookie on the
+launch, SHALL verify the token's signature with
 the key its `kid` names in the platform's key set (RS256 family only, refreshing the key
 set once for an unknown `kid`), and SHALL require `iss` to equal the registration's
 issuer, `aud` to contain the client id with `azp` equal to it whenever several audiences
@@ -259,7 +266,7 @@ Traces to: FR-002
 Given a registered platform
 When it posts iss, login_hint, lti_message_hint and client_id to /lti/login
 Then the browser is redirected to the platform's authorization endpoint with scope=openid, response_type=id_token, response_mode=form_post, prompt=none, client_id, redirect_uri, login_hint, state, nonce and lti_message_hint
-And a state cookie is set
+And a state cookie named for that login is set on path /lti, so a second login in another tab keeps its own
 And an unknown issuer, an unknown client, an ambiguous issuer without client_id, or an unlisted deployment id is refused
 ```
 
@@ -289,6 +296,9 @@ When the id_token has a wrong issuer, a wrong audience, several audiences withou
 Then the launch is refused with a code naming the check
 And posting the same id_token and state a second time is refused as an unknown state
 And a state the server did not issue is refused
+And a launch without its state cookie is refused with lti_state_cookie_missing while cookies are secure, and its login record is spent
+And a launch whose state cookie names another login is refused with lti_state_mismatch
+And with COOKIE_INSECURE set, a launch without the cookie passes on the login record alone and the log carries a warning
 ```
 
 Tests: `lti/lti-launch.service.spec.ts` ("launch"), `lti/lti-login-state.store.spec.ts`.
@@ -323,8 +333,10 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 ## Edge cases
 
-- The browser sends no state cookie (third-party cookies blocked in the LMS iframe) → the
-  server-side login record alone decides; the cookie is checked only when present.
+- The browser sends no state cookie (the launch runs in an LMS iframe, where the browser
+  withholds third-party cookies) → refused with `lti_state_cookie_missing`; the person
+  starts the tool again from the course, which opens it in its own window. Only a
+  plain-HTTP stack with `COOKIE_INSECURE` accepts the login record alone.
 - The platform rotated its signing key → the key set is fetched again once for the unknown
   `kid`; a key still unknown is refused.
 - The platform launches without a context claim → the workspace key carries an empty
@@ -341,6 +353,8 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 - The tool verifies launches; it never signs one.
 - A login record is used once; its nonce dies with it.
+- A launch belongs to the browser that started its login: the state cookie says so, and
+  only an insecure local stack may do without it.
 - A registration lives in the deployment configuration, not in a request.
 
 ## Constraints
@@ -375,5 +389,6 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fix: the state cookie is named per login and required while cookies are secure (`lti_state_cookie_missing`); only `COOKIE_INSECURE` stacks accept the login record alone (FR-002, FR-003, AC-002, AC-004). |
 | 2026-10-01 | Review fixes: the 1.1 launch is refused without consumer credentials unless `LTI_11_ALLOW_UNSIGNED` is set (FR-005, AC-005); 1.3 workspace keys carry the `lti13:` namespace with client and deployment id, and a 1.1 key never does (FR-004, SPEC-0004/FR-008). |
 | 2026-10-01 | Initial specification and implementation: `@haski/lti` claims, OIDC login, id_token verification and claim mapping; backend `LtiModule` with `/lti/config`, `/lti/login`, `/lti/launch`, `/lti/jwks`, the shared `LtiService.establishLaunch` and the deprecated `/lti/basiclogin`; `LTI_PLATFORMS`, `LTI_TOOL_PRIVATE_KEY`, `LTI_TOOL_URL`; tests under `packages/backend/src/lti/` and `config/lti-platforms.spec.ts`; Deep Linking, AGS, NRPS and Dynamic Registration deferred. |

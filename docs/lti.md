@@ -94,13 +94,13 @@ sequenceDiagram
 
     LMS->>B: resource link clicked
     B->>T: GET or POST /lti/login (iss, login_hint, client_id?, lti_deployment_id?, lti_message_hint?)
-    T->>T: find registration, issue state + nonce (10 min, single use), set state cookie
+    T->>T: find registration, issue state + nonce (10 min, single use), set per-login state cookie
     T-->>B: 302 authorization endpoint?scope=openid&response_type=id_token&response_mode=form_post&prompt=none&client_id&redirect_uri&login_hint&state&nonce&lti_message_hint
     B->>LMS: authentication request
     LMS->>LMS: user already signed in; sign id_token with platform private key
     LMS-->>B: auto-submitting form
     B->>T: POST /lti/launch (id_token, state)
-    T->>T: consume state, fetch platform JWKS (cached), verify signature, iss, aud/azp, exp, iat, nonce, message type, version, deployment
+    T->>T: consume state, require its cookie, fetch platform JWKS (cached), verify signature, iss, aud/azp, exp, iat, nonce, message type, version, deployment
     T->>T: workspace by issuer|context|resource link, first workflow, launch cookie
     T-->>B: 302 FRONTEND_URL/editor/:id?lti=1 or /student/:id?lti=1
     B->>F: editor or student view with lti_nodegrade_cookie
@@ -111,10 +111,14 @@ Where the pieces live:
 - `lti-platform.registry.ts`: the registrations from `LTI_PLATFORMS`
   (`config/lti-platforms.ts` parses and validates them at startup).
 - `lti-login-state.store.ts`: the pending logins, in memory, ten minutes, consumed once.
-  The launch is a cross-site form post, which a `SameSite=Lax` cookie does not accompany
-  and which some browsers strip of third-party cookies inside an LMS iframe, so the
-  server-side record is the source of truth; the state cookie (`lti_nodegrade_state`,
-  `SameSite=None; Secure` when cookies are secure) is checked when the browser sends it.
+  The record proves the launch answers a login this server started; the state cookie
+  (`lti_nodegrade_state_<state>`, one per login so parallel logins keep their own,
+  `SameSite=None; Secure`, path `/lti`, cleared on the launch) proves it arrives in the
+  browser that started that login. Without the cookie someone could finish a login of
+  their own inside another person's browser and plant their identity there, so a launch
+  without it is refused (`lti_state_cookie_missing`). Only a plain-HTTP stack with
+  `COOKIE_INSECURE` accepts the record alone, because there the cookie falls back to
+  `SameSite=Lax` and a cross-site post does not carry it; the log says so per launch.
 - `jwks-fetcher.ts`: the platform key set with a ten-minute cache and one forced refresh
   when a token names an unknown `kid` (key rotation).
 - `lti-launch.service.ts`: the login and the launch, refusing with `{ code, message }`
@@ -225,7 +229,7 @@ registration and Canvas always sends `client_id` on the login.
 | `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. While either is unset, `POST /lti/basiclogin` answers 503 `lti_11_not_configured`. |
 | `LTI_11_ALLOW_UNSIGNED` | `true` accepts unsigned 1.1 launches while the credentials are unset, for a local test platform without a secret. Whoever posts the form then picks the course, the role and the person, and every launch logs a warning. Never set it on a deployment. |
 | `FRONTEND_URL` | Where both launches redirect (`/editor/:id?lti=1`, `/student/:id?lti=1`). |
-| `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, and the state cookie falls back to `SameSite=Lax`; the server-side login record carries the launch. |
+| `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, the state cookie falls back to `SameSite=Lax` and does not arrive on the cross-site launch post; the launch then passes on the server-side login record alone, with a warning per launch. Never set it on a deployment. |
 
 `stack.env.example`, `docker-compose.yml`, `docker-compose.prod.yml` and
 `docker-compose.debug.yml` pass them through like `FRONTEND_URL`.
