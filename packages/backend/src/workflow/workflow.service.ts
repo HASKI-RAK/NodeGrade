@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -151,17 +152,50 @@ export class WorkflowService {
   }
 
   /**
-   * "Use template" (SPEC-0003/FR-006, FR-018).
+   * "Use template" from the gallery (SPEC-0003/FR-006): resolves a published workflow
+   * template by slug and instantiates its current revision.
    *
-   * The copy is the user's from the moment it exists; the template is untouched, which
-   * is FR-007 by construction rather than by a check. The source revision id is recorded
-   * because reset has to reproduce *that* revision later, even after the template has
-   * moved on (AC-002) or been unpublished or deleted (AC-014a, AC-017).
+   * publishedOnly is true because this is the participant-facing path: an unpublished
+   * template must not be reachable by guessing its slug (FR-017). A workshop entry
+   * resolves its own revision — pinned or newest — and calls createFromTemplate directly
+   * (SPEC-0022/FR-002, FR-003), so it is unaffected by the template being unpublished
+   * later (FR-017a). Only workflow templates can become a workflow; a block is a
+   * subgraph the palette inserts, not something to open on its own.
    */
+  async createFromTemplateSlug(
+    workspace: ResolvedWorkspace,
+    templateSlug: string,
+    nameOverride?: string,
+  ): Promise<WorkflowDetail> {
+    const template = await this.templates.findBySlug(templateSlug, true);
+    if (template.kind !== 'WORKFLOW') {
+      throw new BadRequestException({
+        code: 'template_not_workflow',
+        message: 'Only a workflow template can be opened as a workflow.',
+      });
+    }
+    const revision = await this.templates.getCurrentRevision(template.id);
+
+    return this.createFromTemplate(
+      workspace,
+      {
+        templateId: template.id,
+        revisionId: revision.id,
+        revision: revision.revision,
+        name: revision.name,
+        content: revision.content,
+        contentSchema: revision.contentSchema,
+      },
+      nameOverride,
+    );
+  }
+
   /**
    * Copies a template revision into a workspace, recording where it came from (SPEC-0003/
-   * FR-018). Participants reach it only by starting an entry of their workshop
-   * (SPEC-0022/FR-014); which revision that is was decided by the entry.
+   * FR-018). The copy is the user's from the moment it exists; the template is untouched,
+   * which is FR-007 by construction rather than by a check. The source revision id is
+   * recorded because reset has to reproduce *that* revision later, even after the
+   * template has moved on (AC-002) or been unpublished or deleted (AC-014a, AC-017).
    */
   async createFromTemplate(
     workspace: ResolvedWorkspace,

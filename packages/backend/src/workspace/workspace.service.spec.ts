@@ -33,6 +33,29 @@ describe('WorkspaceService', () => {
     service = module.get(WorkspaceService);
   });
 
+  describe('createBrowser', () => {
+    it('stores only the hash and returns the token once (SPEC-0004/FR-003)', async () => {
+      workspace.create.mockImplementation(({ data }) =>
+        Promise.resolve({
+          id: 'ws1',
+          type: data.type,
+          label: data.label,
+          workshopId: null,
+          createdAt: new Date(),
+        }),
+      );
+
+      const created = await service.createBrowser('My workspace');
+
+      const stored = workspace.create.mock.calls[0][0].data;
+      expect(stored.type).toBe('BROWSER');
+      expect(stored.workshopId).toBeNull();
+      expect(stored.tokenHash).toBe(hashWorkspaceToken(created.token));
+      expect(JSON.stringify(stored)).not.toContain(created.token);
+      expect(created.label).toBe('My workspace');
+    });
+  });
+
   describe('createWorkshop', () => {
     it('stores only the hash and returns the token once', async () => {
       workspace.create.mockImplementation(({ data }) =>
@@ -80,18 +103,26 @@ describe('WorkspaceService', () => {
       );
     });
 
-    it('rejects a browser workspace token (SPEC-0022/FR-013)', async () => {
+    it('resolves a browser workspace token (SPEC-0004/FR-003, ADR-0011)', async () => {
       workspace.findUnique.mockResolvedValue({
         id: 'ws1',
         type: 'BROWSER',
         label: null,
         workshopId: null,
-        lastActiveAt: new Date(),
+        lastActiveAt: new Date('2026-09-25T09:00:00.000Z'),
         workshop: null,
       });
 
-      await expect(service.resolveByToken(VALID_TOKEN)).resolves.toBeNull();
-      expect(workspace.updateMany).not.toHaveBeenCalled();
+      await expect(
+        service.resolveByToken(VALID_TOKEN, new Date('2026-09-25T10:00:00.000Z')),
+      ).resolves.toEqual({
+        id: 'ws1',
+        type: 'BROWSER',
+        label: null,
+        workshopId: null,
+        workshop: null,
+      });
+      expect(workspace.updateMany).toHaveBeenCalled();
     });
 
     it('returns null for an unknown token', async () => {
