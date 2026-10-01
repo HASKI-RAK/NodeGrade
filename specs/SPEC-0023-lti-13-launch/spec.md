@@ -182,7 +182,12 @@ system `Instructor` stays a learner, as it does under FR-004.
 WHEN `GET /lti/config` is requested,
 the system SHALL answer with the login, launch (also the redirect URI) and key set URLs
 derived from `LTI_TOOL_URL` or the request origin, the title, the LTI version and the
-message type, so an administrator can copy them into Moodle or Canvas.
+message type, so an administrator can copy them into Moodle or Canvas. WHEN it is
+requested with `?format=canvas`, the system SHALL answer the JSON Canvas's developer key
+form imports instead: `title`, `description`, `oidc_initiation_url`, `target_link_uri`,
+`public_jwk_url`, empty `scopes`, `privacy_level` `public`, `custom_fields` with
+`activityname`, and a `canvas.instructure.com` extension with one `course_navigation`
+placement whose `windowTarget` is `_blank`.
 
 ### FR-007 — Tool key set
 
@@ -337,10 +342,12 @@ Traces to: FR-006, FR-007
 Given the backend is reached at https://grade.example.org
 When /lti/config is requested
 Then it names https://grade.example.org/lti/login, /lti/launch and /lti/jwks
+And /lti/config?format=canvas carries privacy_level public, the activityname custom field and one course_navigation placement opening in a new tab
 And /lti/jwks answers the RSA public key of LTI_TOOL_PRIVATE_KEY, or an empty key set without one
 ```
 
-Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
+Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti-tool-config.spec.ts`,
+`lti/lti.controller.spec.ts`.
 
 ## Edge cases
 
@@ -402,6 +409,7 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fix: `GET /lti/config?format=canvas` answers the JSON Canvas's developer key form imports, with one new-tab placement (FR-006, AC-006). |
 | 2026-10-01 | Review fix: `/lti/login` is throttled per address (`LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS`) and a forced key set refresh is honoured at most once a minute per key set (FR-002, FR-003, AC-002). |
 | 2026-10-01 | Review fix: 1.1 role URNs are read by namespace, so an institution `Instructor` no longer opens the editor (FR-005, AC-005). |
 | 2026-10-01 | Review fix: the state cookie is named per login and required while cookies are secure (`lti_state_cookie_missing`); only `COOKIE_INSECURE` stacks accept the login record alone (FR-002, FR-003, AC-002, AC-004). |

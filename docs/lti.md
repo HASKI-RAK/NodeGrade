@@ -73,7 +73,7 @@ point in time (`exp`).
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/lti/config` | GET | Tool configuration JSON for registration: login, launch and JWKS URLs, title, version, message type |
+| `/lti/config` | GET | Tool configuration JSON for registration: login, launch and JWKS URLs, title, version, message type. `?format=canvas` answers the JSON Canvas's developer key form imports |
 | `/lti/login` | GET, POST | OIDC third-party initiated login; redirects to the platform's authorization endpoint. Throttled per address (60 a minute, `LTI_LOGIN_MAX`) |
 | `/lti/launch` | POST | The platform posts `id_token` and `state`; verified, then the session is established |
 | `/lti/jwks` | GET | The tool's public key set from `LTI_TOOL_PRIVATE_KEY`; `{ "keys": [] }` when unset |
@@ -195,8 +195,11 @@ Save, then open *View configuration details* on the tool's card and copy into
 
 ### Canvas
 
-Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*, method *Manual Entry* (or
-*Paste JSON* with the fields `/lti/config` returns):
+Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*. With method *Paste JSON*, paste
+the answer of `GET https://<host>/lti/config?format=canvas`: Canvas's own configuration
+schema, with the three URLs, `privacy_level: public`, the `activityname` custom field and
+one Course Navigation placement that opens NodeGrade in a new tab. With method *Manual
+Entry*, fill in:
 
 | Canvas field | Value |
 |---|---|
@@ -206,7 +209,9 @@ Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*, method *Manual E
 | JWK Method | Public JWK URL → `https://<host>/lti/jwks` |
 | Redirect URIs | `https://<host>/lti/launch` |
 | LTI Advantage Services | none needed today |
+| Custom Fields | optional, e.g. `activityname=default` |
 | Privacy Level | Public, so name and email are sent |
+| Placements | Course Navigation or Assignment Selection, each with *Open in a new tab* (`windowTarget: _blank`); see "Launches open in a new window" below |
 
 Turn the key *ON*, copy its Client ID, then Settings → Apps → *+ App* → Configuration
 Type *By Client ID* in the account or course; the Deployment ID appears on the installed

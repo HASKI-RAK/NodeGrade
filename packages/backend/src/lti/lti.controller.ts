@@ -23,7 +23,11 @@ import { LtiLaunchService } from './lti-launch.service.js';
 import { LOGIN_STATE_TTL_MS } from './lti-login-state.store.js';
 import { LtiLoginThrottle } from './lti-login-throttle.js';
 import { unsignedBasicLaunchAllowed, verifyLtiOAuth } from './lti-oauth.js';
-import { ltiToolConfiguration, toolBaseUrl } from './lti-tool-config.js';
+import {
+  canvasToolConfiguration,
+  ltiToolConfiguration,
+  toolBaseUrl,
+} from './lti-tool-config.js';
 import { LtiToolKeys } from './lti-tool-keys.js';
 import { LtiService, type EstablishedLaunch } from './lti.service.js';
 import { LtiBasicLaunchValidationPipe } from './pipes/lti-validation.pipe.js';
@@ -51,10 +55,16 @@ export class LtiController {
     private readonly loginThrottle: LtiLoginThrottle,
   ) {}
 
-  /** What an admin pastes into Moodle or Canvas (FR-006). */
+  /**
+   * What an admin copies into Moodle or Canvas (FR-006); `?format=canvas` answers the
+   * JSON that Canvas's "Paste JSON" developer key form imports.
+   */
   @Get('config')
-  config(@Req() request: Request) {
-    return ltiToolConfiguration(toolBaseUrl(request));
+  config(@Req() request: Request, @Query('format') format?: string) {
+    const baseUrl = toolBaseUrl(request);
+    return format === 'canvas'
+      ? canvasToolConfiguration(baseUrl)
+      : ltiToolConfiguration(baseUrl);
   }
 
   /** The tool's public keys; empty until LTI_TOOL_PRIVATE_KEY is set (FR-007). */

@@ -90,6 +90,26 @@ describe('LtiController', () => {
     });
   });
 
+  it('answers the Canvas JSON for ?format=canvas, with a new-tab placement (FR-006)', () => {
+    const { controller, request } = build();
+    delete process.env.LTI_TOOL_URL;
+
+    expect(controller.config(request(), 'canvas')).toMatchObject({
+      oidc_initiation_url: 'https://grade.example.org/lti/login',
+      privacy_level: 'public',
+      custom_fields: { activityname: 'default' },
+      extensions: [
+        expect.objectContaining({
+          platform: 'canvas.instructure.com',
+          settings: expect.objectContaining({
+            placements: [expect.objectContaining({ placement: 'course_navigation', windowTarget: '_blank' })],
+          }),
+        }),
+      ],
+    });
+    expect(controller.config(request(), 'other')).toMatchObject({ lti_version: '1.3.0' });
+  });
+
   it('serves the tool key set (FR-007)', () => {
     const { controller } = build();
 
