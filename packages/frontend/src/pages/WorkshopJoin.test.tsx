@@ -100,7 +100,7 @@ const renderJoin = (path: string) => {
     [
       { path: '/workshop/:code', element: <WorkshopJoin /> },
       { path: '/editor/:workflowId', element: <div data-testid="probe" /> },
-      { path: '/', element: <div data-testid="start" /> }
+      { path: '/workshop', element: <div data-testid="hub" /> }
     ],
     { initialEntries: [path] }
   )
@@ -228,8 +228,8 @@ describe('workshop deep link', () => {
     ).toBeVisible()
     expect(router.state.location.pathname).toBe('/workshop/CLOSED01')
 
-    await userEvent.click(screen.getByRole('link', { name: 'Back to start' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    await userEvent.click(screen.getByRole('link', { name: 'Back to workshop entry' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/workshop'))
   })
 
   it('does not start a participant into a workshop that fails preflight (AC-007)', async () => {

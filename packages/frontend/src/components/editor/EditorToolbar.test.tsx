@@ -236,4 +236,56 @@ describe('EditorToolbar', () => {
     expect(screen.queryByText('Reset to source template…')).toBeNull()
     expect(screen.getByText('Export workflow')).toBeVisible()
   })
+
+  it.each([
+    ['a workshop session', { onWorkshop: vi.fn() }, 'Workshop', 'Home'],
+    ['a browser session', { onHome: vi.fn() }, 'Home', 'Workshop'],
+    ['an LTI launch', {}, null, null]
+  ])(
+    'offers the way back that fits %s',
+    async (_label, handlers, shown: string | null, hidden: string | null) => {
+      const user = userEvent.setup()
+      const action = vi.fn()
+      render(
+        <EditorToolbar
+          workflowName="Demo"
+          status="saved"
+          student={false}
+          canSaveAs
+          canReset={false}
+          ltiInstructor={false}
+          developerTools={false}
+          connectionStatus="Connected"
+          onAdd={action}
+          onRun={action}
+          onPreview={action}
+          onSaveAs={async () => undefined}
+          onHistory={action}
+          onImport={async () => undefined}
+          onExport={action}
+          onReset={async () => undefined}
+          onDeveloperTools={action}
+          onPublish={async () => undefined}
+          onRetry={action}
+          onReloadLatest={action}
+          connectionInfo={{
+            apiOrigin: 'http://api',
+            wsOrigin: 'ws://api',
+            workspaceType: 'BROWSER',
+            workflowId: 'wf-1'
+          }}
+          {...handlers}
+        />
+      )
+
+      if (hidden) expect(screen.queryByRole('button', { name: hidden })).toBeNull()
+      if (shown) {
+        await user.click(screen.getByRole('button', { name: shown }))
+        expect(Object.values(handlers)[0]).toHaveBeenCalledOnce()
+      } else {
+        expect(screen.queryByRole('button', { name: 'Home' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Workshop' })).toBeNull()
+      }
+    }
+  )
 })

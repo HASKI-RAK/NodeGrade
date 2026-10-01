@@ -53,6 +53,7 @@ export const EditorToolbar = ({
   connectionStatus,
   onAdd,
   onWorkshop,
+  onHome,
   onRun,
   onPreview,
   onSaveAs,
@@ -77,8 +78,10 @@ export const EditorToolbar = ({
   developerTools: boolean
   connectionStatus: string
   onAdd: () => void
-  /** Back to the participant's workshop overview; absent outside a workshop. */
+  /** Back to the participant's workshop overview; present for workshop sessions only. */
   onWorkshop?: () => void
+  /** Back to the start page; present for the browser's own workspace only. */
+  onHome?: () => void
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
@@ -127,6 +130,11 @@ export const EditorToolbar = ({
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
               Workshop
+            </Button>
+          )}
+          {!student && onHome && (
+            <Button onClick={onHome} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+              Home
             </Button>
           )}
           {!readOnly && (

@@ -180,7 +180,7 @@ export const Editor = () => {
   useEffect(() => {
     if (!student)
       void api
-        .templates(token)
+        .templates(token, 'BLOCK')
         .then(setBlocks)
         .catch(() => setBlocks([]))
   }, [student, token])
@@ -554,8 +554,9 @@ export const Editor = () => {
     [canvas, history, lgraph, token]
   )
 
-  // A participant reaches the editor through their workshop; without its session there is
-  // nothing this browser may open (SPEC-0022/FR-013).
+  // Outside an LTI launch the editor opens a workflow with the active session's token —
+  // the browser's own workspace or a joined workshop. Without one there is nothing this
+  // browser may open (SPEC-0002/FR-005, SPEC-0022/FR-013).
   if (!ltiMode && !session) return <Navigate to="/" replace />
   if (loadError)
     return (
@@ -601,10 +602,11 @@ export const Editor = () => {
           if (mobile && !paletteOpen) setRailOpen(false)
         }}
         onWorkshop={
-          session?.workshop
+          session?.type === 'WORKSHOP' && session.workshop
             ? () => navigate(`/workshop/${session.workshop?.code ?? ''}`)
             : undefined
         }
+        onHome={session?.type === 'BROWSER' ? () => navigate('/') : undefined}
         onRun={run}
         onPreview={showPreview}
         onSaveAs={saveAs}
