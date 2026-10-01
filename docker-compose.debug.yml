@@ -92,6 +92,11 @@ services:
       LTI_PLATFORMS: ${LTI_PLATFORMS:-}
       LTI_TOOL_PRIVATE_KEY: ${LTI_TOOL_PRIVATE_KEY:-}
       LTI_TOOL_URL: ${LTI_TOOL_URL:-http://localhost:${NODEGRADE_DEBUG_BACKEND_PORT:-15000}}
+      # LTI 1.1 basic launch: refused while the consumer credentials are unset, unless
+      # LTI_11_ALLOW_UNSIGNED=true accepts unsigned posts for a local test platform.
+      LTI_CONSUMER_KEY: ${LTI_CONSUMER_KEY:-}
+      LTI_CONSUMER_SECRET: ${LTI_CONSUMER_SECRET:-}
+      LTI_11_ALLOW_UNSIGNED: ${LTI_11_ALLOW_UNSIGNED:-}
     ports:
       - '${NODEGRADE_DEBUG_BACKEND_PORT:-15000}:5000'
       - '${NODEGRADE_DEBUG_INSPECTOR_PORT:-19229}:9229'

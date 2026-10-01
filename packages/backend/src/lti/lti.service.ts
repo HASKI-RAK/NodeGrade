@@ -10,8 +10,20 @@ type Launch = LtiBasicLaunchRequest & { oauth_consumer_key?: string };
 const EMPTY_GRAPH =
   '{"last_node_id":0,"last_link_id":0,"nodes":[],"links":[],"groups":[],"config":{},"extra":{},"version":0.4}';
 
+/**
+ * The namespace of a 1.3 workspace key (SPEC-0004/FR-008). A 1.1 key never starts with
+ * it, so the two launch kinds can never address each other's workspaces.
+ */
+export const LTI13_KEY_PREFIX = 'lti13:';
+
+/** How a launch was verified; it decides the namespace of its workspace key. */
+export type LaunchProtocol =
+  | { version: '1.1' }
+  | { version: '1.3'; clientId: string; deploymentId: string };
+
 /** What a launch of either LTI version establishes a session from. */
 export type LaunchInput = {
+  protocol: LaunchProtocol;
   /** The platform: the OIDC `iss` for 1.3, the OAuth consumer key for 1.1. */
   issuer: string;
   contextId: string;
@@ -38,6 +50,39 @@ export type EstablishedLaunch = {
 };
 
 /**
+ * The workspace key of a launch (SPEC-0004/FR-008).
+ *
+ * A 1.1 key is `consumer key|context|resource link`, as it always was, so existing
+ * course workspaces keep resolving. A 1.3 key lives in its own namespace and names the
+ * client and the deployment as well, because a resource link id is unique within a
+ * deployment and nowhere wider. A 1.1 post whose consumer key or platform guid begins
+ * with the 1.3 namespace is refused rather than keyed, so even an unsigned 1.1 launch
+ * (LTI_11_ALLOW_UNSIGNED) cannot reach a 1.3 workspace. A platform migrated from 1.1
+ * announces its old consumer key in the `lti1p1` claim; honouring that claim is how a
+ * migrated course would map onto its 1.1 workspace (SPEC-0023 roadmap).
+ */
+export function ltiWorkspaceKey(
+  input: Pick<
+    LaunchInput,
+    'protocol' | 'issuer' | 'contextId' | 'resourceLinkId'
+  >,
+): string {
+  const link = [input.contextId, input.resourceLinkId];
+  if (input.protocol.version === '1.3') {
+    const { clientId, deploymentId } = input.protocol;
+    return `${LTI13_KEY_PREFIX}${[input.issuer, clientId, deploymentId, ...link].join('|')}`;
+  }
+  const key = [input.issuer, ...link].join('|');
+  if (key.startsWith(LTI13_KEY_PREFIX)) {
+    throw new BadRequestException({
+      code: 'lti_launch_invalid',
+      message: 'The consumer key uses a prefix reserved for LTI 1.3 launches.',
+    });
+  }
+  return key;
+}
+
+/**
  * Turns a verified launch into a course workspace and a workflow to open
  * (SPEC-0004/FR-008, SPEC-0023/FR-004). The 1.1 basic launch and the 1.3 launch
  * differ only in how they are verified and read; from here on they are one path.
@@ -58,6 +103,7 @@ export class LtiService {
 
     const roles = payload.roles.split(',').map((role) => role.trim());
     return this.establishLaunch({
+      protocol: { version: '1.1' },
       issuer: payload.oauth_consumer_key || payload.tool_consumer_instance_guid,
       contextId: payload.context_id,
       contextTitle: payload.context_title,
@@ -74,17 +120,15 @@ export class LtiService {
   }
 
   /**
-   * The shared tail of every launch: the `LTI` workspace keyed by
-   * issuer|context|resource link (SPEC-0004/FR-008), its first workflow (seeded from the
-   * legacy graph named by the activity, or empty), and where to send the browser.
+   * The shared tail of every launch: the `LTI` workspace keyed by `ltiWorkspaceKey`
+   * (SPEC-0004/FR-008), its first workflow (seeded from the legacy graph named by the
+   * activity, or empty), and where to send the browser.
    */
   async establishLaunch(input: LaunchInput): Promise<EstablishedLaunch> {
     const frontendUrl = this.frontendUrl();
     const activityName = this.activityName(input.activityName);
 
-    const ltiKey = [input.issuer, input.contextId, input.resourceLinkId].join(
-      '|',
-    );
+    const ltiKey = ltiWorkspaceKey(input);
     const workspace = await this.prisma.workspace.upsert({
       where: { ltiKey },
       update: { label: input.contextTitle },

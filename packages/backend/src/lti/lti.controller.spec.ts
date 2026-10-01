@@ -6,10 +6,12 @@ import type { LtiToolKeys } from './lti-tool-keys.js';
 import { LTI_STATE_COOKIE_NAME, LtiController } from './lti.controller.js';
 import type { EstablishedLaunch, LtiService } from './lti.service.js';
 
+const LTI_KEY = 'lti13:https://moodle.example.org|abc123|1|course-1|link-1';
+
 const launch: EstablishedLaunch = {
   redirectUrl: 'https://grade.example.org/editor/wf-1?lti=1',
   isEditor: true,
-  ltiKey: 'https://moodle.example.org|course-1|link-1',
+  ltiKey: LTI_KEY,
   workflowId: 'wf-1',
   cookie: {
     user_id: 'user-7',
@@ -19,7 +21,7 @@ const launch: EstablishedLaunch = {
     lis_person_name_full: 'Ada Lovelace',
     tool_consumer_instance_name: 'Example University',
     lis_person_contact_email_primary: 'ada@example.test',
-    ltiKey: 'https://moodle.example.org|course-1|link-1',
+    ltiKey: LTI_KEY,
     workflowId: 'wf-1',
   },
 };
@@ -28,12 +30,14 @@ describe('LtiController', () => {
   const savedToolUrl = process.env.LTI_TOOL_URL;
   const savedKey = process.env.LTI_CONSUMER_KEY;
   const savedSecret = process.env.LTI_CONSUMER_SECRET;
+  const savedUnsigned = process.env.LTI_11_ALLOW_UNSIGNED;
 
   afterEach(() => {
     for (const [name, value] of [
       ['LTI_TOOL_URL', savedToolUrl],
       ['LTI_CONSUMER_KEY', savedKey],
       ['LTI_CONSUMER_SECRET', savedSecret],
+      ['LTI_11_ALLOW_UNSIGNED', savedUnsigned],
     ] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -136,16 +140,32 @@ describe('LtiController', () => {
     expect(response.redirect).toHaveBeenCalledWith(302, launch.redirectUrl);
   });
 
-  it('keeps the 1.1 basic launch and says it is deprecated', async () => {
+  it('refuses the 1.1 basic launch while the consumer credentials are unset (FR-005)', async () => {
     const { controller, lti, response, request } = build();
     delete process.env.LTI_CONSUMER_KEY;
     delete process.env.LTI_CONSUMER_SECRET;
+    delete process.env.LTI_11_ALLOW_UNSIGNED;
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    await expect(
+      controller.handleBasicLogin({ user_id: '7', roles: 'Instructor' } as never, request(), response),
+    ).rejects.toMatchObject({ status: 503, response: { code: 'lti_11_not_configured' } });
+    expect(lti.handleBasicLogin).not.toHaveBeenCalled();
+    expect(response.cookie).not.toHaveBeenCalled();
+  });
+
+  it('accepts an unsigned 1.1 launch only with LTI_11_ALLOW_UNSIGNED, warning each time', async () => {
+    const { controller, lti, response, request } = build();
+    delete process.env.LTI_CONSUMER_KEY;
+    delete process.env.LTI_CONSUMER_SECRET;
+    process.env.LTI_11_ALLOW_UNSIGNED = 'true';
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const payload = { user_id: '7', roles: 'Instructor' } as never;
 
     await controller.handleBasicLogin(payload, request(), response);
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI 1.1 is deprecated'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI_11_ALLOW_UNSIGNED'));
     expect(lti.handleBasicLogin).toHaveBeenCalledWith(payload);
     expect(response.cookie).toHaveBeenCalledWith(
       LTI_COOKIE_NAME,

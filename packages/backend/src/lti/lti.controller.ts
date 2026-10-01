@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { LtiBasicLaunchRequest } from '@haski/lti';
@@ -18,7 +19,7 @@ import {
 import { LTI_COOKIE_NAME } from './lti-cookie.js';
 import { LtiLaunchService } from './lti-launch.service.js';
 import { LOGIN_STATE_TTL_MS } from './lti-login-state.store.js';
-import { verifyLtiOAuth } from './lti-oauth.js';
+import { unsignedBasicLaunchAllowed, verifyLtiOAuth } from './lti-oauth.js';
 import { ltiToolConfiguration, toolBaseUrl } from './lti-tool-config.js';
 import { LtiToolKeys } from './lti-tool-keys.js';
 import { LtiService, type EstablishedLaunch } from './lti.service.js';
@@ -96,9 +97,13 @@ export class LtiController {
   }
 
   /**
-   * The LTI 1.1 basic launch, verified with OAuth 1.0a HMAC-SHA1. 1EdTech ended
+   * The LTI 1.1 basic launch, verified with OAuth 1.0a HMAC-SHA1 (FR-005). 1EdTech ended
    * certification of LTI 1.1 and OAuth 1.0a in 2021 and support in 2022; it stays for
    * platforms that still have it, and every launch says so in the log.
+   *
+   * Without the consumer credentials the launch is refused: an unverified form post
+   * would let anyone pick a course workspace and the editor role. LTI_11_ALLOW_UNSIGNED
+   * reopens it for local testing against a platform without a secret.
    */
   @Post('basiclogin')
   async handleBasicLogin(
@@ -124,10 +129,16 @@ export class LtiController {
           message: 'Invalid LTI OAuth signature',
         });
       }
-    } else {
+    } else if (unsignedBasicLaunchAllowed()) {
       this.logger.warn(
-        'LTI OAuth verification is disabled because LTI_CONSUMER_KEY and LTI_CONSUMER_SECRET are unset',
+        'LTI 1.1 launch accepted without a signature because LTI_11_ALLOW_UNSIGNED is set. Local testing only: set LTI_CONSUMER_KEY and LTI_CONSUMER_SECRET for a deployment.',
       );
+    } else {
+      throw new ServiceUnavailableException({
+        code: 'lti_11_not_configured',
+        message:
+          'The LTI 1.1 launch is not configured on this deployment: LTI_CONSUMER_KEY and LTI_CONSUMER_SECRET are unset.',
+      });
     }
 
     const launch = await this.lti.handleBasicLogin(payload);

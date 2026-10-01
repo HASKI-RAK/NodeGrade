@@ -35,8 +35,8 @@ point in time (`exp`).
 
 - `POST /lti/basiclogin` (`packages/backend/src/lti/lti.controller.ts`): the 1.1 basic
   launch, validated field by field by `pipes/lti-validation.pipe.ts` and verified with
-  OAuth 1.0a HMAC-SHA1 by `lti-oauth.ts` when `LTI_CONSUMER_KEY` and `LTI_CONSUMER_SECRET`
-  are set.
+  OAuth 1.0a HMAC-SHA1 by `lti-oauth.ts` against `LTI_CONSUMER_KEY` and
+  `LTI_CONSUMER_SECRET`.
 - The launch cookie `lti_nodegrade_cookie` (`lti-cookie.ts`, `utils/LtiCookie.ts`): an
   HTTP-only JSON cookie with the person, the platform, `isEditor`, the `ltiKey` and the
   workflow to open. `WorkspaceGuard` and the Socket.IO adapter accept it in place of a
@@ -123,15 +123,30 @@ Where the pieces live:
   `lti_unknown_deployment`, `lti_unsupported_message_type`; nothing it logs contains a
   token, a cookie or a body.
 - `lti.service.ts`: `establishLaunch`, shared by both launch kinds; `handleBasicLogin`
-  maps the 1.1 payload onto it.
+  maps the 1.1 payload onto it; `ltiWorkspaceKey` derives the workspace key.
 - `lti-tool-keys.ts`, `lti-tool-config.ts`: the tool key set and the configuration JSON.
 
 What a 1.3 launch maps to: `sub` becomes `user_id`; context `Instructor` (and sub-roles)
-or `Administrator` roles open the editor, everyone else the student view; the `context`
-and `resource_link` claims form the `ltiKey` with the platform `iss` as issuer; `name`
-(or given and family name) and `email` fill the cookie; the `activityname` custom
-parameter names the legacy graph a new course workspace starts from, as
-`custom_activityname` did in 1.1.
+or `Administrator` roles open the editor, everyone else the student view; `name` (or
+given and family name) and `email` fill the cookie; the `activityname` custom parameter
+names the legacy graph a new course workspace starts from, as `custom_activityname` did
+in 1.1.
+
+### Workspace keys
+
+Each launch kind has its own key namespace (SPEC-0004/FR-008, `ltiWorkspaceKey` in
+`lti.service.ts`):
+
+| Launch | `ltiKey` |
+|---|---|
+| 1.1 | `<oauth_consumer_key>\|<context_id>\|<resource_link_id>`, unchanged, so existing course workspaces keep resolving |
+| 1.3 | `lti13:<iss>\|<client_id>\|<deployment_id>\|<context.id>\|<resource_link.id>`; a resource link id is unique within one deployment and nowhere wider |
+
+A 1.1 post can therefore never address a 1.3 workspace: its key has no `lti13:` prefix,
+and a consumer key that spells the prefix out is refused. A platform migrated from 1.1 to
+1.3 launches into a new `lti13:` workspace; it also sends the `lti1p1` claim with its old
+consumer key, and honouring that claim (roadmap) is how a migrated course maps onto the
+1.1 workspace it had before.
 
 ## Registering NodeGrade
 
@@ -207,7 +222,8 @@ registration and Canvas always sends `client_id` on the login.
 | `LTI_PLATFORMS` | JSON array of registrations: `issuer`, `clientId`, `deploymentIds`, `authorizationEndpoint`, `tokenEndpoint`, `jwksUri`, optional `name`. Validated at startup; a bad entry stops the backend with a line naming the entry and the field. Unset means no 1.3 platform. |
 | `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`; literal `\n` is accepted). `/lti/jwks` serves its public half with a stable `kid`. Needed by the services below, not by the launch. |
 | `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin (set by the debug stack to the backend port). |
-| `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. Unset disables the signature check, for local testing only. |
+| `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. While either is unset, `POST /lti/basiclogin` answers 503 `lti_11_not_configured`. |
+| `LTI_11_ALLOW_UNSIGNED` | `true` accepts unsigned 1.1 launches while the credentials are unset, for a local test platform without a secret. Whoever posts the form then picks the course, the role and the person, and every launch logs a warning. Never set it on a deployment. |
 | `FRONTEND_URL` | Where both launches redirect (`/editor/:id?lti=1`, `/student/:id?lti=1`). |
 | `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, and the state cookie falls back to `SameSite=Lax`; the server-side login record carries the launch. |
 
@@ -262,8 +278,10 @@ Everything below rides on the launch and on the tool key pair of `/lti/jwks`.
    server-side login record makes this optional for NodeGrade.
 6. **1.1 to 1.3 migration claim.** A platform migrated from 1.1 sends
    `https://purl.imsglobal.org/spec/lti/claim/lti1p1` with the old `user_id` and
-   `oauth_consumer_key`; honouring it would let a course keep its 1.1 workspace
-   (`consumer key|context|link`) after the switch.
+   `oauth_consumer_key` (plus `oauth_consumer_key_sign`, an HMAC over the launch that
+   proves the platform knew the secret). Today such a launch keys a new `lti13:`
+   workspace; honouring the claim is how a migrated course would map onto its 1.1
+   workspace (`consumer key|context|link`) after the switch.
 
 ## Sources
 

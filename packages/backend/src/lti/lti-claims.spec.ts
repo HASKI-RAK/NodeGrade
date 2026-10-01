@@ -64,6 +64,7 @@ describe('mapLaunchClaims', () => {
 
     expect(identity).toEqual({
       userId: 'user-1',
+      deploymentId: '1',
       roles: [LTI_ROLE.instructor],
       isInstructor: true,
       contextId: 'course-1',
@@ -98,6 +99,7 @@ describe('mapLaunchClaims', () => {
 
     expect(identity).toEqual({
       userId: 'user-1',
+      deploymentId: '1',
       roles: [],
       isInstructor: false,
       contextId: undefined,

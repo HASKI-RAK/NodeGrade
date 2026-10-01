@@ -158,10 +158,12 @@ workspace while preserving their content.
 WHEN a workflow is created via an LTI launch context, from an LTI 1.1 basic launch or an
 LTI 1.3 launch (SPEC-0023),
 the system SHALL associate it with a workspace of type LTI keyed by the stable
-combination of the launch issuer and the launch context/resource identity
-(`issuer|context_id|resource_link_id`, the issuer being the OAuth consumer key of a 1.1
-launch and the platform `iss` of a 1.3 launch), so that the same launch context
-consistently maps to the same workspace.
+combination of the launch issuer and the launch context/resource identity, so that the
+same launch context consistently maps to the same workspace. A 1.1 launch is keyed by
+`consumer_key|context_id|resource_link_id`; a 1.3 launch by
+`lti13:iss|client_id|deployment_id|context_id|resource_link_id`, because a resource link
+id is unique within one deployment. The `lti13:` namespace is reserved: a 1.1 key never
+begins with it, so no 1.1 launch can address a 1.3 workspace.
 
 ### FR-009 — Retention based on last activity
 
@@ -392,4 +394,5 @@ And a launch from a different context maps to a different workspace
 | 2026-09-15 | Hardened isolation: opaque workspace access tokens as authorization (FR-003/004, AC-007), full CRUD scoping (FR-001, AC-008), retention re-anchored to lastActiveAt with defined update triggers (FR-009/010, AC-006), workspace types BROWSER|WORKSHOP|LTI|PERSONAL, precise LTI mapping rule (FR-008, AC-009), workshop workspaces exempt from retention (FR-011) |
 | 2026-09-15 | Review revision 2: PERSONAL workspace type dropped (no account system exists to authenticate or recover it) — types are now BROWSER | WORKSHOP | LTI; WORKSHOP workspaces no longer live forever: retained 60 days after workshop close/expiry or last activity (FR-009a/FR-011, AC-006a); optimistic concurrency added so same-browser multi-tab saves cannot silently clobber newer state (FR-012/FR-013, AC-006b) |
 | 2026-09-25 | SPEC-0022 withdraws the anonymous browser workspace: FR-003 superseded (a workshop join issues the workspace and token), NFR-001, AC-001 and AC-003 now concern workshop workspaces, FR-009/AC-006 retention applies only to legacy BROWSER rows; intent, scope, actors, edge cases and assumptions amended |
+| 2026-10-01 | FR-008 names the two key forms: 1.1 keys unchanged, 1.3 keys namespaced `lti13:` with client and deployment id (SPEC-0023 review) |
 | 2026-10-01 | ADR-0011 restores the browser workspace: FR-003 is a live requirement again (`POST /api/workspaces`, throttled per address), BROWSER is a first-class type in scope, actors and retention wording; FR-008 covers the LTI 1.1 and the LTI 1.3 launch (SPEC-0023); AC-003 and AC-006 reworded; edge cases and assumptions amended |

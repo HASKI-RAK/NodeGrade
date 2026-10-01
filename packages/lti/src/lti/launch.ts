@@ -141,6 +141,8 @@ export function verifyIdToken(idToken: string, options: VerifyIdTokenOptions): L
 export interface LtiLaunchIdentity {
   /** Platform-scoped, stable user id (`sub`). */
   userId: string
+  /** The deployment the launch comes from; `verifyIdToken` checked it against the registration. */
+  deploymentId: string
   roles: string[]
   isInstructor: boolean
   /** The course; absent when the platform launches outside any context. */
@@ -180,6 +182,7 @@ export function mapLaunchClaims(claims: LtiIdTokenClaims): LtiLaunchIdentity {
   )
   return {
     userId: claims.sub,
+    deploymentId: claims[LTI_CLAIM.deploymentId],
     roles,
     isInstructor: roles.some(isEditorRole),
     contextId: nonEmpty(context?.id),

@@ -144,9 +144,12 @@ message }` payload and SHALL log no token, cookie or body.
 ### FR-004 — One session for both launch kinds
 
 WHEN a 1.1 or a 1.3 launch is verified,
-the system SHALL establish the `LTI` workspace keyed by `issuer|context_id|resource_link_id`
-(SPEC-0004/FR-008), SHALL open the workspace's oldest workflow or seed one from the legacy
-graph the `activityname` custom parameter names, SHALL set the `lti_nodegrade_cookie` with
+the system SHALL establish the `LTI` workspace keyed per SPEC-0004/FR-008: a 1.1 launch
+by `consumer_key|context_id|resource_link_id`, a 1.3 launch by
+`lti13:iss|client_id|deployment_id|context_id|resource_link_id`, SHALL refuse a 1.1
+launch whose key would begin with the `lti13:` namespace, SHALL open the workspace's
+oldest workflow or seed one from the legacy graph the `activityname` custom parameter
+names, SHALL set the `lti_nodegrade_cookie` with
 the person, platform, role and `ltiKey`, and SHALL redirect an instructor to
 `/editor/:id?lti=1` and anyone else to `/student/:id?lti=1` on the frontend. For a 1.3
 launch an editor is a context `Instructor` (including its sub-roles) or an `Administrator`
@@ -155,9 +158,11 @@ of the context, institution or system.
 ### FR-005 — The 1.1 basic launch stays, deprecated
 
 WHEN a platform posts an LTI 1.1 basic launch to `/lti/basiclogin`,
-the system SHALL verify it with OAuth 1.0a HMAC-SHA1 when `LTI_CONSUMER_KEY` and
-`LTI_CONSUMER_SECRET` are set, SHALL establish the session through FR-004, and SHALL log
-one line per launch saying that LTI 1.1 is deprecated.
+the system SHALL verify it with OAuth 1.0a HMAC-SHA1 against `LTI_CONSUMER_KEY` and
+`LTI_CONSUMER_SECRET`, SHALL refuse the launch with 503 `lti_11_not_configured` while
+either is unset unless `LTI_11_ALLOW_UNSIGNED` is `true` (local testing; one warning per
+unsigned launch), SHALL establish the session through FR-004, and SHALL log one line per
+launch saying that LTI 1.1 is deprecated.
 
 ### FR-006 — Tool configuration for registration
 
@@ -297,6 +302,8 @@ Given LTI_CONSUMER_KEY and LTI_CONSUMER_SECRET are set
 When a platform posts a correctly signed basic launch
 Then the same cookie and redirect as a 1.3 launch follow and the log carries one deprecation line
 And a launch with a wrong signature is refused with lti_oauth_invalid
+And with either credential unset the launch is refused with 503 lti_11_not_configured, unless LTI_11_ALLOW_UNSIGNED is true
+And a 1.1 launch naming a 1.3 issuer as its consumer key resolves a 1.1 key, never the lti13: key of that platform
 ```
 
 Tests: `lti/lti.controller.spec.ts`, `lti/lti-oauth.spec.ts`, `lti/lti.service.spec.ts`.
@@ -326,6 +333,9 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
   `lti_platform_keys_unavailable` and the person retries from the course.
 - One issuer hosts several tenants (Canvas) → one registration per client id; the login
   must carry `client_id`.
+- A platform migrated from 1.1 to 1.3 → its launches key a new `lti13:` workspace; the
+  `lti1p1` claim it sends names the old consumer key, and honouring it is how a migrated
+  course would map onto its 1.1 workspace (roadmap, docs/lti.md).
 
 ## Business rules
 
@@ -365,4 +375,5 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fixes: the 1.1 launch is refused without consumer credentials unless `LTI_11_ALLOW_UNSIGNED` is set (FR-005, AC-005); 1.3 workspace keys carry the `lti13:` namespace with client and deployment id, and a 1.1 key never does (FR-004, SPEC-0004/FR-008). |
 | 2026-10-01 | Initial specification and implementation: `@haski/lti` claims, OIDC login, id_token verification and claim mapping; backend `LtiModule` with `/lti/config`, `/lti/login`, `/lti/launch`, `/lti/jwks`, the shared `LtiService.establishLaunch` and the deprecated `/lti/basiclogin`; `LTI_PLATFORMS`, `LTI_TOOL_PRIVATE_KEY`, `LTI_TOOL_URL`; tests under `packages/backend/src/lti/` and `config/lti-platforms.spec.ts`; Deep Linking, AGS, NRPS and Dynamic Registration deferred. |

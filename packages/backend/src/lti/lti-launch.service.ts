@@ -129,6 +129,11 @@ export class LtiLaunchService {
       `LTI 1.3 launch from ${platform.issuer} context ${identity.contextId ?? '-'} link ${identity.resourceLinkId} as ${identity.isInstructor ? 'editor' : 'student'}`,
     );
     return this.lti.establishLaunch({
+      protocol: {
+        version: '1.3',
+        clientId: platform.clientId,
+        deploymentId: identity.deploymentId,
+      },
       issuer: platform.issuer,
       contextId: identity.contextId ?? '',
       contextTitle: identity.contextTitle ?? identity.resourceLinkTitle ?? '',

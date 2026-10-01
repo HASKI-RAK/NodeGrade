@@ -1,8 +1,15 @@
 import type { LtiBasicLaunchRequest } from '@haski/lti';
 import type { PrismaService } from '../prisma.service.js';
-import { LtiService, type LaunchInput } from './lti.service.js';
+import {
+  LtiService,
+  ltiWorkspaceKey,
+  type LaunchInput,
+} from './lti.service.js';
+
+const LTI13_KEY = 'lti13:https://moodle.example.org|abc123|1|course-1|link-1';
 
 const input: LaunchInput = {
+  protocol: { version: '1.3', clientId: 'abc123', deploymentId: '1' },
   issuer: 'https://moodle.example.org',
   contextId: 'course-1',
   contextTitle: 'Analysis I',
@@ -67,17 +74,57 @@ describe('LtiService', () => {
     return { service, workspace, workflow, legacyGraph };
   };
 
+  describe('ltiWorkspaceKey', () => {
+    it('keeps the 1.1 key as consumer key, context and resource link (SPEC-0004/FR-008)', () => {
+      expect(
+        ltiWorkspaceKey({
+          protocol: { version: '1.1' },
+          issuer: 'consumer-1',
+          contextId: 'course-1',
+          resourceLinkId: 'link-1',
+        }),
+      ).toBe('consumer-1|course-1|link-1');
+    });
+
+    it('namespaces a 1.3 key with the issuer, client and deployment', () => {
+      expect(ltiWorkspaceKey(input)).toBe(LTI13_KEY);
+    });
+
+    it('cannot be made to address a 1.3 workspace from a 1.1 post naming the 1.3 issuer', () => {
+      const forged = ltiWorkspaceKey({
+        protocol: { version: '1.1' },
+        issuer: 'https://moodle.example.org',
+        contextId: 'course-1',
+        resourceLinkId: 'link-1',
+      });
+
+      expect(forged).toBe('https://moodle.example.org|course-1|link-1');
+      expect(forged).not.toBe(LTI13_KEY);
+    });
+
+    it('refuses a 1.1 consumer key that spells out the 1.3 namespace', () => {
+      expect(() =>
+        ltiWorkspaceKey({
+          protocol: { version: '1.1' },
+          issuer: 'lti13:https://moodle.example.org',
+          contextId: 'abc123|1|course-1',
+          resourceLinkId: 'link-1',
+        }),
+      ).toThrow(expect.objectContaining({ status: 400, response: { code: 'lti_launch_invalid', message: expect.any(String) } }));
+    });
+  });
+
   describe('establishLaunch', () => {
-    it('keys the course workspace by issuer, context and resource link (SPEC-0004/FR-008)', async () => {
+    it('keys the course workspace by the launch key (SPEC-0004/FR-008)', async () => {
       const { service, workspace } = build();
 
       const launch = await service.establishLaunch(input);
 
-      expect(launch.ltiKey).toBe('https://moodle.example.org|course-1|link-1');
+      expect(launch.ltiKey).toBe(LTI13_KEY);
       expect(workspace.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { ltiKey: 'https://moodle.example.org|course-1|link-1' },
-          create: { type: 'LTI', label: 'Analysis I', ltiKey: 'https://moodle.example.org|course-1|link-1' },
+          where: { ltiKey: LTI13_KEY },
+          create: { type: 'LTI', label: 'Analysis I', ltiKey: LTI13_KEY },
         }),
       );
     });
@@ -136,7 +183,7 @@ describe('LtiService', () => {
         issuer: 'https://moodle.example.org',
         context_id: 'course-1',
         resource_link_id: 'link-1',
-        ltiKey: 'https://moodle.example.org|course-1|link-1',
+        ltiKey: LTI13_KEY,
         workflowId: 'wf-new',
       });
     });
@@ -178,6 +225,24 @@ describe('LtiService', () => {
       const launch = await service.handleBasicLogin(basicLaunch());
 
       expect(launch.ltiKey).toBe('moodle-guid|course-1|link-1');
+    });
+
+    it('never resolves a 1.3 workspace, even when the post names the 1.3 issuer', async () => {
+      const { service, workspace } = build();
+
+      const launch = await service.handleBasicLogin(
+        basicLaunch({ oauth_consumer_key: 'https://moodle.example.org' } as Partial<LtiBasicLaunchRequest>),
+      );
+
+      expect(launch.ltiKey).toBe('https://moodle.example.org|course-1|link-1');
+      expect(workspace.upsert).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: { ltiKey: LTI13_KEY } }),
+      );
+      await expect(
+        service.handleBasicLogin(
+          basicLaunch({ oauth_consumer_key: 'lti13:https://moodle.example.org' } as Partial<LtiBasicLaunchRequest>),
+        ),
+      ).rejects.toMatchObject({ response: { code: 'lti_launch_invalid' } });
     });
 
     it.each([

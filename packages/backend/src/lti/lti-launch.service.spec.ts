@@ -218,6 +218,7 @@ describe('LtiLaunchService', () => {
 
       expect(launch.redirectUrl).toBe('http://front/editor/wf-1?lti=1');
       expect(lti.establishLaunch).toHaveBeenCalledWith({
+        protocol: { version: '1.3', clientId: moodle.clientId, deploymentId: '1' },
         issuer: moodle.issuer,
         contextId: 'course-1',
         contextTitle: 'Analysis I',
