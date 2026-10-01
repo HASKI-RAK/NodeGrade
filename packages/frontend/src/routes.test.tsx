@@ -32,6 +32,10 @@ const titleBar = () => screen.queryByRole('navigation', { name: 'Main' })
 const callsTo = (fetchMock: ReturnType<typeof stubApi>, suffix: string) =>
   fetchMock.mock.calls.filter(([url]) => String(url).endsWith(suffix))
 
+/** Every request that tried to open or save one workflow. */
+const workflowRequests = (fetchMock: ReturnType<typeof stubApi>) =>
+  fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/workflows/'))
+
 describe('application routes', () => {
   let fetchMock: ReturnType<typeof stubApi>
 
@@ -79,12 +83,16 @@ describe('application routes', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/'))
     expect(await screen.findByRole('heading', { name: 'NodeGrade' })).toBeVisible()
+    // The start page is presented instead of a graph load attempt, not after one.
+    expect(workflowRequests(fetchMock)).toHaveLength(0)
   })
 
   it('sends an editor URL without any session to the start page (FR-005)', async () => {
     const router = renderAt('/editor/wf-1')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    expect(await screen.findByRole('heading', { name: 'NodeGrade' })).toBeVisible()
+    expect(workflowRequests(fetchMock)).toHaveLength(0)
   })
 
   it('offers the workshop code on the hub (FR-008)', async () => {

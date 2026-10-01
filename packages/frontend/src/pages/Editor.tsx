@@ -130,6 +130,9 @@ export const Editor = () => {
   const mobile = useMediaQuery(theme.breakpoints.down('md'))
 
   useEffect(() => {
+    // Without a session there is nothing this browser may open; the render below sends
+    // the participant to the start page without a graph load attempt (SPEC-0002/FR-005).
+    if (!ltiMode && !token) return
     let active = true
     void api
       .workflow(workflowId, token)
@@ -148,7 +151,7 @@ export const Editor = () => {
     return () => {
       active = false
     }
-  }, [lgraph, token, workflowId])
+  }, [lgraph, ltiMode, token, workflowId])
 
   useEffect(() => {
     if (!token) return
