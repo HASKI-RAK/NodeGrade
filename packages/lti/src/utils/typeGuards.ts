@@ -1,10 +1,10 @@
 import {
   LtiBasicLaunchRequest,
-  LtiLaunchRequest,
   OpenIdConfigJson,
   SuccessfulToolRegistrationResponse,
   ToolRegistrationRequest
-} from '@haski/lti'
+} from '../lti/toolRegistration'
+
 export const isPayloadToolRegistrationValid = (
   payload: unknown
 ): payload is ToolRegistrationRequest => {
@@ -15,21 +15,6 @@ export const isPayloadToolRegistrationValid = (
     'initiate_login_uri' in payload &&
     'redirect_uris' in payload &&
     'jwks_uri' in payload
-  )
-}
-
-export const isPayloadLtiLaunchValid = (
-  payload: unknown
-): payload is LtiLaunchRequest => {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'iss' in payload &&
-    'target_link_uri' in payload &&
-    'login_hint' in payload &&
-    'lti_message_hint' in payload &&
-    'client_id' in payload &&
-    'lti_deployment_id' in payload
   )
 }
 

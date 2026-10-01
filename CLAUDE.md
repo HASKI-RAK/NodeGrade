@@ -60,7 +60,7 @@ Result cards, output display types→ packages/lib/src/nodes/OutputNode.ts, src/
 Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
-LTI launch and registration       → packages/backend/src/lti/, packages/lti/
+LTI launch and registration       → packages/backend/src/lti/ (lti-launch.service.ts, lti.service.ts), packages/lti/, docs/lti.md
 Specification consistency rules   → tools/spec-lint/
 Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
 Deployment, images, Portainer     → docker-compose.prod.yml, .github/workflows/deploy.yml, README "Deploying with Portainer"
@@ -101,12 +101,19 @@ a stale `dist` produces failures that look like code bugs.
 - Workspace authorization comes from the bearer access token only. No handler may take a
   workspace id from a path, query or body; `WorkspaceGuard` resolves it and handlers read
   `@CurrentWorkspace()` (ADR-0001).
-- Participant workspaces are created only by a workshop join
-  (`POST /api/workshops/by-code/:code/join`) or an LTI launch. `BROWSER` workspace tokens
-  are rejected (ADR-0010).
-- Workflow templates reach participants only through their workshop's entries
-  (`/api/workshops/current/**`). `/api/templates` is workspace-scoped and serves `BLOCK`
-  templates only, for the editor palette (SPEC-0022).
+- Participant workspaces come from three places: a browser's own `POST /api/workspaces`
+  (type `BROWSER`, throttled per address), a workshop join
+  (`POST /api/workshops/by-code/:code/join`) or an LTI launch (ADR-0011). All three resolve
+  through the bearer token or the launch cookie; a `BROWSER` workspace belongs to no
+  workshop.
+- `/api/templates` is workspace-scoped and serves published templates of both kinds; a
+  workshop participant's entries still resolve to the pinned or newest revision through
+  `/api/workshops/current/**` (SPEC-0022, ADR-0010).
+- LTI: the tool verifies, it never signs a launch. A 1.3 launch is accepted only when its
+  id_token verifies against the platform's JWKS, answers a login this server started
+  (state and nonce, used once) and names a deployment of a platform in `LTI_PLATFORMS`;
+  the 1.1 basic launch is verified with OAuth 1.0a. Both end in the same
+  `lti_nodegrade_cookie` and `ltiKey` through `LtiService.establishLaunch` (SPEC-0023).
 - A CLOSED or expired workshop is read-only for its participants: `WorkspaceGuard` rejects
   every non-GET/HEAD request with `workshop_closed`, and `GraphHandlerService` re-checks the
   workshop on every run rather than at socket connect.

@@ -18,7 +18,7 @@ describe('RetentionService', () => {
     return { service, workspace, adminSession };
   };
 
-  it('deletes browser workspaces idle past the retention window', async () => {
+  it('deletes browser workspaces idle past the retention window (FR-009)', async () => {
     const { service, workspace } = build();
 
     await service.sweep(NOW);

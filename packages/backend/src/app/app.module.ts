@@ -13,8 +13,7 @@ import { WorkspaceModule } from '../workspace/workspace.module.js';
 import { WorkshopModule } from '../workshop/workshop.module.js';
 import { BenchmarkController } from '../benchmark/benchmark.controller.js';
 import { BenchmarkService } from '../benchmark/benchmark.service.js';
-import { LtiController } from '../lti/lti.controller.js';
-import { LtiService } from '../lti/lti.service.js';
+import { LtiModule } from '../lti/lti.module.js';
 import { XapiService } from '../xapi.service.js';
 import { HealthController } from '../health/health.controller.js';
 import { HealthService } from '../health/health.service.js';
@@ -36,8 +35,9 @@ import { HealthService } from '../health/health.service.js';
     WorkflowModule,
     WorkshopModule,
     RunModule,
+    LtiModule,
   ],
-  controllers: [BenchmarkController, LtiController, HealthController],
-  providers: [BenchmarkService, LtiService, XapiService, HealthService],
+  controllers: [BenchmarkController, HealthController],
+  providers: [BenchmarkService, XapiService, HealthService],
 })
 export class AppModule {}

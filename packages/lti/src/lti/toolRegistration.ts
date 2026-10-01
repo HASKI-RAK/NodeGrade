@@ -1,5 +1,3 @@
-// src/toolRegistration.ts
-
 import { IncomingMessage, ServerResponse } from 'http'
 
 export interface ToolRegistrationRequest {
@@ -55,15 +53,6 @@ export interface OpenIdConfigJson {
     version: string
     variables: string[]
   }
-}
-
-export interface LtiLaunchRequest {
-  iss: string
-  target_link_uri: string
-  login_hint: string
-  lti_message_hint: string
-  client_id: string
-  lti_deployment_id: string
 }
 
 export interface LtiBasicLaunchRequest {

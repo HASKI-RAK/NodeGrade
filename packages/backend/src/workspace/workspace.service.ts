@@ -77,6 +77,19 @@ export class WorkspaceService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * The workspace a browser gets when it opens NodeGrade directly (SPEC-0004/FR-003,
+   * ADR-0011). The token is the only way back into it: nothing else identifies the
+   * caller, and only its hash is stored. Retention sweeps it after 60 idle days.
+   */
+  async createBrowser(label?: string): Promise<CreatedWorkspace> {
+    const issued = issueWorkspaceToken();
+    const workspace = await this.create('BROWSER', issued, { label });
+
+    this.logger.log(`Created BROWSER workspace ${workspace.id}`);
+    return { ...workspace, token: issued.token };
+  }
+
+  /**
    * The workspace a workshop join mints (SPEC-0014/FR-004). The token is the only way back
    * into it: nothing else identifies the caller, and only its hash is stored.
    */
@@ -163,9 +176,7 @@ export class WorkspaceService {
         workshop: { select: WORKSHOP_STATE_SELECT },
       },
     });
-    // Anonymous browser workspaces are withdrawn (SPEC-0022/FR-013): a token issued for one
-    // before that no longer opens anything, and retention removes the rows.
-    if (!workspace || workspace.type === 'BROWSER') return null;
+    if (!workspace) return null;
 
     await this.touch(workspace.id, workspace.lastActiveAt, now);
 
