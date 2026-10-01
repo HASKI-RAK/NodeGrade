@@ -270,13 +270,28 @@ Tests: `packages/frontend/src/**/*.test.tsx`, `packages/frontend/src/**/*.test.t
 
 Location: `packages/frontend/src/pages/`, routes in `packages/frontend/src/routes.tsx`
 
-Primary entry points: `StartPage.tsx` (`/`: code entry, a link back to the last joined
-workshop, the facilitator link), `WorkshopJoin.tsx` (`/workshop/:code`: join and the
-workshop overview with template cards and "My workflows"), `components/TemplateCard.tsx`,
-`admin/AdminPage.tsx` (`/admin/workshops`, `/admin/providers`, `/admin/templates`),
-`admin/WorkshopAdmin.tsx`, `admin/TemplateAdmin.tsx`, `admin/adminApi.ts` (CSRF-carrying
-admin requests), `lti/LtiRegister.tsx`, `NotFoundPage.tsx`. The former `/templates` and
-`/workflows` routes redirect to the active workshop's overview, or to `/`.
+Responsibilities: the app shell with the title bar on every page outside the editor, the
+direct entry at `/` backed by the browser's own workspace, the workshop hub and join
+pages, the workflow list and the template gallery, the facilitator area.
+
+Primary entry points: `components/AppShell.tsx` (layout route: title bar with brand,
+Workflows, Templates, Workshop, Facilitator and the appearance picker, then the page),
+`StartPage.tsx` (`/`: New workflow, My workflows, Templates; bootstraps the browser
+workspace through `hooks/useWorkspaceSession.ts` and `store/workspaceSession.ts`),
+`WorkshopPage.tsx` (`/workshop`: code entry and the way back to the workshop joined
+last), `WorkshopJoin.tsx` (`/workshop/:code`: join and the workshop overview with
+template cards and "My workflows"), `WorkflowListPage.tsx` (`/workflows`),
+`TemplatesPage.tsx` (`/templates`: gallery of workflow templates with structure preview
+and "Use template"), `components/TemplateCard.tsx` (card and structure dialog shared by
+the gallery and the overview), `admin/AdminPage.tsx` (`/admin/workshops`,
+`/admin/providers`, `/admin/templates`), `admin/WorkshopAdmin.tsx`,
+`admin/TemplateAdmin.tsx`, `admin/adminApi.ts` (CSRF-carrying admin requests),
+`lti/LtiRegister.tsx` (outside the shell), `NotFoundPage.tsx`.
+
+Session rule: `store/workspaceStore.ts` keeps the browser workspace, one session per
+joined workshop, the last joined workshop and the active session; the start page and its
+pages make the browser session active, a workshop route makes that workshop's session
+active, and the editor opens a workflow with the active session.
 
 Server access: `api/http.ts` only. Runtime config: `utils/config.ts` +
 `public/config/env.*.json`.

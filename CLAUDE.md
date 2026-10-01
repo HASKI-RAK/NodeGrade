@@ -37,10 +37,12 @@ things live).
 ## Where to start
 
 ```text
-UI page, route, editor panel      → packages/frontend/src/pages/, src/components/editor/
+UI page, route, editor panel      → packages/frontend/src/pages/, src/routes.tsx, src/components/editor/
+App shell, titlebar, navigation   → packages/frontend/src/components/AppShell.tsx (layout route in src/routes.tsx)
+Direct entry, gallery, workflows  → packages/frontend/src/pages/StartPage.tsx, TemplatesPage.tsx, WorkflowListPage.tsx
 Frontend server calls             → packages/frontend/src/api/http.ts
-Participant session / tokens      → packages/frontend/src/store/workspaceStore.ts
-Workshop join and overview (UI)   → packages/frontend/src/pages/WorkshopJoin.tsx, src/components/TemplateCard.tsx
+Participant session / tokens      → packages/frontend/src/store/workspaceStore.ts, src/store/workspaceSession.ts
+Workshop hub, join, overview (UI) → packages/frontend/src/pages/WorkshopPage.tsx, WorkshopJoin.tsx, src/components/TemplateCard.tsx
 Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionRegistry.ts)
 Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
