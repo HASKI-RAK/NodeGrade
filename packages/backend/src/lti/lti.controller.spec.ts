@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { LTI_COOKIE_NAME, ltiStateCookieName } from './lti-cookie.js';
 import type { LtiLaunchService } from './lti-launch.service.js';
+import type { LtiLoginThrottle } from './lti-login-throttle.js';
 import type { LtiToolKeys } from './lti-tool-keys.js';
 import { LtiController } from './lti.controller.js';
 import type { EstablishedLaunch, LtiService } from './lti.service.js';
@@ -55,23 +56,27 @@ describe('LtiController', () => {
       launch: jest.fn().mockResolvedValue(launch),
     };
     const toolKeys = { jwks: jest.fn().mockReturnValue({ keys: [{ kty: 'RSA', kid: 'k' }] }) };
+    const loginThrottle = { retryAfterMs: jest.fn().mockReturnValue(0), record: jest.fn() };
     const controller = new LtiController(
       lti as unknown as LtiService,
       launches as unknown as LtiLaunchService,
       toolKeys as unknown as LtiToolKeys,
+      loginThrottle as unknown as LtiLoginThrottle,
     );
     const response = {
       cookie: jest.fn(),
       clearCookie: jest.fn(),
       redirect: jest.fn(),
+      setHeader: jest.fn(),
     } as unknown as Response;
     const request = (cookies: Record<string, string> = {}) =>
       ({
         protocol: 'https',
+        ip: '203.0.113.7',
         get: (name: string) => (name === 'host' ? 'grade.example.org' : undefined),
         cookies,
       }) as unknown as Request;
-    return { controller, lti, launches, toolKeys, response, request };
+    return { controller, lti, launches, toolKeys, loginThrottle, response, request };
   };
 
   it('publishes the registration URLs from the request origin (FR-006)', () => {
@@ -115,6 +120,22 @@ describe('LtiController', () => {
     controller.loginByForm({ iss: 'https://moodle.example.org', login_hint: '42' }, request(), response);
 
     expect(launches.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('records each login per address and refuses the address over the limit with 429 and Retry-After', () => {
+    const { controller, launches, loginThrottle, response, request } = build();
+    const login = { iss: 'https://moodle.example.org', login_hint: '42' };
+
+    controller.loginByQuery(login, request(), response);
+    expect(loginThrottle.record).toHaveBeenCalledWith('203.0.113.7');
+
+    loginThrottle.retryAfterMs.mockReturnValue(30_500);
+    expect(() => controller.loginByQuery(login, request(), response)).toThrow(
+      expect.objectContaining({ status: 429, response: { code: 'too_many_requests', message: expect.stringContaining('31 seconds') } }),
+    );
+    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '31');
+    expect(launches.login).toHaveBeenCalledTimes(1);
+    expect(loginThrottle.record).toHaveBeenCalledTimes(1);
   });
 
   it('names the state cookie per login, so parallel logins keep their own state', () => {

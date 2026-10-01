@@ -74,7 +74,7 @@ point in time (`exp`).
 | Route | Method | Purpose |
 |---|---|---|
 | `/lti/config` | GET | Tool configuration JSON for registration: login, launch and JWKS URLs, title, version, message type |
-| `/lti/login` | GET, POST | OIDC third-party initiated login; redirects to the platform's authorization endpoint |
+| `/lti/login` | GET, POST | OIDC third-party initiated login; redirects to the platform's authorization endpoint. Throttled per address (60 a minute, `LTI_LOGIN_MAX`) |
 | `/lti/launch` | POST | The platform posts `id_token` and `state`; verified, then the session is established |
 | `/lti/jwks` | GET | The tool's public key set from `LTI_TOOL_PRIVATE_KEY`; `{ "keys": [] }` when unset |
 | `/lti/basiclogin` | POST | The LTI 1.1 basic launch; logs a deprecation line per launch |
@@ -122,8 +122,11 @@ Where the pieces live:
   without it is refused (`lti_state_cookie_missing`). Only a plain-HTTP stack with
   `COOKIE_INSECURE` accepts the record alone, because there the cookie falls back to
   `SameSite=Lax` and a cross-site post does not carry it; the log says so per launch.
-- `jwks-fetcher.ts`: the platform key set with a ten-minute cache and one forced refresh
-  when a token names an unknown `kid` (key rotation).
+- `jwks-fetcher.ts`: the platform key set with a ten-minute cache and a forced refresh
+  when a token names an unknown `kid` (key rotation), honoured at most once a minute per
+  key set so a stream of self-signed tokens cannot hammer the platform's key endpoint.
+- `lti-login-throttle.ts`: the per-address cap on login initiations, with the same
+  sliding window, 429 and `Retry-After` as the workspace and facilitator throttles.
 - `lti-launch.service.ts`: the login and the launch, refusing with `{ code, message }`
   payloads such as `lti_platform_unknown`, `lti_state_unknown`, `lti_invalid_signature`,
   `lti_invalid_audience`, `lti_token_expired`, `lti_unknown_kid`, `lti_invalid_nonce`,
@@ -230,6 +233,7 @@ registration and Canvas always sends `client_id` on the login.
 | `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`; literal `\n` is accepted). `/lti/jwks` serves its public half with a stable `kid`. Needed by the services below, not by the launch. |
 | `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin (set by the debug stack to the backend port). |
 | `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. While either is unset, `POST /lti/basiclogin` answers 503 `lti_11_not_configured`. |
+| `LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS` | Login initiations one address may start per window; defaults 60 per 60000 ms. Each initiation records a pending login for ten minutes, so the cap keeps one address from evicting everyone else's. |
 | `LTI_11_ALLOW_UNSIGNED` | `true` accepts unsigned 1.1 launches while the credentials are unset, for a local test platform without a secret. Whoever posts the form then picks the course, the role and the person, and every launch logs a warning. Never set it on a deployment. |
 | `FRONTEND_URL` | Where both launches redirect (`/editor/:id?lti=1`, `/student/:id?lti=1`). |
 | `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, the state cookie falls back to `SameSite=Lax` and does not arrive on the cross-site launch post; the launch then passes on the server-side login record alone, with a warning per launch. Never set it on a deployment. |

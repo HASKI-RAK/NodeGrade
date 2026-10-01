@@ -313,14 +313,18 @@ Responsibilities:
   third-party initiated login (`/lti/login`), the id_token launch (`/lti/launch`) verified
   against the platform's JWKS, the tool configuration (`/lti/config`) and key set
   (`/lti/jwks`)
-- the LTI 1.1 basic launch (`/lti/basiclogin`, OAuth 1.0a), kept and logged as deprecated
-- one shared launch tail: the `LTI` workspace by `ltiKey`, the first workflow, the launch
-  cookie that carries `ltiKey` and the editor/student role, the frontend redirect
+- the LTI 1.1 basic launch (`/lti/basiclogin`, OAuth 1.0a), kept and logged as deprecated;
+  refused while the consumer credentials are unset
+- one shared launch tail: the `LTI` workspace by `ltiKey` (`ltiWorkspaceKey`: 1.1 keys as
+  before, 1.3 keys in the `lti13:` namespace), the first workflow, the launch cookie that
+  carries `ltiKey` and the editor/student role, the frontend redirect
+- the per-address throttle on login initiations and the once-a-minute cap on forced key
+  set refreshes
 
 Primary entry points: backend `lti.module.ts`, `lti.controller.ts`,
 `lti-launch.service.ts` (login and launch), `lti.service.ts` (`establishLaunch`,
-`handleBasicLogin`), `lti-platform.registry.ts`, `lti-login-state.store.ts`,
-`jwks-fetcher.ts`, `lti-tool-keys.ts`, `lti-tool-config.ts`, `lti-cookie.ts`,
+`handleBasicLogin`, `ltiWorkspaceKey`), `lti-platform.registry.ts`,
+`lti-login-state.store.ts`, `lti-login-throttle.ts`, `jwks-fetcher.ts`, `lti-tool-keys.ts`, `lti-tool-config.ts`, `lti-cookie.ts`,
 `lti-oauth.ts`, `pipes/lti-validation.pipe.ts`, `config/lti-platforms.ts`; library
 `src/lti/claims.ts`, `platform.ts`, `oidc.ts`, `launch.ts`, `ags.ts`, `nrps.ts`,
 `src/utils/jwks.ts`, `src/lti/toolRegistration.ts` (Dynamic Registration types, roadmap)

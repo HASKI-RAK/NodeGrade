@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwksFetcher } from './jwks-fetcher.js';
 import { LtiLaunchService } from './lti-launch.service.js';
 import { LtiLoginStateStore } from './lti-login-state.store.js';
+import { LtiLoginThrottle } from './lti-login-throttle.js';
 import { LtiPlatformRegistry } from './lti-platform.registry.js';
 import { LtiToolKeys } from './lti-tool-keys.js';
 import { LtiController } from './lti.controller.js';
@@ -17,6 +18,7 @@ import { LtiService } from './lti.service.js';
     LtiService,
     LtiLaunchService,
     LtiLoginStateStore,
+    LtiLoginThrottle,
     JwksFetcher,
     LtiToolKeys,
     {

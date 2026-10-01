@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
+  HttpStatus,
   Logger,
   Post,
   Query,
@@ -19,6 +21,7 @@ import {
 import { LTI_COOKIE_NAME, ltiStateCookieName } from './lti-cookie.js';
 import { LtiLaunchService } from './lti-launch.service.js';
 import { LOGIN_STATE_TTL_MS } from './lti-login-state.store.js';
+import { LtiLoginThrottle } from './lti-login-throttle.js';
 import { unsignedBasicLaunchAllowed, verifyLtiOAuth } from './lti-oauth.js';
 import { ltiToolConfiguration, toolBaseUrl } from './lti-tool-config.js';
 import { LtiToolKeys } from './lti-tool-keys.js';
@@ -45,6 +48,7 @@ export class LtiController {
     private readonly lti: LtiService,
     private readonly launches: LtiLaunchService,
     private readonly toolKeys: LtiToolKeys,
+    private readonly loginThrottle: LtiLoginThrottle,
   ) {}
 
   /** What an admin pastes into Moodle or Canvas (FR-006). */
@@ -152,6 +156,7 @@ export class LtiController {
   }
 
   private login(raw: unknown, request: Request, response: Response): void {
+    this.throttleLogin(request, response);
     const { redirectUrl, state } = this.launches.login(
       raw,
       toolBaseUrl(request),
@@ -162,6 +167,25 @@ export class LtiController {
       this.stateCookieOptions(),
     );
     response.redirect(302, redirectUrl);
+  }
+
+  /** The same 429 and Retry-After as the other throttled routes (FR-002). */
+  private throttleLogin(request: Request, response: Response): void {
+    const key = request.ip ?? 'unknown';
+    const retryAfterMs = this.loginThrottle.retryAfterMs(key);
+    if (retryAfterMs > 0) {
+      const retryAfter = Math.ceil(retryAfterMs / 1000);
+      response.setHeader('Retry-After', String(retryAfter));
+      // @nestjs/common has no TooManyRequestsException.
+      throw new HttpException(
+        {
+          code: 'too_many_requests',
+          message: `Too many LTI logins from this address. Try again in ${retryAfter} seconds.`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    this.loginThrottle.record(key);
   }
 
   /**

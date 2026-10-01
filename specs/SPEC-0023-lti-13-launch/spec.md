@@ -129,7 +129,9 @@ state in a cross-site cookie named for that login (`lti_nodegrade_state_<state>`
 `/lti`, the same ten minutes), and SHALL redirect to the platform's authorization endpoint
 with `scope=openid`, `response_type=id_token`, `response_mode=form_post`, `prompt=none`,
 `client_id`, `redirect_uri` (the launch URL), `login_hint`, `state`, `nonce` and, when
-given, `lti_message_hint`.
+given, `lti_message_hint`. Once an address has started `LTI_LOGIN_MAX` (60) logins within
+`LTI_LOGIN_WINDOW_MS` (one minute), the system SHALL answer 429 with `Retry-After` and
+`{ code: "too_many_requests", message }` and SHALL record no login for that call.
 
 ### FR-003 — Launch verification
 
@@ -141,7 +143,7 @@ start the tool from the course again in its own window), SHALL accept the record
 only when `COOKIE_INSECURE` is set, logging a warning, SHALL clear that cookie on the
 launch, SHALL verify the token's signature with
 the key its `kid` names in the platform's key set (RS256 family only, refreshing the key
-set once for an unknown `kid`), and SHALL require `iss` to equal the registration's
+set for an unknown `kid` at most once a minute per key set), and SHALL require `iss` to equal the registration's
 issuer, `aud` to contain the client id with `azp` equal to it whenever several audiences
 or an `azp` are present, `exp` not to have passed, `iat` not to lie in the future, `nonce`
 to equal the recorded one, the message type `LtiResourceLinkRequest`, the version `1.3.0`
@@ -272,9 +274,11 @@ When it posts iss, login_hint, lti_message_hint and client_id to /lti/login
 Then the browser is redirected to the platform's authorization endpoint with scope=openid, response_type=id_token, response_mode=form_post, prompt=none, client_id, redirect_uri, login_hint, state, nonce and lti_message_hint
 And a state cookie named for that login is set on path /lti, so a second login in another tab keeps its own
 And an unknown issuer, an unknown client, an ambiguous issuer without client_id, or an unlisted deployment id is refused
+And the sixty-first login from one address within a minute is refused with 429 and a Retry-After header
 ```
 
-Tests: `lti/lti-launch.service.spec.ts` ("login"), `lti/lti.controller.spec.ts`.
+Tests: `lti/lti-launch.service.spec.ts` ("login"), `lti/lti.controller.spec.ts`,
+`lti/lti-login-throttle.spec.ts`.
 
 ### AC-003 — A valid launch opens the editor or the student view
 
@@ -342,8 +346,10 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
   withholds third-party cookies) → refused with `lti_state_cookie_missing`; the person
   starts the tool again from the course, which opens it in its own window. Only a
   plain-HTTP stack with `COOKIE_INSECURE` accepts the login record alone.
-- The platform rotated its signing key → the key set is fetched again once for the unknown
-  `kid`; a key still unknown is refused.
+- The platform rotated its signing key → the key set is fetched again for the unknown
+  `kid`; a key still unknown is refused. A second unknown `kid` within a minute is
+  checked against the cached set only (`jwks-fetcher.spec.ts`), so forged tokens cannot
+  turn the launch into a request generator against the platform.
 - The platform launches without a context claim → the workspace key carries an empty
   context id; the resource link id is required.
 - The platform's key set endpoint is down → the launch answers 502
@@ -394,6 +400,7 @@ Tests: `lti/lti-tool-keys.spec.ts`, `lti/lti.controller.spec.ts`.
 
 | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | Review fix: `/lti/login` is throttled per address (`LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS`) and a forced key set refresh is honoured at most once a minute per key set (FR-002, FR-003, AC-002). |
 | 2026-10-01 | Review fix: 1.1 role URNs are read by namespace, so an institution `Instructor` no longer opens the editor (FR-005, AC-005). |
 | 2026-10-01 | Review fix: the state cookie is named per login and required while cookies are secure (`lti_state_cookie_missing`); only `COOKIE_INSECURE` stacks accept the login record alone (FR-002, FR-003, AC-002, AC-004). |
 | 2026-10-01 | Review fixes: the 1.1 launch is refused without consumer credentials unless `LTI_11_ALLOW_UNSIGNED` is set (FR-005, AC-005); 1.3 workspace keys carry the `lti13:` namespace with client and deployment id, and a 1.1 key never does (FR-004, SPEC-0004/FR-008). |
