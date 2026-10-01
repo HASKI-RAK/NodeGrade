@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test'
 
-import { waitForEditor } from './support/nodegrade'
+import { WAIE_WORKSHOP_CODE, waitForEditor } from './support/nodegrade'
 
 /**
  * The direct entry at the application root (SPEC-0002/FR-001, AC-003, AC-003a): a
  * visitor gets a workspace of their own, creates a workflow in it, and finds it again
  * after a reload; the template gallery copies a published template into the same
- * workspace. No workshop code is involved on this path.
+ * workspace. No workshop code is involved on this path, and a workshop visit in between
+ * leaves it intact (SPEC-0002 business rules).
  */
 
 // The one template the debug stack can run: its model catalogue holds only the
@@ -42,6 +43,45 @@ test('a visitor creates a workflow in a browser workspace and keeps it across a 
   await expect(
     page.getByRole('list', { name: 'My workflows' }).getByText('Untitled workflow')
   ).toBeVisible()
+})
+
+test('a browser workflow opens with the browser workspace after a workshop visit', async ({
+  page
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'New workflow' }).click()
+  await waitForEditor(page)
+  const browser = await workspaceState(page)
+  expect(browser?.type).toBe('BROWSER')
+
+  // The workshop, reached through the title bar: the single-entry WAIE workshop opens its
+  // copy straight away, in a workspace of its own with the workshop's way back.
+  await page.getByRole('button', { name: 'Home' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await page.getByRole('link', { name: 'Workshop', exact: true }).click()
+  await page.waitForURL(/\/workshop$/)
+  await page.getByTestId('workshop-code').fill(WAIE_WORKSHOP_CODE)
+  await page.getByTestId('join-workshop').click()
+  await waitForEditor(page)
+  const workshop = await workspaceState(page)
+  expect(workshop?.type).toBe('WORKSHOP')
+  expect(workshop?.workspaceId).not.toBe(browser?.workspaceId)
+  await expect(page.getByRole('button', { name: 'Workshop', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Home' })).toHaveCount(0)
+
+  // Back on the direct entry, "My workflows" is the browser's list and opens its workflow
+  // with the browser workspace, not with the workshop session used last.
+  await page.goto('/')
+  await page.getByRole('link', { name: 'My workflows', exact: true }).click()
+  await expect(page).toHaveURL(/\/workflows$/)
+  await page
+    .getByRole('list', { name: 'My workflows' })
+    .getByText('Untitled workflow')
+    .click()
+  await waitForEditor(page)
+  const reopened = await workspaceState(page)
+  expect(reopened?.type).toBe('BROWSER')
+  expect(reopened?.workspaceId).toBe(browser?.workspaceId)
 })
 
 test('the template gallery copies a template into the browser workspace', async ({
