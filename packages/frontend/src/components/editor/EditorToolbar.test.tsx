@@ -6,6 +6,22 @@ import { COLOR_SCHEME_STORAGE_KEY, ColorSchemeProvider } from '@/theme/colorSche
 
 import { EditorToolbar } from './EditorToolbar'
 
+/** A viewport that answers every media query the same way. */
+const stubViewport = (matches: boolean) =>
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({
+      matches,
+      media: '',
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false
+    })
+  )
+
 describe('EditorToolbar', () => {
   afterEach(() => {
     localStorage.clear()
@@ -286,6 +302,55 @@ describe('EditorToolbar', () => {
         expect(screen.queryByRole('button', { name: 'Home' })).toBeNull()
         expect(screen.queryByRole('button', { name: 'Workshop' })).toBeNull()
       }
+    }
+  )
+
+  it.each([
+    ['a workshop session', { onWorkshop: vi.fn() }, 'Workshop'],
+    ['a browser session', { onHome: vi.fn() }, 'Home']
+  ])(
+    'keeps the way back for %s under its name below the sm breakpoint',
+    async (_label, handlers, name) => {
+      // The editor has no title bar, so the toolbar is the only way out on a phone.
+      stubViewport(true)
+      const user = userEvent.setup()
+      const action = vi.fn()
+      render(
+        <EditorToolbar
+          workflowName="Demo"
+          status="saved"
+          student={false}
+          canSaveAs
+          canReset={false}
+          ltiInstructor={false}
+          developerTools={false}
+          connectionStatus="Connected"
+          onAdd={action}
+          onRun={action}
+          onPreview={action}
+          onSaveAs={async () => undefined}
+          onHistory={action}
+          onImport={async () => undefined}
+          onExport={action}
+          onReset={async () => undefined}
+          onDeveloperTools={action}
+          onPublish={async () => undefined}
+          onRetry={action}
+          onReloadLatest={action}
+          connectionInfo={{
+            apiOrigin: 'http://api',
+            wsOrigin: 'ws://api',
+            workspaceType: 'BROWSER',
+            workflowId: 'wf-1'
+          }}
+          {...handlers}
+        />
+      )
+
+      const back = screen.getByRole('button', { name })
+      expect(back).toBeVisible()
+      await user.click(back)
+      expect(Object.values(handlers)[0]).toHaveBeenCalledOnce()
     }
   )
 })
