@@ -1,16 +1,25 @@
 import type { WorkspaceSession } from '@/api/http'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
 
-type StoredSession = WorkspaceSession & { token: string }
+export type StoredSession = WorkspaceSession & { token: string }
 
-const LEGACY_BROWSER_KEY = 'nodegrade.browser-workspace'
+const BROWSER_KEY = 'nodegrade.browser-workspace'
 const ACTIVE_KEY = 'nodegrade.active-workspace'
+const LAST_WORKSHOP_KEY = 'nodegrade.last-workshop'
 const workshopKey = (code: string) =>
   `nodegrade.workshop-workspace.${normalizeWorkshopCode(code)}`
 
+const readText = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
 const read = (key: string): StoredSession | null => {
   try {
-    const value = localStorage.getItem(key)
+    const value = readText(key)
     return value ? (JSON.parse(value) as StoredSession) : null
   } catch {
     return null
@@ -25,38 +34,53 @@ const remove = (key: string): void => {
   }
 }
 
-const write = (key: string, session: StoredSession): void => {
+const write = (key: string, value: string): void => {
   try {
-    localStorage.setItem(key, JSON.stringify(session))
+    localStorage.setItem(key, value)
   } catch {
     // A profile with storage disabled or full still gets a usable session for this page
     // view; it just will not survive the reload (SPEC-0004/NFR-001 caveat).
   }
 }
 
+const writeSession = (key: string, session: StoredSession): void =>
+  write(key, JSON.stringify(session))
+
 /**
- * Participant identity kept in the browser: one token per joined workshop, plus the one
- * the editor currently uses (SPEC-0004/NFR-001, SPEC-0022).
+ * Participant identity kept in the browser (SPEC-0004/NFR-001, SPEC-0022).
  *
- * Only workshop sessions are kept. A browser workspace stored before SPEC-0022 withdrew
- * them is dropped on first read: the server no longer honours its token.
+ * Two kinds of session live here: the browser's own anonymous workspace, minted on the
+ * direct entry (SPEC-0002/FR-001), and one workspace per joined workshop. The active
+ * session is the one the editor uses. Every workflow belongs to exactly one workspace,
+ * so the hub a participant last used — the start page or a workshop — decides which
+ * session is active.
  */
 export const workspaceStore = {
+  browser: () => read(BROWSER_KEY),
   workshop: (code: string) => read(workshopKey(code)),
-  active: (): StoredSession | null => {
-    remove(LEGACY_BROWSER_KEY)
-    const session = read(ACTIVE_KEY)
-    if (session && session.type !== 'WORKSHOP') {
-      remove(ACTIVE_KEY)
-      return null
-    }
-    return session
+  /** The workshop this browser joined most recently, for the way back to it. */
+  lastWorkshop: (): StoredSession | null => {
+    const code = readText(LAST_WORKSHOP_KEY)
+    return code ? read(workshopKey(code)) : null
+  },
+  active: () => read(ACTIVE_KEY),
+  saveBrowser(session: StoredSession) {
+    writeSession(BROWSER_KEY, session)
+    writeSession(ACTIVE_KEY, session)
   },
   saveWorkshop(code: string, session: StoredSession) {
-    write(workshopKey(code), session)
-    write(ACTIVE_KEY, session)
+    writeSession(workshopKey(code), session)
+    writeSession(ACTIVE_KEY, session)
+    write(LAST_WORKSHOP_KEY, normalizeWorkshopCode(code))
   },
   clearActive() {
     remove(ACTIVE_KEY)
+  },
+  /** Forgets the browser workspace, and the active session when it is that one. */
+  clearBrowser() {
+    const browser = read(BROWSER_KEY)
+    const active = read(ACTIVE_KEY)
+    remove(BROWSER_KEY)
+    if (active && (!browser || active.id === browser.id)) remove(ACTIVE_KEY)
   }
 }
