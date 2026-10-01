@@ -129,6 +129,23 @@ describe('start page', () => {
     expect(workspaceStore.active()?.id).toBe('ws-1')
   })
 
+  it('keeps a stored token when the server fails transiently', async () => {
+    workspaceStore.saveBrowser({ ...workspace, id: 'ws-old', token: 'stored' })
+    const fetchMock = stubApi((url) =>
+      url.endsWith('/api/workspaces/me')
+        ? jsonResponse(
+            { code: 'server_error', message: 'Workspace store unavailable.' },
+            { status: 500 }
+          )
+        : jsonResponse({ workspace, token: 'fresh' })
+    )
+    renderStart()
+
+    expect(await screen.findByText('Workspace store unavailable.')).toBeVisible()
+    expect(callsTo(fetchMock, '/api/workspaces', 'POST')).toHaveLength(0)
+    expect(workspaceStore.browser()?.token).toBe('stored')
+  })
+
   it('surfaces a failed workspace bootstrap and recovers on retry', async () => {
     let attempts = 0
     stubApi(() => {

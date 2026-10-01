@@ -19,9 +19,10 @@ const establish = async (): Promise<ActiveSession> => {
       workspaceStore.saveBrowser(session)
       return session
     } catch (error) {
-      // A token the server no longer honours — retention sweep, reset database — must not
-      // strand the participant on the start page. Drop it and mint a fresh workspace.
-      if (!(error instanceof ApiError)) throw error
+      // A token the server no longer honours (retention sweep, reset database) answers
+      // 401: drop it and mint a fresh workspace. Every other failure is reported, so a
+      // transient error never costs the participant the workspace holding their work.
+      if (!(error instanceof ApiError) || error.status !== 401) throw error
       workspaceStore.clearBrowser()
     }
   }
