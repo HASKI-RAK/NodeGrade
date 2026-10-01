@@ -1,15 +1,18 @@
 import { Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { LTI_COOKIE_NAME } from './lti-cookie.js';
+import { LTI_COOKIE_NAME, ltiStateCookieName } from './lti-cookie.js';
 import type { LtiLaunchService } from './lti-launch.service.js';
+import type { LtiLoginThrottle } from './lti-login-throttle.js';
 import type { LtiToolKeys } from './lti-tool-keys.js';
-import { LTI_STATE_COOKIE_NAME, LtiController } from './lti.controller.js';
+import { LtiController } from './lti.controller.js';
 import type { EstablishedLaunch, LtiService } from './lti.service.js';
+
+const LTI_KEY = 'lti13:https://moodle.example.org|abc123|1|course-1|link-1';
 
 const launch: EstablishedLaunch = {
   redirectUrl: 'https://grade.example.org/editor/wf-1?lti=1',
   isEditor: true,
-  ltiKey: 'https://moodle.example.org|course-1|link-1',
+  ltiKey: LTI_KEY,
   workflowId: 'wf-1',
   cookie: {
     user_id: 'user-7',
@@ -19,7 +22,7 @@ const launch: EstablishedLaunch = {
     lis_person_name_full: 'Ada Lovelace',
     tool_consumer_instance_name: 'Example University',
     lis_person_contact_email_primary: 'ada@example.test',
-    ltiKey: 'https://moodle.example.org|course-1|link-1',
+    ltiKey: LTI_KEY,
     workflowId: 'wf-1',
   },
 };
@@ -28,12 +31,14 @@ describe('LtiController', () => {
   const savedToolUrl = process.env.LTI_TOOL_URL;
   const savedKey = process.env.LTI_CONSUMER_KEY;
   const savedSecret = process.env.LTI_CONSUMER_SECRET;
+  const savedUnsigned = process.env.LTI_11_ALLOW_UNSIGNED;
 
   afterEach(() => {
     for (const [name, value] of [
       ['LTI_TOOL_URL', savedToolUrl],
       ['LTI_CONSUMER_KEY', savedKey],
       ['LTI_CONSUMER_SECRET', savedSecret],
+      ['LTI_11_ALLOW_UNSIGNED', savedUnsigned],
     ] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -51,23 +56,27 @@ describe('LtiController', () => {
       launch: jest.fn().mockResolvedValue(launch),
     };
     const toolKeys = { jwks: jest.fn().mockReturnValue({ keys: [{ kty: 'RSA', kid: 'k' }] }) };
+    const loginThrottle = { retryAfterMs: jest.fn().mockReturnValue(0), record: jest.fn() };
     const controller = new LtiController(
       lti as unknown as LtiService,
       launches as unknown as LtiLaunchService,
       toolKeys as unknown as LtiToolKeys,
+      loginThrottle as unknown as LtiLoginThrottle,
     );
     const response = {
       cookie: jest.fn(),
       clearCookie: jest.fn(),
       redirect: jest.fn(),
+      setHeader: jest.fn(),
     } as unknown as Response;
     const request = (cookies: Record<string, string> = {}) =>
       ({
         protocol: 'https',
+        ip: '203.0.113.7',
         get: (name: string) => (name === 'host' ? 'grade.example.org' : undefined),
         cookies,
       }) as unknown as Request;
-    return { controller, lti, launches, toolKeys, response, request };
+    return { controller, lti, launches, toolKeys, loginThrottle, response, request };
   };
 
   it('publishes the registration URLs from the request origin (FR-006)', () => {
@@ -79,6 +88,26 @@ describe('LtiController', () => {
       target_link_uri: 'https://grade.example.org/lti/launch',
       public_jwk_url: 'https://grade.example.org/lti/jwks',
     });
+  });
+
+  it('answers the Canvas JSON for ?format=canvas, with a new-tab placement (FR-006)', () => {
+    const { controller, request } = build();
+    delete process.env.LTI_TOOL_URL;
+
+    expect(controller.config(request(), 'canvas')).toMatchObject({
+      oidc_initiation_url: 'https://grade.example.org/lti/login',
+      privacy_level: 'public',
+      custom_fields: { activityname: 'default' },
+      extensions: [
+        expect.objectContaining({
+          platform: 'canvas.instructure.com',
+          settings: expect.objectContaining({
+            placements: [expect.objectContaining({ placement: 'course_navigation', windowTarget: '_blank' })],
+          }),
+        }),
+      ],
+    });
+    expect(controller.config(request(), 'other')).toMatchObject({ lti_version: '1.3.0' });
   });
 
   it('serves the tool key set (FR-007)', () => {
@@ -95,7 +124,7 @@ describe('LtiController', () => {
 
     expect(launches.login).toHaveBeenCalledWith(query, 'https://grade.example.org');
     expect(response.cookie).toHaveBeenCalledWith(
-      LTI_STATE_COOKIE_NAME,
+      'lti_nodegrade_state_state-1',
       'state-1',
       expect.objectContaining({ httpOnly: true, path: '/lti' }),
     );
@@ -113,12 +142,40 @@ describe('LtiController', () => {
     expect(launches.login).toHaveBeenCalledTimes(1);
   });
 
+  it('records each login per address and refuses the address over the limit with 429 and Retry-After', () => {
+    const { controller, launches, loginThrottle, response, request } = build();
+    const login = { iss: 'https://moodle.example.org', login_hint: '42' };
+
+    controller.loginByQuery(login, request(), response);
+    expect(loginThrottle.record).toHaveBeenCalledWith('203.0.113.7');
+
+    loginThrottle.retryAfterMs.mockReturnValue(30_500);
+    expect(() => controller.loginByQuery(login, request(), response)).toThrow(
+      expect.objectContaining({ status: 429, response: { code: 'too_many_requests', message: expect.stringContaining('31 seconds') } }),
+    );
+    expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '31');
+    expect(launches.login).toHaveBeenCalledTimes(1);
+    expect(loginThrottle.record).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the state cookie per login, so parallel logins keep their own state', () => {
+    const { controller, launches, response, request } = build();
+    launches.login.mockReturnValueOnce({ redirectUrl: 'https://moodle.example.org/auth', state: 'state-2' });
+    const login = { iss: 'https://moodle.example.org', login_hint: '42' };
+
+    controller.loginByQuery(login, request(), response);
+    controller.loginByQuery(login, request(), response);
+
+    expect(response.cookie).toHaveBeenCalledWith(ltiStateCookieName('state-2'), 'state-2', expect.anything());
+    expect(response.cookie).toHaveBeenCalledWith(ltiStateCookieName('state-1'), 'state-1', expect.anything());
+  });
+
   it('finishes a launch with the launch cookie and the frontend redirect (FR-004)', async () => {
     const { controller, launches, response, request } = build();
 
     await controller.launch(
       { id_token: 'jwt', state: 'state-1', lti_storage_target: 'ignored' },
-      request({ [LTI_STATE_COOKIE_NAME]: 'state-1' }),
+      request({ [ltiStateCookieName('state-1')]: 'state-1', [ltiStateCookieName('state-9')]: 'state-9' }),
       response,
     );
 
@@ -127,7 +184,11 @@ describe('LtiController', () => {
       state: 'state-1',
       stateCookie: 'state-1',
     });
-    expect(response.clearCookie).toHaveBeenCalledWith(LTI_STATE_COOKIE_NAME, { path: '/lti' });
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      ltiStateCookieName('state-1'),
+      expect.objectContaining({ path: '/lti', httpOnly: true, sameSite: 'none', secure: true }),
+    );
+    expect(response.clearCookie).not.toHaveBeenCalledWith(ltiStateCookieName('state-9'), expect.anything());
     expect(response.cookie).toHaveBeenCalledWith(
       LTI_COOKIE_NAME,
       JSON.stringify(launch.cookie),
@@ -136,16 +197,51 @@ describe('LtiController', () => {
     expect(response.redirect).toHaveBeenCalledWith(302, launch.redirectUrl);
   });
 
-  it('keeps the 1.1 basic launch and says it is deprecated', async () => {
+  it('hands an absent state cookie to the launch service as undefined', async () => {
+    const { controller, launches, response, request } = build();
+
+    await controller.launch({ id_token: 'jwt', state: 'state-1' }, request({}), response);
+
+    expect(launches.launch).toHaveBeenCalledWith(expect.objectContaining({ stateCookie: undefined }));
+  });
+
+  it('refuses the 1.1 basic launch while the consumer credentials are unset (FR-005)', async () => {
     const { controller, lti, response, request } = build();
     delete process.env.LTI_CONSUMER_KEY;
     delete process.env.LTI_CONSUMER_SECRET;
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const payload = { user_id: '7', roles: 'Instructor' } as never;
+    delete process.env.LTI_11_ALLOW_UNSIGNED;
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    await expect(
+      controller.handleBasicLogin({ user_id: '7', roles: 'Instructor' } as never, request(), response),
+    ).rejects.toMatchObject({ status: 503, response: { code: 'lti_11_not_configured' } });
+    expect(lti.handleBasicLogin).not.toHaveBeenCalled();
+    expect(response.cookie).not.toHaveBeenCalled();
+  });
+
+  it('accepts an unsigned 1.1 launch only with LTI_11_ALLOW_UNSIGNED, warning each time and logging nothing from the form (NFR-001)', async () => {
+    const { controller, lti, response, request } = build();
+    delete process.env.LTI_CONSUMER_KEY;
+    delete process.env.LTI_CONSUMER_SECRET;
+    process.env.LTI_11_ALLOW_UNSIGNED = 'true';
+    const spies = (['log', 'warn', 'debug', 'error', 'verbose'] as const).map((level) =>
+      jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined),
+    );
+    const [, warn] = spies;
+    const payload = {
+      user_id: '7',
+      roles: 'Instructor',
+      lis_person_name_full: 'Ada Lovelace',
+      lis_person_contact_email_primary: 'ada@example.test',
+      oauth_signature: 'sig-secret',
+    } as never;
 
     await controller.handleBasicLogin(payload, request(), response);
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI 1.1 is deprecated'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI_11_ALLOW_UNSIGNED'));
+    const logged = spies.flatMap((spy) => spy.mock.calls.map((call) => String(call[0]))).join('\n');
+    expect(logged).not.toMatch(/Ada Lovelace|ada@example\.test|sig-secret/);
     expect(lti.handleBasicLogin).toHaveBeenCalledWith(payload);
     expect(response.cookie).toHaveBeenCalledWith(
       LTI_COOKIE_NAME,

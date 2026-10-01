@@ -35,8 +35,8 @@ point in time (`exp`).
 
 - `POST /lti/basiclogin` (`packages/backend/src/lti/lti.controller.ts`): the 1.1 basic
   launch, validated field by field by `pipes/lti-validation.pipe.ts` and verified with
-  OAuth 1.0a HMAC-SHA1 by `lti-oauth.ts` when `LTI_CONSUMER_KEY` and `LTI_CONSUMER_SECRET`
-  are set.
+  OAuth 1.0a HMAC-SHA1 by `lti-oauth.ts` against `LTI_CONSUMER_KEY` and
+  `LTI_CONSUMER_SECRET`.
 - The launch cookie `lti_nodegrade_cookie` (`lti-cookie.ts`, `utils/LtiCookie.ts`): an
   HTTP-only JSON cookie with the person, the platform, `isEditor`, the `ltiKey` and the
   workflow to open. `WorkspaceGuard` and the Socket.IO adapter accept it in place of a
@@ -54,8 +54,11 @@ point in time (`exp`).
 ### The library (`packages/lti`)
 
 - `claims.ts`: the claim URIs, message types, version, the role vocabulary and
-  `isEditorRole` (context `Instructor` and its sub-roles, `Administrator` of the context,
-  the institution or the system; short names and 1.1 URNs for platforms that send them).
+  `isEditorRole`: context `Instructor` and its sub-roles, `Administrator` of the context,
+  the institution or the system. The 1.1 URNs are read by namespace the same way:
+  `urn:lti:role:ims/lis/Instructor` (and `Instructor/...`) or `Administrator` and an
+  `instrole`/`sysrole` `Administrator` edit, an institution or system `Instructor` stays
+  a learner, and the bare names `Instructor` and `Administrator` are accepted.
 - `platform.ts`: `LtiPlatformRegistration` — what the tool records per platform.
 - `oidc.ts`: `readOidcLoginRequest` and `buildOidcAuthorizationUrl`.
 - `launch.ts`: `verifyIdToken` and `mapLaunchClaims`. Verification uses `jsonwebtoken`
@@ -70,8 +73,8 @@ point in time (`exp`).
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/lti/config` | GET | Tool configuration JSON for registration: login, launch and JWKS URLs, title, version, message type |
-| `/lti/login` | GET, POST | OIDC third-party initiated login; redirects to the platform's authorization endpoint |
+| `/lti/config` | GET | Tool configuration JSON for registration: login, launch and JWKS URLs, title, version, message type. `?format=canvas` answers the JSON Canvas's developer key form imports |
+| `/lti/login` | GET, POST | OIDC third-party initiated login; redirects to the platform's authorization endpoint. Throttled per address (60 a minute, `LTI_LOGIN_MAX`) |
 | `/lti/launch` | POST | The platform posts `id_token` and `state`; verified, then the session is established |
 | `/lti/jwks` | GET | The tool's public key set from `LTI_TOOL_PRIVATE_KEY`; `{ "keys": [] }` when unset |
 | `/lti/basiclogin` | POST | The LTI 1.1 basic launch; logs a deprecation line per launch |
@@ -94,13 +97,13 @@ sequenceDiagram
 
     LMS->>B: resource link clicked
     B->>T: GET or POST /lti/login (iss, login_hint, client_id?, lti_deployment_id?, lti_message_hint?)
-    T->>T: find registration, issue state + nonce (10 min, single use), set state cookie
+    T->>T: find registration, issue state + nonce (10 min, single use), set per-login state cookie
     T-->>B: 302 authorization endpoint?scope=openid&response_type=id_token&response_mode=form_post&prompt=none&client_id&redirect_uri&login_hint&state&nonce&lti_message_hint
     B->>LMS: authentication request
     LMS->>LMS: user already signed in; sign id_token with platform private key
     LMS-->>B: auto-submitting form
     B->>T: POST /lti/launch (id_token, state)
-    T->>T: consume state, fetch platform JWKS (cached), verify signature, iss, aud/azp, exp, iat, nonce, message type, version, deployment
+    T->>T: consume state, require its cookie, fetch platform JWKS (cached), verify signature, iss, aud/azp, exp, iat, nonce, message type, version, deployment
     T->>T: workspace by issuer|context|resource link, first workflow, launch cookie
     T-->>B: 302 FRONTEND_URL/editor/:id?lti=1 or /student/:id?lti=1
     B->>F: editor or student view with lti_nodegrade_cookie
@@ -111,32 +114,65 @@ Where the pieces live:
 - `lti-platform.registry.ts`: the registrations from `LTI_PLATFORMS`
   (`config/lti-platforms.ts` parses and validates them at startup).
 - `lti-login-state.store.ts`: the pending logins, in memory, ten minutes, consumed once.
-  The launch is a cross-site form post, which a `SameSite=Lax` cookie does not accompany
-  and which some browsers strip of third-party cookies inside an LMS iframe, so the
-  server-side record is the source of truth; the state cookie (`lti_nodegrade_state`,
-  `SameSite=None; Secure` when cookies are secure) is checked when the browser sends it.
-- `jwks-fetcher.ts`: the platform key set with a ten-minute cache and one forced refresh
-  when a token names an unknown `kid` (key rotation).
+  The record proves the launch answers a login this server started; the state cookie
+  (`lti_nodegrade_state_<state>`, one per login so parallel logins keep their own,
+  `SameSite=None; Secure`, path `/lti`, cleared on the launch) proves it arrives in the
+  browser that started that login. Without the cookie someone could finish a login of
+  their own inside another person's browser and plant their identity there, so a launch
+  without it is refused (`lti_state_cookie_missing`). Only a plain-HTTP stack with
+  `COOKIE_INSECURE` accepts the record alone, because there the cookie falls back to
+  `SameSite=Lax` and a cross-site post does not carry it; the log says so per launch.
+- `jwks-fetcher.ts`: the platform key set with a ten-minute cache and a forced refresh
+  when a token names an unknown `kid` (key rotation), honoured at most once a minute per
+  key set so a stream of self-signed tokens cannot hammer the platform's key endpoint.
+- `lti-login-throttle.ts`: the per-address cap on login initiations, with the same
+  sliding window, 429 and `Retry-After` as the workspace and facilitator throttles.
 - `lti-launch.service.ts`: the login and the launch, refusing with `{ code, message }`
   payloads such as `lti_platform_unknown`, `lti_state_unknown`, `lti_invalid_signature`,
   `lti_invalid_audience`, `lti_token_expired`, `lti_unknown_kid`, `lti_invalid_nonce`,
   `lti_unknown_deployment`, `lti_unsupported_message_type`; nothing it logs contains a
   token, a cookie or a body.
 - `lti.service.ts`: `establishLaunch`, shared by both launch kinds; `handleBasicLogin`
-  maps the 1.1 payload onto it.
+  maps the 1.1 payload onto it; `ltiWorkspaceKey` derives the workspace key.
 - `lti-tool-keys.ts`, `lti-tool-config.ts`: the tool key set and the configuration JSON.
 
 What a 1.3 launch maps to: `sub` becomes `user_id`; context `Instructor` (and sub-roles)
-or `Administrator` roles open the editor, everyone else the student view; the `context`
-and `resource_link` claims form the `ltiKey` with the platform `iss` as issuer; `name`
-(or given and family name) and `email` fill the cookie; the `activityname` custom
-parameter names the legacy graph a new course workspace starts from, as
-`custom_activityname` did in 1.1.
+or `Administrator` roles open the editor, everyone else the student view; `name` (or
+given and family name) and `email` fill the cookie; the `activityname` custom parameter
+names the legacy graph a new course workspace starts from, as `custom_activityname` did
+in 1.1.
+
+### Workspace keys
+
+Each launch kind has its own key namespace (SPEC-0004/FR-008, `ltiWorkspaceKey` in
+`lti.service.ts`):
+
+| Launch | `ltiKey` |
+|---|---|
+| 1.1 | `<oauth_consumer_key>\|<context_id>\|<resource_link_id>`, unchanged, so existing course workspaces keep resolving |
+| 1.3 | `lti13:<iss>\|<client_id>\|<deployment_id>\|<context.id>\|<resource_link.id>`; a resource link id is unique within one deployment and nowhere wider |
+
+A 1.1 post can therefore never address a 1.3 workspace: its key has no `lti13:` prefix,
+and a consumer key that spells the prefix out is refused. A platform migrated from 1.1 to
+1.3 launches into a new `lti13:` workspace; it also sends the `lti1p1` claim with its old
+consumer key, and honouring that claim (roadmap) is how a migrated course maps onto the
+1.1 workspace it had before.
 
 ## Registering NodeGrade
 
 Open `GET https://<your host>/lti/config` first; it lists the URLs below for your
 deployment.
+
+### Launches open in a new window
+
+Register every placement so that it opens NodeGrade in its own window or tab: Moodle's
+*Default launch container: New window*, Canvas placements with *Open in a new tab*
+(`windowTarget: _blank`, which `/lti/config?format=canvas` sets). The launch ends in the
+cookie `lti_nodegrade_cookie`, which is `SameSite=Lax`: a first-party cookie that the
+browser sends only when NodeGrade is the page itself. Embedded in the course page,
+NodeGrade is a third party, the cookie never reaches the frontend, and the editor finds
+no session; the frontend tells an embedded visitor to open NodeGrade in its own window.
+The roadmap below names what an embedded launch would need.
 
 ### Moodle (LTI Advantage)
 
@@ -153,7 +189,7 @@ Site administration → Plugins → Activity modules → External tool → Manag
 | Initiate login URL | `https://<host>/lti/login` |
 | Redirection URI(s) | `https://<host>/lti/launch` |
 | Custom parameters | optional, e.g. `activityname=default` |
-| Default launch container | New window or Embed, as you prefer |
+| Default launch container | New window (see "Launches open in a new window") |
 | Privacy: share launcher's name and email | yes, so the editor shows who launched |
 
 Save, then open *View configuration details* on the tool's card and copy into
@@ -170,8 +206,11 @@ Save, then open *View configuration details* on the tool's card and copy into
 
 ### Canvas
 
-Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*, method *Manual Entry* (or
-*Paste JSON* with the fields `/lti/config` returns):
+Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*. With method *Paste JSON*, paste
+the answer of `GET https://<host>/lti/config?format=canvas`: Canvas's own configuration
+schema, with the three URLs, `privacy_level: public`, the `activityname` custom field and
+one Course Navigation placement that opens NodeGrade in a new tab. With method *Manual
+Entry*, fill in:
 
 | Canvas field | Value |
 |---|---|
@@ -181,7 +220,9 @@ Admin → Developer Keys → *+ Developer Key* → *+ LTI Key*, method *Manual E
 | JWK Method | Public JWK URL → `https://<host>/lti/jwks` |
 | Redirect URIs | `https://<host>/lti/launch` |
 | LTI Advantage Services | none needed today |
+| Custom Fields | optional, e.g. `activityname=default` |
 | Privacy Level | Public, so name and email are sent |
+| Placements | Course Navigation or Assignment Selection, each with *Open in a new tab* (`windowTarget: _blank`); see "Launches open in a new window" below |
 
 Turn the key *ON*, copy its Client ID, then Settings → Apps → *+ App* → Configuration
 Type *By Client ID* in the account or course; the Deployment ID appears on the installed
@@ -206,10 +247,12 @@ registration and Canvas always sends `client_id` on the login.
 |---|---|
 | `LTI_PLATFORMS` | JSON array of registrations: `issuer`, `clientId`, `deploymentIds`, `authorizationEndpoint`, `tokenEndpoint`, `jwksUri`, optional `name`. Validated at startup; a bad entry stops the backend with a line naming the entry and the field. Unset means no 1.3 platform. |
 | `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`; literal `\n` is accepted). `/lti/jwks` serves its public half with a stable `kid`. Needed by the services below, not by the launch. |
-| `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin (set by the debug stack to the backend port). |
-| `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. Unset disables the signature check, for local testing only. |
+| `LTI_TOOL_URL` | Public base URL of the `/lti` routes. Without it the tool URLs derive from the request origin (`trust proxy` and the frontend's nginx, which passes the `Host` header with its port, make that the public scheme, host and port); set it when a proxy rewrites the origin the platform called, and to the backend port on the debug stack. |
+| `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | The 1.1 basic launch credentials. While either is unset, `POST /lti/basiclogin` answers 503 `lti_11_not_configured`. |
+| `LTI_LOGIN_MAX`, `LTI_LOGIN_WINDOW_MS` | Login initiations one address may start per window; defaults 60 per 60000 ms. Each initiation records a pending login for ten minutes, so the cap keeps one address from evicting everyone else's. |
+| `LTI_11_ALLOW_UNSIGNED` | `true` accepts unsigned 1.1 launches while the credentials are unset, for a local test platform without a secret. Whoever posts the form then picks the course, the role and the person, and every launch logs a warning. Never set it on a deployment. |
 | `FRONTEND_URL` | Where both launches redirect (`/editor/:id?lti=1`, `/student/:id?lti=1`). |
-| `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, and the state cookie falls back to `SameSite=Lax`; the server-side login record carries the launch. |
+| `COOKIE_INSECURE` | On the plain-HTTP debug stack cookies lose `Secure`, the state cookie falls back to `SameSite=Lax` and does not arrive on the cross-site launch post; the launch then passes on the server-side login record alone, with a warning per launch. Never set it on a deployment. |
 
 `stack.env.example`, `docker-compose.yml`, `docker-compose.prod.yml` and
 `docker-compose.debug.yml` pass them through like `FRONTEND_URL`.
@@ -257,13 +300,18 @@ Everything below rides on the launch and on the tool key pair of `/lti/jwks`.
    already carries `LtiPlatform` and `LtiClientRegistration` models from that skeleton
    (`packages/backend/prisma/schema.prisma`), unused so far; `LtiPlatformRegistry` is the
    place to read them from.
-5. **Platform storage.** When a browser blocks the state cookie inside the LMS iframe, the
-   LTI Platform Storage profile keeps `state` through `postMessage` to the platform; the
-   server-side login record makes this optional for NodeGrade.
+5. **Embedded launches.** Launching inside the LMS page needs a session that no
+   first-party cookie carries: either a `SameSite=None` launch session with a CSRF
+   defence of its own, or a one-time code in the redirect that the frontend exchanges
+   for a bearer token (SPEC-0023/FR-013). The login half would use the LTI Platform
+   Storage profile, which keeps `state` through `postMessage` to the platform where the
+   browser withholds the state cookie in an iframe.
 6. **1.1 to 1.3 migration claim.** A platform migrated from 1.1 sends
    `https://purl.imsglobal.org/spec/lti/claim/lti1p1` with the old `user_id` and
-   `oauth_consumer_key`; honouring it would let a course keep its 1.1 workspace
-   (`consumer key|context|link`) after the switch.
+   `oauth_consumer_key` (plus `oauth_consumer_key_sign`, an HMAC over the launch that
+   proves the platform knew the secret). Today such a launch keys a new `lti13:`
+   workspace; honouring the claim is how a migrated course would map onto its 1.1
+   workspace (`consumer key|context|link`) after the switch.
 
 ## Sources
 

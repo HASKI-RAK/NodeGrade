@@ -1,5 +1,4 @@
 import {
-  LtiBasicLaunchRequest,
   OpenIdConfigJson,
   SuccessfulToolRegistrationResponse,
   ToolRegistrationRequest
@@ -16,51 +15,6 @@ export const isPayloadToolRegistrationValid = (
     'redirect_uris' in payload &&
     'jwks_uri' in payload
   )
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function isBasicLtiLaunchValid(value: any): value is LtiBasicLaunchRequest {
-  const requiredProps = [
-    'user_id',
-    'roles',
-    'context_id',
-    'context_label',
-    'context_title',
-    'lti_message_type',
-    'resource_link_title',
-    'resource_link_id',
-    'context_type'
-  ]
-
-  // Check if value exists and is an object
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  // Check if all required properties exist and have correct types
-  for (const prop of requiredProps) {
-    if (!(prop in value)) {
-      return false
-    }
-  }
-
-  // Check specific property types and constraints
-  if (
-    typeof value.user_id !== 'number' ||
-    typeof value.roles !== 'string' ||
-    typeof value.context_id !== 'number' ||
-    typeof value.context_label !== 'string' ||
-    typeof value.context_title !== 'string' ||
-    typeof value.lti_message_type !== 'string' ||
-    value.lti_message_type !== 'basic-lti-launch-request' ||
-    typeof value.resource_link_title !== 'string' ||
-    typeof value.resource_link_id !== 'number' ||
-    typeof value.context_type !== 'string'
-  ) {
-    return false
-  }
-
-  return true
 }
 
 export function isSuccessfulToolRegistrationResponse(

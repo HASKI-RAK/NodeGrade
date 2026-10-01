@@ -14,7 +14,8 @@ dependency. The backend (`packages/backend/src/lti/`) wires it into HTTP.
 - `src/lti/ags.ts`, `src/lti/nrps.ts`: the service endpoints a launch advertises, for the
   grade passback and roster work that comes next.
 - `src/lti/toolRegistration.ts`, `src/utils/typeGuards.ts`: the LTI 1.1 basic launch
-  payload and the Dynamic Registration types.
+  payload type (validated field by field by the backend's `LtiBasicLaunchValidationPipe`)
+  and the Dynamic Registration types with their guards, for the roadmap.
 
 `docs/lti.md` at the repository root explains the protocol, the registration steps for
 Moodle and Canvas, and the roadmap.

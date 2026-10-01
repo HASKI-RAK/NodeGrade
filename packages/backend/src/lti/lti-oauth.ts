@@ -1,6 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
 
+/**
+ * Whether a 1.1 launch may pass without a signature (SPEC-0023/FR-005). Local testing
+ * only: an unsigned form post is the launch, so whoever posts it chooses the course,
+ * the role and the person. The controller logs a warning on every such launch.
+ */
+export const unsignedBasicLaunchAllowed = (): boolean =>
+  process.env.LTI_11_ALLOW_UNSIGNED === 'true' ||
+  process.env.LTI_11_ALLOW_UNSIGNED === '1';
+
 const encode = (value: string): string =>
   encodeURIComponent(value).replace(
     /[!'()*]/g,

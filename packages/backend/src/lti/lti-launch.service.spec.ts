@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
 import { LTI_CLAIM, LTI_ROLE, type Jwk } from '@haski/lti';
 import type { JwksFetcher } from './jwks-fetcher.js';
@@ -44,6 +45,19 @@ const signJwt = (
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 describe('LtiLaunchService', () => {
+  const savedInsecure = process.env.COOKIE_INSECURE;
+
+  // Secure cookies unless a test says otherwise: that is every deployment.
+  beforeEach(() => {
+    delete process.env.COOKIE_INSECURE;
+  });
+
+  afterEach(() => {
+    if (savedInsecure === undefined) delete process.env.COOKIE_INSECURE;
+    else process.env.COOKIE_INSECURE = savedInsecure;
+    jest.restoreAllMocks();
+  });
+
   const platformKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const otherKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const platformJwk: Jwk = {
@@ -218,6 +232,7 @@ describe('LtiLaunchService', () => {
 
       expect(launch.redirectUrl).toBe('http://front/editor/wf-1?lti=1');
       expect(lti.establishLaunch).toHaveBeenCalledWith({
+        protocol: { version: '1.3', clientId: moodle.clientId, deploymentId: '1' },
         issuer: moodle.issuer,
         contextId: 'course-1',
         contextTitle: 'Analysis I',
@@ -243,7 +258,7 @@ describe('LtiLaunchService', () => {
           [LTI_CLAIM.custom]: { activityname: 'intro' },
         }),
         state,
-        stateCookie: undefined,
+        stateCookie: state,
       });
 
       expect(launch.redirectUrl).toBe('http://front/student/wf-1?lti=1');
@@ -303,12 +318,35 @@ describe('LtiLaunchService', () => {
 
       await refused(
         service,
-        { idToken: idToken(first.nonce), state: second.state, stateCookie: undefined },
+        { idToken: idToken(first.nonce), state: second.state, stateCookie: second.state },
         'lti_invalid_nonce',
       );
     });
 
-    it('refuses a state cookie from another browser session when one is present', async () => {
+    it('refuses a launch without its state cookie while cookies are secure, and burns the login', async () => {
+      const { service, lti } = build();
+      const { state, nonce } = startLogin(service);
+      const token = idToken(nonce);
+
+      await refused(service, { idToken: token, state, stateCookie: undefined }, 'lti_state_cookie_missing');
+      expect(lti.establishLaunch).not.toHaveBeenCalled();
+      // The record was consumed by the refused attempt: the launch cannot be retried.
+      await refused(service, { idToken: token, state, stateCookie: state }, 'lti_state_unknown');
+    });
+
+    it('accepts a launch without the cookie on an insecure stack, with a warning', async () => {
+      process.env.COOKIE_INSECURE = 'true';
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { service } = build();
+      const { state, nonce } = startLogin(service);
+
+      const launch = await service.launch({ idToken: idToken(nonce), state, stateCookie: undefined });
+
+      expect(launch.workflowId).toBe('wf-1');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('COOKIE_INSECURE'));
+    });
+
+    it('refuses a state cookie that names another login', async () => {
       const { service } = build();
       const { state, nonce } = startLogin(service);
 

@@ -13,6 +13,7 @@ import {
   verifyIdToken,
   type LtiPlatformRegistration,
 } from '@haski/lti';
+import { cookiesInsecure } from '../config/cookies.js';
 import { JwksFetcher } from './jwks-fetcher.js';
 import { LtiLoginStateStore } from './lti-login-state.store.js';
 import { LtiPlatformRegistry } from './lti-platform.registry.js';
@@ -28,7 +29,7 @@ export type LtiLoginRedirect = {
 export type LtiLaunchRequest = {
   idToken: unknown;
   state: unknown;
-  /** The state cookie as received, or undefined when the browser sent none. */
+  /** The cookie named for this state as received, or undefined when the browser sent none. */
   stateCookie: string | undefined;
 };
 
@@ -106,15 +107,7 @@ export class LtiLaunchService {
           'This launch answers no login this tool started, or the login expired. Start it again from the course.',
       });
     }
-    if (
-      request.stateCookie !== undefined &&
-      request.stateCookie !== request.state
-    ) {
-      throw new UnauthorizedException({
-        code: 'lti_state_mismatch',
-        message: 'This launch was started in another browser session.',
-      });
-    }
+    this.bindToBrowser(request.state, request.stateCookie);
     const platform = this.platformFor(login.issuer, login.clientId);
     const claims = await this.verify(request.idToken, platform, login.nonce);
     const identity = mapLaunchClaims(claims);
@@ -129,6 +122,11 @@ export class LtiLaunchService {
       `LTI 1.3 launch from ${platform.issuer} context ${identity.contextId ?? '-'} link ${identity.resourceLinkId} as ${identity.isInstructor ? 'editor' : 'student'}`,
     );
     return this.lti.establishLaunch({
+      protocol: {
+        version: '1.3',
+        clientId: platform.clientId,
+        deploymentId: identity.deploymentId,
+      },
       issuer: platform.issuer,
       contextId: identity.contextId ?? '',
       contextTitle: identity.contextTitle ?? identity.resourceLinkTitle ?? '',
@@ -142,6 +140,37 @@ export class LtiLaunchService {
       platformGuid: identity.platformGuid ?? platform.issuer,
       platformName: identity.platformName ?? platform.name ?? '',
     });
+  }
+
+  /**
+   * The state cookie proves that the browser posting the launch is the one that started
+   * the login (FR-003). Without that proof someone could complete a login of their own
+   * inside another person's browser, by a hidden form posting id_token and state within
+   * the ten-minute TTL, and plant their identity there. The cookie is SameSite=None and
+   * so needs Secure; on a plain-HTTP stack (COOKIE_INSECURE) it falls back to Lax, which
+   * a cross-site post does not carry, so there the login record alone decides and the
+   * log says so.
+   */
+  private bindToBrowser(state: string, stateCookie: string | undefined): void {
+    if (stateCookie === undefined) {
+      if (!cookiesInsecure()) {
+        throw new UnauthorizedException({
+          code: 'lti_state_cookie_missing',
+          message:
+            'The browser carried no login cookie into this launch. Start NodeGrade from the course again and let it open in its own window: embedded in the course page, the browser withholds the cookie.',
+        });
+      }
+      this.logger.warn(
+        'LTI launch accepted without its state cookie because COOKIE_INSECURE is set; only the login record was checked.',
+      );
+      return;
+    }
+    if (stateCookie !== state) {
+      throw new UnauthorizedException({
+        code: 'lti_state_mismatch',
+        message: 'This launch was started in another browser session.',
+      });
+    }
   }
 
   /**
