@@ -1,4 +1,6 @@
+import type { LtiPlatformRegistration } from '@haski/lti';
 import { resolveCorsOrigins } from './cors.js';
+import { parseLtiPlatforms } from './lti-platforms.js';
 
 /**
  * The model worker address used before MODEL_WORKER_URL existed. It was hardcoded in
@@ -46,6 +48,14 @@ export type AppConfig = {
     username: string;
     password: string;
   };
+  lti: {
+    /** Platforms allowed to launch this tool over LTI 1.3 (SPEC-0023/FR-001). */
+    platforms: LtiPlatformRegistration[];
+    /** PEM RSA private key the tool signs service requests with; its public half is served at /lti/jwks. */
+    toolPrivateKey?: string;
+    /** Public base URL of the tool's /lti routes when the request origin is not it. */
+    toolUrl?: string;
+  };
 };
 
 const toBool = (raw: string | undefined): boolean =>
@@ -69,5 +79,10 @@ export const configuration = (): AppConfig => ({
     endpoint: process.env.XAPI_ENDPOINT ?? '',
     username: process.env.XAPI_USERNAME ?? '',
     password: process.env.XAPI_PASSWORD ?? '',
+  },
+  lti: {
+    platforms: parseLtiPlatforms(process.env.LTI_PLATFORMS),
+    toolPrivateKey: process.env.LTI_TOOL_PRIVATE_KEY || undefined,
+    toolUrl: process.env.LTI_TOOL_URL || undefined,
   },
 });

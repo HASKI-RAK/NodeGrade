@@ -25,3 +25,23 @@ export function sessionCookieOptions(maxAgeMs: number): CookieOptions {
     maxAge: maxAgeMs,
   };
 }
+
+/**
+ * A cookie that must arrive on a cross-site form post, which is how an LTI platform
+ * delivers a launch: SameSite=None, which browsers accept only together with Secure.
+ * On the plain-HTTP debug stack the cookie falls back to Lax, where it is absent on
+ * the cross-site post; the LTI login state store is the source of truth for that case.
+ */
+export function crossSiteCookieOptions(
+  maxAgeMs: number,
+  path = '/',
+): CookieOptions {
+  const secure = !cookiesInsecure();
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: secure ? 'none' : 'lax',
+    path,
+    maxAge: maxAgeMs,
+  };
+}

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es6",
+    "target": "ES2022",
     "module": "commonjs",
     "declaration": true,
     "outDir": "./dist",
@@ -10,8 +10,7 @@
   },
   "include": [
     "index.ts",
-    "src/**/*.ts",
-    "core/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
