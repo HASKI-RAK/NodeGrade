@@ -199,18 +199,29 @@ describe('LtiController', () => {
     expect(response.cookie).not.toHaveBeenCalled();
   });
 
-  it('accepts an unsigned 1.1 launch only with LTI_11_ALLOW_UNSIGNED, warning each time', async () => {
+  it('accepts an unsigned 1.1 launch only with LTI_11_ALLOW_UNSIGNED, warning each time and logging nothing from the form (NFR-001)', async () => {
     const { controller, lti, response, request } = build();
     delete process.env.LTI_CONSUMER_KEY;
     delete process.env.LTI_CONSUMER_SECRET;
     process.env.LTI_11_ALLOW_UNSIGNED = 'true';
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const payload = { user_id: '7', roles: 'Instructor' } as never;
+    const spies = (['log', 'warn', 'debug', 'error', 'verbose'] as const).map((level) =>
+      jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined),
+    );
+    const [, warn] = spies;
+    const payload = {
+      user_id: '7',
+      roles: 'Instructor',
+      lis_person_name_full: 'Ada Lovelace',
+      lis_person_contact_email_primary: 'ada@example.test',
+      oauth_signature: 'sig-secret',
+    } as never;
 
     await controller.handleBasicLogin(payload, request(), response);
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI 1.1 is deprecated'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('LTI_11_ALLOW_UNSIGNED'));
+    const logged = spies.flatMap((spy) => spy.mock.calls.map((call) => String(call[0]))).join('\n');
+    expect(logged).not.toMatch(/Ada Lovelace|ada@example\.test|sig-secret/);
     expect(lti.handleBasicLogin).toHaveBeenCalledWith(payload);
     expect(response.cookie).toHaveBeenCalledWith(
       LTI_COOKIE_NAME,

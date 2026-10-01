@@ -6,6 +6,12 @@ import {
 } from '@nestjs/common';
 import { LtiBasicLaunchRequest } from '@haski/lti';
 
+/**
+ * Validates the LTI 1.1 basic launch form field by field (SPEC-0023/FR-005).
+ *
+ * A rejected form is described by its error list alone: the form carries the person's
+ * name, e-mail and the OAuth signature, none of which belongs in a log (NFR-001).
+ */
 @Injectable()
 export class LtiBasicLaunchValidationPipe implements PipeTransform<
   unknown,
@@ -19,7 +25,6 @@ export class LtiBasicLaunchValidationPipe implements PipeTransform<
 
     if (!isValid) {
       const errorMessage = `Invalid LTI Basic Launch Request: ${validationErrors.join(', ')}`;
-      this.logger.debug(`Validation failed: ${JSON.stringify(value)}`);
       this.logger.warn(errorMessage);
       throw new BadRequestException(errorMessage);
     }
@@ -107,13 +112,9 @@ export class LtiBasicLaunchValidationPipe implements PipeTransform<
               // Valid JSON that parses to an object
               continue;
             }
-          } catch (error) {
-            // Using error parameter instead of e, and safe conversion to string
-            this.logger.debug(
-              `Failed to parse lis_result_sourcedid as JSON: ${String(val)} with error: ${String(
-                error,
-              )}`,
-            );
+          } catch {
+            // Not logged: JSON.parse quotes the value in its message. The error list
+            // below names the field.
           }
           // If we're here, it's a string but not valid JSON
           errors.push(

@@ -246,8 +246,10 @@ environment for the database first.
 The launch path SHALL log at most the issuer, deployment, context, resource link and role
 of a launch, never the id_token, the state, the cookies or the posted form.
 
-Verification: code review of `lti-launch.service.ts` and `lti.controller.ts`; the
-controller spec asserts the deprecation line and nothing else is logged for a 1.1 launch.
+Verification: code review of `lti-launch.service.ts` and `lti.controller.ts`;
+`lti.controller.spec.ts` asserts that no line logged during a 1.1 launch carries the
+person's name, e-mail or OAuth signature, and `pipes/lti-validation.pipe.spec.ts` asserts
+the same for a rejected form, whose log holds the error list alone.
 
 ## Acceptance criteria
 
