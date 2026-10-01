@@ -26,7 +26,7 @@ import {
   useSearchParams
 } from 'react-router-dom'
 
-import { api, type Workflow, type WorkflowTemplate } from '@/api/http'
+import { api, ApiError, type Workflow, type WorkflowTemplate } from '@/api/http'
 import Canvas from '@/components/Canvas'
 import { EditorRail } from '@/components/editor/EditorRail'
 import { EditorToolbar } from '@/components/editor/EditorToolbar'
@@ -81,6 +81,26 @@ const prepareGraph = (graph: LGraph, serialized: SerializedWorkflow) => {
     compactNodeWidgets(node)
   })
   graph.setDirtyCanvas(true, true)
+}
+
+const EMBEDDED_LAUNCH_MESSAGE =
+  'NodeGrade has to open in its own window: the course page blocks the launch cookie. Ask your course to open the tool in a new window.'
+
+/**
+ * Why the workflow did not load, in the participant's terms. An LTI launch inside the
+ * course page's frame is the one case with a remedy: the launch cookie of
+ * SPEC-0023/FR-004 is SameSite=Lax, so the browser withholds it from the embedded tool
+ * and the editor's first request answers 401. A launch in its own window carries it.
+ */
+const describeLoadError = (error: unknown, ltiMode: boolean): string => {
+  if (
+    ltiMode &&
+    error instanceof ApiError &&
+    error.status === 401 &&
+    window.self !== window.top
+  )
+    return EMBEDDED_LAUNCH_MESSAGE
+  return error instanceof Error ? error.message : 'Workflow could not be loaded.'
 }
 
 export const drawerWidth = 400
@@ -143,10 +163,7 @@ export const Editor = () => {
         if (active) setWorkflow(loaded)
       })
       .catch((error: unknown) => {
-        if (active)
-          setLoadError(
-            error instanceof Error ? error.message : 'Workflow could not be loaded.'
-          )
+        if (active) setLoadError(describeLoadError(error, ltiMode))
       })
     return () => {
       active = false
