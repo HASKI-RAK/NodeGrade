@@ -1,5 +1,7 @@
 import AddIcon from '@mui/icons-material/Add'
+import GroupsIcon from '@mui/icons-material/Groups'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import HomeIcon from '@mui/icons-material/Home'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -21,9 +23,11 @@ import {
   TextField,
   Toolbar,
   Tooltip,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material'
-import { useRef, useState } from 'react'
+import { type ReactElement, useRef, useState } from 'react'
 
 import { ColorSchemeMenuItems } from '@/components/ColorSchemeMenuItems'
 import type { SaveStatus } from '@/hooks/useAutosave'
@@ -41,6 +45,34 @@ const labels: Record<SaveStatus, string> = {
   readonly: 'Read-only'
 }
 
+/**
+ * The way back out of the editor (SPEC-0002/FR-007). The editor has no title bar, so
+ * below the sm breakpoint the label gives way to an icon with the same accessible name
+ * instead of leaving the toolbar.
+ */
+const WayBack = ({
+  label,
+  icon,
+  compact,
+  onClick
+}: {
+  label: string
+  icon: ReactElement
+  compact: boolean
+  onClick: () => void
+}) =>
+  compact ? (
+    <Tooltip title={label}>
+      <IconButton aria-label={label} onClick={onClick}>
+        {icon}
+      </IconButton>
+    </Tooltip>
+  ) : (
+    <Button startIcon={icon} onClick={onClick}>
+      {label}
+    </Button>
+  )
+
 export const EditorToolbar = ({
   workflowName,
   status,
@@ -53,6 +85,7 @@ export const EditorToolbar = ({
   connectionStatus,
   onAdd,
   onWorkshop,
+  onHome,
   onRun,
   onPreview,
   onSaveAs,
@@ -77,8 +110,10 @@ export const EditorToolbar = ({
   developerTools: boolean
   connectionStatus: string
   onAdd: () => void
-  /** Back to the participant's workshop overview; absent outside a workshop. */
+  /** Back to the participant's workshop overview; present for workshop sessions only. */
   onWorkshop?: () => void
+  /** Back to the start page; present for the browser's own workspace only. */
+  onHome?: () => void
   onRun: () => void
   onPreview: () => void
   onSaveAs: (name: string) => Promise<void>
@@ -105,6 +140,8 @@ export const EditorToolbar = ({
   const [helpOpen, setHelpOpen] = useState(false)
   const [name, setName] = useState(`${workflowName} copy`)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const theme = useTheme()
+  const compact = useMediaQuery(theme.breakpoints.down('sm'))
   return (
     <>
       <AppBar position="static" color="inherit" elevation={1}>
@@ -122,12 +159,20 @@ export const EditorToolbar = ({
             </Button>
           )}
           {!student && onWorkshop && (
-            <Button
+            <WayBack
+              label="Workshop"
+              icon={<GroupsIcon />}
+              compact={compact}
               onClick={onWorkshop}
-              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-            >
-              Workshop
-            </Button>
+            />
+          )}
+          {!student && onHome && (
+            <WayBack
+              label="Home"
+              icon={<HomeIcon />}
+              compact={compact}
+              onClick={onHome}
+            />
           )}
           {!readOnly && (
             <Button startIcon={<PlayArrowIcon />} onClick={onRun}>

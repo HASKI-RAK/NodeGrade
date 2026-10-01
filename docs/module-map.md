@@ -10,20 +10,25 @@ Responsibilities:
 
 - issue and resolve opaque workspace access tokens (only the SHA-256 hash is stored)
 - scope every participant operation to one workspace
-- `WORKSHOP` and `LTI` workspace kinds; `BROWSER` is legacy — its tokens are rejected and
-  retention still sweeps the old rows (SPEC-0022/FR-013)
+- `BROWSER`, `WORKSHOP` and `LTI` workspace kinds; a browser mints its own through
+  `POST /api/workspaces` behind the per-address creation throttle (SPEC-0004/FR-003,
+  ADR-0011), a workshop join mints a `WORKSHOP` one, an LTI launch an `LTI` one
 - read-only state of a closed or expired workshop: `resolveByToken` carries it and the
   guard rejects non-GET/HEAD requests with `workshop_closed`
-- workspace creation throttle for workshop joins (`workspace-creation-throttle.ts`)
+- workspace creation throttle shared by direct entry and workshop joins
+  (`workspace-creation-throttle.ts`)
 - retention sweeps and last-active bookkeeping
 
 Primary entry points:
 
-- `workspace.service.ts`, `workspace-token.ts`
+- `workspace.controller.ts` (`POST /api/workspaces`, `GET /api/workspaces/me`),
+  `dto/create-workspace.dto.ts`
+- `workspace.service.ts` (`createBrowser`, `createWorkshop`, `resolveByToken`,
+  `resolveByLtiKey`), `workspace-token.ts`
 - `guards/workspace.guard.ts`, `decorators/current-workspace.decorator.ts`
 - `retention.service.ts` (plain `setInterval`, public `sweep(now)`)
-- frontend: `store/workspaceStore.ts` (localStorage: one token per joined workshop plus
-  the active one; legacy browser sessions are dropped on read)
+- frontend: `store/workspaceStore.ts` (localStorage: the browser's own token and one
+  token per joined workshop, plus which is active)
 
 Used by: every participant-facing controller, the Socket.IO run handler, the editor UI.
 
@@ -38,9 +43,10 @@ Responsibilities:
 - workflow CRUD inside a workspace; identity is `(workspaceId, slug)`
 - optimistic concurrency through `If-Match`/`ETag`
 - draft `content` versus `publishedContent` projection (ADR-0007)
-- creation from content, and from a template revision when a workshop entry is started
-  (`createFromTemplate`; there is no participant-facing copy endpoint), and reset to the
-  revision a copy was made from
+- creation from content, from a published workflow template by slug
+  (`POST /api/workflows/from-template`, the gallery's "Use template",
+  `createFromTemplateSlug`) and from a template revision when a workshop entry is started
+  (`createFromTemplate`), and reset to the revision a copy was made from
 - version history: a `WorkflowVersion` row per state the workflow leaves, coalesced on
   save and forced before a reset or restore, with a per-workflow cap (newest 20)
 
@@ -61,9 +67,10 @@ Location: `packages/backend/src/template/`
 Responsibilities:
 
 - `WORKFLOW` and `BLOCK` templates with immutable revisions
-- publish/unpublish and soft delete; there is no public gallery — `template.controller.ts`
-  (`/api/templates`) is workspace-scoped and serves published `BLOCK` templates for the
-  palette, and workflow templates reach participants only as workshop entries
+- publish/unpublish and soft delete; `template.controller.ts` (`/api/templates`) is
+  workspace-scoped and serves published templates of both kinds (`?kind=`), a template by
+  slug and a revision by id — workflow templates for the gallery, block templates for the
+  palette; workshop participants also reach workflow templates as entries
 - refusing to delete the current revision a newest-revision workshop entry follows
   (`revision_current_in_use`); workshop pins count as references
 - block interface declarations used for palette insertion
@@ -270,30 +277,73 @@ Tests: `packages/frontend/src/**/*.test.tsx`, `packages/frontend/src/**/*.test.t
 
 Location: `packages/frontend/src/pages/`, routes in `packages/frontend/src/routes.tsx`
 
-Primary entry points: `StartPage.tsx` (`/`: code entry, a link back to the last joined
-workshop, the facilitator link), `WorkshopJoin.tsx` (`/workshop/:code`: join and the
-workshop overview with template cards and "My workflows"), `components/TemplateCard.tsx`,
-`admin/AdminPage.tsx` (`/admin/workshops`, `/admin/providers`, `/admin/templates`),
-`admin/WorkshopAdmin.tsx`, `admin/TemplateAdmin.tsx`, `admin/adminApi.ts` (CSRF-carrying
-admin requests), `lti/LtiRegister.tsx`, `NotFoundPage.tsx`. The former `/templates` and
-`/workflows` routes redirect to the active workshop's overview, or to `/`.
+Responsibilities: the app shell with the title bar on every page outside the editor, the
+direct entry at `/` backed by the browser's own workspace, the workshop hub and join
+pages, the workflow list and the template gallery, the facilitator area.
+
+Primary entry points: `components/AppShell.tsx` (layout route: title bar with brand,
+Workflows, Templates, Workshop, Facilitator and the appearance picker, then the page),
+`StartPage.tsx` (`/`: New workflow, My workflows, Templates; bootstraps the browser
+workspace through `hooks/useWorkspaceSession.ts` and `store/workspaceSession.ts`),
+`WorkshopPage.tsx` (`/workshop`: code entry and the way back to the workshop joined
+last), `WorkshopJoin.tsx` (`/workshop/:code`: join and the workshop overview with
+template cards and "My workflows"), `WorkflowListPage.tsx` (`/workflows`),
+`TemplatesPage.tsx` (`/templates`: gallery of workflow templates with structure preview
+and "Use template"), `components/TemplateCard.tsx` (card and structure dialog shared by
+the gallery and the overview), `admin/AdminPage.tsx` (`/admin/workshops`,
+`/admin/providers`, `/admin/templates`), `admin/WorkshopAdmin.tsx`,
+`admin/TemplateAdmin.tsx`, `admin/adminApi.ts` (CSRF-carrying admin requests),
+`lti/LtiRegister.tsx` (outside the shell), `NotFoundPage.tsx`.
+
+Session rule: `store/workspaceStore.ts` keeps the browser workspace, one session per
+joined workshop, the last joined workshop and the active session. `store/workspaceSession.ts`
+only remembers the browser workspace it bootstraps; `hooks/useWorkspaceSession.ts` makes
+it active on every mount of a direct-entry page, and the handlers that open the editor
+activate the session they used right before navigating. A workshop route makes that
+workshop's session active as it joins, and the editor opens a workflow with the active
+session.
 
 Server access: `api/http.ts` only. Runtime config: `utils/config.ts` +
 `public/config/env.*.json`.
 
 ## LTI
 
-Location: `packages/backend/src/lti/`, `packages/lti/`
+Location: `packages/backend/src/lti/` (`LtiModule`), `packages/lti/` (`@haski/lti`)
 
-Responsibilities: LTI 1.3 launch validation, platform registration, NRPS, JWT/JWKS
-handling, launch cookie that carries `ltiKey` and editor/student role.
+Responsibilities:
 
-Primary entry points: `packages/backend/src/lti/lti.controller.ts`, `lti.service.ts`,
-`lti-cookie.ts`, `lti-oauth.ts`, `pipes/lti-validation.pipe.ts`;
-`packages/lti/src/lti/lti.ts`, `packages/lti/core/platform.ts`
+- the LTI 1.3 launch (SPEC-0023): platform registrations from `LTI_PLATFORMS`, the OIDC
+  third-party initiated login (`/lti/login`), the id_token launch (`/lti/launch`) verified
+  against the platform's JWKS, the tool configuration (`/lti/config`) and key set
+  (`/lti/jwks`)
+- the LTI 1.1 basic launch (`/lti/basiclogin`, OAuth 1.0a), kept and logged as deprecated;
+  refused while the consumer credentials are unset
+- one shared launch tail: the `LTI` workspace by `ltiKey` (`ltiWorkspaceKey`: 1.1 keys as
+  before, 1.3 keys in the `lti13:` namespace), the first workflow, the launch cookie that
+  carries `ltiKey` and the editor/student role, the frontend redirect
+- the per-address throttle on login initiations and the once-a-minute cap on forced key
+  set refreshes
 
-Related: `packages/backend/src/utils/websocket-cookie.adapter.ts` forwards the launch
-cookie onto the Socket.IO handshake.
+Primary entry points: backend `lti.module.ts`, `lti.controller.ts`,
+`lti-launch.service.ts` (login and launch), `lti.service.ts` (`establishLaunch`,
+`handleBasicLogin`, `ltiWorkspaceKey`), `lti-platform.registry.ts`,
+`lti-login-state.store.ts`, `lti-login-throttle.ts`, `jwks-fetcher.ts`,
+`lti-tool-keys.ts`, `lti-tool-config.ts` (generic and Canvas configuration JSON),
+`lti-cookie.ts` (`ltiStateCookieName`), `lti-oauth.ts`, `pipes/lti-validation.pipe.ts`,
+`config/lti-platforms.ts`; library
+`src/lti/claims.ts`, `platform.ts`, `oidc.ts`, `launch.ts`, `ags.ts`, `nrps.ts`,
+`src/utils/jwks.ts`, `src/lti/toolRegistration.ts` (Dynamic Registration types, roadmap)
+
+Depends on: Prisma (workspace and workflow), `@haski/lti`. Used by: `WorkspaceGuard` and
+`utils/websocket-cookie.adapter.ts`, which accept the launch cookie in place of a bearer
+token.
+
+Routes live outside the `api` prefix (`main.ts`); `packages/frontend/nginx.conf` proxies
+`/lti/` whole. `docs/lti.md` explains the protocol, registration in Moodle and Canvas,
+and the roadmap (AGS, NRPS, Deep Linking, Dynamic Registration).
+
+Tests: `packages/backend/src/lti/*.spec.ts`,
+`packages/backend/src/config/lti-platforms.spec.ts`
 
 ## Content migration
 

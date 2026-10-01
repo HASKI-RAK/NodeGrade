@@ -38,10 +38,17 @@ async function bootstrap() {
   // and grow with prompt text, so the default would start rejecting saves partway
   // through a workshop. The DTO caps content well below this.
   app.useBodyParser('json', { limit: '8mb' });
+  // LTI platforms call the tool at the URLs an admin registered, which carry no `api`
+  // prefix (docs/lti.md).
   app.setGlobalPrefix('api', {
     exclude: [
       { path: 'health', method: RequestMethod.GET },
       { path: 'lti/basiclogin', method: RequestMethod.POST },
+      { path: 'lti/config', method: RequestMethod.GET },
+      { path: 'lti/jwks', method: RequestMethod.GET },
+      { path: 'lti/login', method: RequestMethod.GET },
+      { path: 'lti/login', method: RequestMethod.POST },
+      { path: 'lti/launch', method: RequestMethod.POST },
     ],
   });
 

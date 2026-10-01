@@ -104,6 +104,18 @@ services:
       # create the workshop this stack exists to serve.
       ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in the Portainer stack environment}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the Portainer stack environment}
+      # LTI 1.3 platforms allowed to launch NodeGrade, as a JSON array (docs/lti.md).
+      # Traefik and nginx deliver /lti to this service, so an LMS admin registers
+      # https://${NODEGRADE_HOST}/lti/login, /lti/launch and /lti/jwks.
+      LTI_PLATFORMS: ${LTI_PLATFORMS:-}
+      # Optional PEM RSA private key; /lti/jwks serves its public half.
+      LTI_TOOL_PRIVATE_KEY: ${LTI_TOOL_PRIVATE_KEY:-}
+      LTI_TOOL_URL: ${LTI_TOOL_URL:-}
+      # LTI 1.1 basic launch (deprecated by 1EdTech); refused while either is unset.
+      LTI_CONSUMER_KEY: ${LTI_CONSUMER_KEY:-}
+      LTI_CONSUMER_SECRET: ${LTI_CONSUMER_SECRET:-}
+      # Local testing only: accept unsigned 1.1 launches (docs/lti.md).
+      LTI_11_ALLOW_UNSIGNED: ${LTI_11_ALLOW_UNSIGNED:-}
     networks:
       - internal
     depends_on:

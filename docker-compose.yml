@@ -79,6 +79,20 @@ services:
       # workshop this stack exists to serve.
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # LTI 1.3 platforms allowed to launch NodeGrade, as a JSON array; empty means
+      # no platform. The frontend's nginx proxies /lti to this service, so the URLs
+      # an LMS admin registers are FRONTEND_URL + /lti/login, /lti/launch and
+      # /lti/jwks (docs/lti.md).
+      LTI_PLATFORMS: ${LTI_PLATFORMS:-}
+      # Optional PEM RSA private key; /lti/jwks serves its public half.
+      LTI_TOOL_PRIVATE_KEY: ${LTI_TOOL_PRIVATE_KEY:-}
+      # Public base URL of the /lti routes when it differs from the request origin.
+      LTI_TOOL_URL: ${LTI_TOOL_URL:-}
+      # LTI 1.1 basic launch (deprecated by 1EdTech); refused while either is unset.
+      LTI_CONSUMER_KEY: ${LTI_CONSUMER_KEY:-}
+      LTI_CONSUMER_SECRET: ${LTI_CONSUMER_SECRET:-}
+      # Local testing only: accept unsigned 1.1 launches (docs/lti.md).
+      LTI_11_ALLOW_UNSIGNED: ${LTI_11_ALLOW_UNSIGNED:-}
     ports:
       - '${NODEGRADE_BACKEND_PORT:-5000}:5000'
     depends_on:

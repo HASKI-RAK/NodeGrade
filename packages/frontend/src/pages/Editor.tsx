@@ -26,7 +26,7 @@ import {
   useSearchParams
 } from 'react-router-dom'
 
-import { api, type Workflow, type WorkflowTemplate } from '@/api/http'
+import { api, ApiError, type Workflow, type WorkflowTemplate } from '@/api/http'
 import Canvas from '@/components/Canvas'
 import { EditorRail } from '@/components/editor/EditorRail'
 import { EditorToolbar } from '@/components/editor/EditorToolbar'
@@ -83,6 +83,26 @@ const prepareGraph = (graph: LGraph, serialized: SerializedWorkflow) => {
   graph.setDirtyCanvas(true, true)
 }
 
+const EMBEDDED_LAUNCH_MESSAGE =
+  'NodeGrade has to open in its own window: the course page blocks the launch cookie. Ask your course to open the tool in a new window.'
+
+/**
+ * Why the workflow did not load, in the participant's terms. An LTI launch inside the
+ * course page's frame is the one case with a remedy: the launch cookie of
+ * SPEC-0023/FR-004 is SameSite=Lax, so the browser withholds it from the embedded tool
+ * and the editor's first request answers 401. A launch in its own window carries it.
+ */
+const describeLoadError = (error: unknown, ltiMode: boolean): string => {
+  if (
+    ltiMode &&
+    error instanceof ApiError &&
+    error.status === 401 &&
+    window.self !== window.top
+  )
+    return EMBEDDED_LAUNCH_MESSAGE
+  return error instanceof Error ? error.message : 'Workflow could not be loaded.'
+}
+
 export const drawerWidth = 400
 
 export const Editor = () => {
@@ -130,6 +150,9 @@ export const Editor = () => {
   const mobile = useMediaQuery(theme.breakpoints.down('md'))
 
   useEffect(() => {
+    // Without a session there is nothing this browser may open; the render below sends
+    // the participant to the start page without a graph load attempt (SPEC-0002/FR-005).
+    if (!ltiMode && !token) return
     let active = true
     void api
       .workflow(workflowId, token)
@@ -140,15 +163,12 @@ export const Editor = () => {
         if (active) setWorkflow(loaded)
       })
       .catch((error: unknown) => {
-        if (active)
-          setLoadError(
-            error instanceof Error ? error.message : 'Workflow could not be loaded.'
-          )
+        if (active) setLoadError(describeLoadError(error, ltiMode))
       })
     return () => {
       active = false
     }
-  }, [lgraph, token, workflowId])
+  }, [lgraph, ltiMode, token, workflowId])
 
   useEffect(() => {
     if (!token) return
@@ -180,7 +200,7 @@ export const Editor = () => {
   useEffect(() => {
     if (!student)
       void api
-        .templates(token)
+        .templates(token, 'BLOCK')
         .then(setBlocks)
         .catch(() => setBlocks([]))
   }, [student, token])
@@ -554,8 +574,9 @@ export const Editor = () => {
     [canvas, history, lgraph, token]
   )
 
-  // A participant reaches the editor through their workshop; without its session there is
-  // nothing this browser may open (SPEC-0022/FR-013).
+  // Outside an LTI launch the editor opens a workflow with the active session's token —
+  // the browser's own workspace or a joined workshop. Without one there is nothing this
+  // browser may open (SPEC-0002/FR-005, SPEC-0022/FR-013).
   if (!ltiMode && !session) return <Navigate to="/" replace />
   if (loadError)
     return (
@@ -601,10 +622,11 @@ export const Editor = () => {
           if (mobile && !paletteOpen) setRailOpen(false)
         }}
         onWorkshop={
-          session?.workshop
+          session?.type === 'WORKSHOP' && session.workshop
             ? () => navigate(`/workshop/${session.workshop?.code ?? ''}`)
             : undefined
         }
+        onHome={session?.type === 'BROWSER' ? () => navigate('/') : undefined}
         onRun={run}
         onPreview={showPreview}
         onSaveAs={saveAs}

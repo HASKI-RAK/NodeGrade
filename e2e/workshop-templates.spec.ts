@@ -100,20 +100,30 @@ test('closing a workshop leaves its participants read-only (SPEC-0022/AC-009)', 
   await expect(page.getByRole('link', { name: 'Continue' })).toBeVisible()
 })
 
-test('the start page offers only a workshop code (SPEC-0022/AC-010)', async ({
+test('the workshop code lives on the hub; templates stay workspace-scoped (SPEC-0002/FR-008, SPEC-0022/FR-014)', async ({
   page,
   request
 }) => {
+  // The root is the direct entry; the code entry is one title-bar link away.
   await page.goto('/')
+  await expect(page.getByRole('button', { name: 'New workflow' })).toBeVisible()
+  await expect(page.getByTestId('workshop-code')).toHaveCount(0)
+  await page.getByRole('link', { name: 'Workshop', exact: true }).click()
+  await expect(page).toHaveURL(/\/workshop$/)
   await expect(page.getByTestId('workshop-code')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'New workflow' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Templates' })).toHaveCount(0)
 
-  await page.goto('/templates')
-  await expect(page).toHaveURL(/\/$/)
-
+  // A template read needs a workspace credential; a browser workspace is one.
   const anonymous = await request.get(`${backendUrl}/api/templates`)
   expect(anonymous.status()).toBe(401)
   const create = await request.post(`${backendUrl}/api/workspaces`, { data: {} })
-  expect(create.status()).toBe(404)
+  expect(create.status()).toBe(201)
+  const { workspace, token } = (await create.json()) as {
+    workspace: { type: string }
+    token: string
+  }
+  expect(workspace.type).toBe('BROWSER')
+  const gallery = await request.get(`${backendUrl}/api/templates?kind=WORKFLOW`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  expect(gallery.status()).toBe(200)
 })

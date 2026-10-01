@@ -58,30 +58,50 @@ const build = () => {
 describe('TemplateController', () => {
   const block = { ...template, kind: 'BLOCK' as const };
 
-  it('lists published blocks only (SPEC-0022/FR-014)', async () => {
+  it('lists published templates of the requested kind', async () => {
     const { gallery, templates } = build();
 
-    await gallery.list();
+    const result = await gallery.list({ kind: 'WORKFLOW' });
 
-    expect(templates.listPublished).toHaveBeenCalledWith('BLOCK');
+    expect(templates.listPublished).toHaveBeenCalledWith('WORKFLOW');
+    expect(result.templates[0].slug).toBe('demo');
   });
 
-  it('resolves a block by slug, published only (FR-017)', async () => {
+  it('lists both kinds when no kind is given (SPEC-0022/FR-014)', async () => {
+    const { gallery, templates } = build();
+
+    await gallery.list({});
+
+    expect(templates.listPublished).toHaveBeenCalledWith(undefined);
+  });
+
+  it('resolves a template by slug, published only (FR-017)', async () => {
+    const { gallery, templates } = build();
+
+    const result = await gallery.get('demo');
+
+    expect(templates.findBySlug).toHaveBeenCalledWith('demo', true);
+    expect(result.template.kind).toBe('WORKFLOW');
+    expect(result.revision.content).toBe(revision.content);
+    expect(result.revision.requiredNodeTypes).toEqual(['models/llm']);
+  });
+
+  it('serves a block by slug for the palette (SPEC-0003/FR-013)', async () => {
     const { gallery, templates } = build();
     templates.findBySlug.mockResolvedValue(block);
 
     const result = await gallery.get('demo');
 
-    expect(templates.findBySlug).toHaveBeenCalledWith('demo', true);
-    expect(result.revision.content).toBe(revision.content);
-    expect(result.revision.requiredNodeTypes).toEqual(['models/llm']);
+    expect(result.template.kind).toBe('BLOCK');
   });
 
-  it('does not serve a workflow template (SPEC-0022/AC-011)', async () => {
+  it('serves a pinned revision by id (FR-017a)', async () => {
     const { gallery, templates } = build();
 
-    await expect(gallery.get('demo')).rejects.toMatchObject({ status: 404 });
-    expect(templates.getCurrentRevision).not.toHaveBeenCalled();
+    const result = await gallery.revision('rev-2');
+
+    expect(templates.getRevision).toHaveBeenCalledWith('rev-2');
+    expect(result.revision.content).toBe(revision.content);
   });
 });
 

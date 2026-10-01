@@ -86,6 +86,17 @@ services:
       # Playwright joins workshops from one address across two browsers; the per-address
       # join limit (SPEC-0022/FR-015) is for rooms, not for test runs.
       WORKSPACE_CREATE_MAX: '100000'
+      # LTI 1.3 platforms allowed to launch this stack (docs/lti.md). The Vite dev server
+      # proxies /api only, so the tool URLs an LMS registers are the backend's own:
+      # http://localhost:15000/lti/login, /lti/launch and /lti/jwks.
+      LTI_PLATFORMS: ${LTI_PLATFORMS:-}
+      LTI_TOOL_PRIVATE_KEY: ${LTI_TOOL_PRIVATE_KEY:-}
+      LTI_TOOL_URL: ${LTI_TOOL_URL:-http://localhost:${NODEGRADE_DEBUG_BACKEND_PORT:-15000}}
+      # LTI 1.1 basic launch: refused while the consumer credentials are unset, unless
+      # LTI_11_ALLOW_UNSIGNED=true accepts unsigned posts for a local test platform.
+      LTI_CONSUMER_KEY: ${LTI_CONSUMER_KEY:-}
+      LTI_CONSUMER_SECRET: ${LTI_CONSUMER_SECRET:-}
+      LTI_11_ALLOW_UNSIGNED: ${LTI_11_ALLOW_UNSIGNED:-}
     ports:
       - '${NODEGRADE_DEBUG_BACKEND_PORT:-15000}:5000'
       - '${NODEGRADE_DEBUG_INSPECTOR_PORT:-19229}:9229'

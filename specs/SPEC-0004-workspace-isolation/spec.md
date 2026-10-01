@@ -6,13 +6,14 @@ status: implemented
 parent: SPEC-0001
 priority: P0
 created: 2026-09-15
-updated: 2026-09-25
+updated: 2026-10-01
 depends_on: []
 related:
   - SPEC-0002
   - SPEC-0003
   - SPEC-0014
   - SPEC-0022
+  - SPEC-0023
 ---
 
 # Workspace isolation and multi-user storage
@@ -31,29 +32,29 @@ everyone wanting `rubric-assessment`).
 Every workflow belongs to exactly one workspace. Every workflow operation — load,
 create, save, delete, duplicate, reset, execution — is scoped to the actor's
 workspace, derived server-side from an opaque access token rather than a
-caller-supplied workspace id. Anonymous participants get a workshop workspace backed by a
-high-entropy access token when they join a workshop (SPEC-0022/FR-013); LTI usage maps to
-its own workspace type.
+caller-supplied workspace id. A browser that opens NodeGrade directly gets a browser workspace backed by
+a high-entropy access token on first use; a workshop join issues a workshop workspace the
+same way (SPEC-0022/FR-006); LTI usage maps to its own workspace type.
 
 ## Scope
 
 ### In scope
 
-- Workspace concept with type BROWSER | WORKSHOP | LTI. BROWSER is legacy since
-  SPEC-0022: no longer created, its tokens rejected, existing rows only swept.
+- Workspace concept with type BROWSER | WORKSHOP | LTI, all three issued (BROWSER was
+  withdrawn by SPEC-0022 and restored by ADR-0011).
 - Opaque high-entropy workspace access token issued by the backend; the backend
   derives the allowed workspace from the token and never trusts a caller-supplied
   workspace id alone.
 - Workflow entity scoped to a workspace with slug uniqueness per workspace.
 - Participant workspace identity persisted in browser storage together with its access
-  token (a workshop workspace per joined workshop since SPEC-0022).
+  token: the browser workspace and one workshop workspace per joined workshop.
 - Full workspace-scoped CRUD: list, load/read, create, save/update, delete,
   duplicate-from-template, reset, execution.
 - Migration of existing path-identified graphs into a default workspace.
 - Retention based on last activity (lastActiveAt), with defined update triggers;
-  legacy BROWSER workspaces expire after 60 days of inactivity, WORKSHOP workspaces are
-  retained for a bounded period after workshop close/expiry or last activity, LTI
-  workspaces are permanent.
+  BROWSER workspaces expire after 60 days of inactivity, WORKSHOP workspaces are retained
+  for a bounded period after workshop close/expiry or last activity, LTI workspaces are
+  permanent.
 - Optimistic concurrency control for workflow saves (workflow version counter) so
   concurrent writers — e.g. two tabs in the same browser — cannot silently clobber
   each other.
@@ -68,12 +69,12 @@ its own workspace type.
 
 ## Actors
 
-- Participant (anonymous): receives a workshop-associated workspace per joined workshop
-  (SPEC-0014); there is no workspace outside a workshop (SPEC-0022/FR-013).
-- Instructor (LTI context): workspace tied to the LTI launch context.
-- Expert user: no longer served by an anonymous browser workspace; works through a
-  workshop or an LTI launch (a personal account-backed workspace type is deferred until
-  user accounts are introduced).
+- Participant (anonymous): receives a browser workspace on first direct use (FR-003) and
+  a workshop-associated workspace per joined workshop (SPEC-0014).
+- Instructor (LTI context): workspace tied to the LTI launch context, from a 1.1 or a 1.3
+  launch (SPEC-0023).
+- Expert user: works in their browser workspace, a workshop or an LTI launch (a personal
+  account-backed workspace type is deferred until user accounts are introduced).
 - Facilitator: may hold the workshop workspace containing prepared workflows.
 
 ## User scenarios
@@ -123,9 +124,11 @@ enforce slug uniqueness within a workspace.
 
 ### FR-003 — Anonymous workspace with access token
 
-Superseded by SPEC-0022/FR-006 and FR-013: first use no longer creates a workspace. A
-workshop join establishes the workshop workspace and issues its opaque high-entropy access
-token, which the browser persists together with the workspace reference.
+WHEN a browser uses NodeGrade directly for the first time,
+the system SHALL create a BROWSER workspace and issue an opaque high-entropy access token
+for it, throttled per network address (SPEC-0022/FR-015), and the browser SHALL persist
+the token together with the workspace reference. A workshop join issues a workshop
+workspace and its token the same way (SPEC-0022/FR-006).
 
 ### FR-004 — Server-side authorization from token
 
@@ -152,15 +155,19 @@ workspace while preserving their content.
 
 ### FR-008 — LTI workspace mapping
 
-WHEN a workflow is created via an LTI launch context,
+WHEN a workflow is created via an LTI launch context, from an LTI 1.1 basic launch or an
+LTI 1.3 launch (SPEC-0023),
 the system SHALL associate it with a workspace of type LTI keyed by the stable
-combination of the launch issuer and the launch context/resource identity, so that
-the same launch context consistently maps to the same workspace.
+combination of the launch issuer and the launch context/resource identity, so that the
+same launch context consistently maps to the same workspace. A 1.1 launch is keyed by
+`consumer_key|context_id|resource_link_id`; a 1.3 launch by
+`lti13:iss|client_id|deployment_id|context_id|resource_link_id`, because a resource link
+id is unique within one deployment. The `lti13:` namespace is reserved: a 1.1 key never
+begins with it, so no 1.1 launch can address a 1.3 workspace.
 
 ### FR-009 — Retention based on last activity
 
-WHEN a legacy BROWSER-type workspace (created before SPEC-0022 withdrew the type) has had
-no activity for 60 days,
+WHEN a BROWSER-type workspace has had no activity for 60 days,
 the system SHALL delete that workspace together with all workflows it contains.
 
 ### FR-009a — Workshop workspace retention
@@ -238,12 +245,10 @@ Then only workspace A workflows are returned
 
 Traces to: FR-003, NFR-001
 
-Amended by SPEC-0022: the identity is the workshop workspace established on join.
-
 ```gherkin
-Given a participant has joined a workshop and holds its workspace
-When the participant reloads the page or reopens the workshop link
-Then the same workspace is used and their workflows are visible
+Given a browser holds its own workspace, or a participant has joined a workshop and holds its workspace
+When the page is reloaded or the workshop link reopened
+Then the same workspace is used and its workflows are visible
 ```
 
 ### AC-004 — Save cannot cross workspaces
@@ -271,10 +276,10 @@ Then every pre-existing graph is accessible in the default workspace with unchan
 Traces to: FR-009, FR-010
 
 ```gherkin
-Given a legacy BROWSER-type workspace with no activity for more than 60 days
+Given a BROWSER-type workspace with no activity for more than 60 days
 When the retention cleanup runs
 Then the workspace and all of its workflows are deleted
-And a legacy BROWSER-type workspace with activity within 60 days is not deleted
+And a BROWSER-type workspace with activity within 60 days is not deleted
 And LTI workspaces are never auto-deleted
 And a WORKSHOP workspace of an active (not closed/expired) workshop is not deleted
 ```
@@ -338,6 +343,8 @@ And a launch from a different context maps to a different workspace
 
 - Browser storage cleared mid-workshop → joining again creates a new workshop
   workspace; previous workflows are unreachable (accepted trade-off, documented).
+- Browser storage cleared outside a workshop → the next visit mints a new browser
+  workspace; the old one is swept after 60 idle days.
 - Two tabs in the same browser → they share the same workshop workspace and token.
 - A participant returns after 60+ days of inactivity → their workflows are gone; this
   is the documented cost of the retention policy and may only surprise outside the
@@ -348,9 +355,9 @@ And a launch from a different context maps to a different workspace
 ## Business rules
 
 - Every workflow SHALL belong to exactly one workspace at all times.
-- Retention deletion SHALL apply only to legacy BROWSER-type workspaces (60 days
-  inactivity) and WORKSHOP-type workspaces (60 days inactivity after their workshop
-  is CLOSED or expired); LTI workspaces are never auto-deleted.
+- Retention deletion SHALL apply only to BROWSER-type workspaces (60 days inactivity)
+  and WORKSHOP-type workspaces (60 days inactivity after their workshop is CLOSED or
+  expired); LTI workspaces are never auto-deleted.
 - A workspace id SHALL NOT itself be an authorization credential; authorization SHALL
   derive from the workspace access token.
 
@@ -367,7 +374,7 @@ And a launch from a different context maps to a different workspace
 ## Assumptions
 
 - No authentication is required for anonymous participants; the workspace access token
-  issued on workshop join alone provides adequate isolation for the conference scenario.
+  issued on first use or on workshop join alone provides adequate isolation.
 
 ## Open questions
 
@@ -387,3 +394,5 @@ And a launch from a different context maps to a different workspace
 | 2026-09-15 | Hardened isolation: opaque workspace access tokens as authorization (FR-003/004, AC-007), full CRUD scoping (FR-001, AC-008), retention re-anchored to lastActiveAt with defined update triggers (FR-009/010, AC-006), workspace types BROWSER|WORKSHOP|LTI|PERSONAL, precise LTI mapping rule (FR-008, AC-009), workshop workspaces exempt from retention (FR-011) |
 | 2026-09-15 | Review revision 2: PERSONAL workspace type dropped (no account system exists to authenticate or recover it) — types are now BROWSER | WORKSHOP | LTI; WORKSHOP workspaces no longer live forever: retained 60 days after workshop close/expiry or last activity (FR-009a/FR-011, AC-006a); optimistic concurrency added so same-browser multi-tab saves cannot silently clobber newer state (FR-012/FR-013, AC-006b) |
 | 2026-09-25 | SPEC-0022 withdraws the anonymous browser workspace: FR-003 superseded (a workshop join issues the workspace and token), NFR-001, AC-001 and AC-003 now concern workshop workspaces, FR-009/AC-006 retention applies only to legacy BROWSER rows; intent, scope, actors, edge cases and assumptions amended |
+| 2026-10-01 | FR-008 names the two key forms: 1.1 keys unchanged, 1.3 keys namespaced `lti13:` with client and deployment id (SPEC-0023 review) |
+| 2026-10-01 | ADR-0011 restores the browser workspace: FR-003 is a live requirement again (`POST /api/workspaces`, throttled per address), BROWSER is a first-class type in scope, actors and retention wording; FR-008 covers the LTI 1.1 and the LTI 1.3 launch (SPEC-0023); AC-003 and AC-006 reworded; edge cases and assumptions amended |

@@ -63,10 +63,11 @@ describe('provider administration', () => {
 
     await screen.findByRole('heading', { name: 'LLM providers' })
 
-    expect(screen.getByRole('main')).toHaveStyle({
-      boxSizing: 'border-box',
-      minHeight: '100dvh'
-    })
+    // The page grows with its content under the title bar; nothing locks its height.
+    const main = screen.getByRole('main')
+    expect(main).toHaveStyle({ boxSizing: 'border-box' })
+    expect(main).not.toHaveStyle({ height: '100dvh' })
+    expect(main).not.toHaveStyle({ overflow: 'hidden' })
   })
 
   it('renders provider navigation and preserves a stored key on ordinary save', async () => {

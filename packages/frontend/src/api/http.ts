@@ -201,6 +201,18 @@ export type RunReview = { reviewed: boolean; note?: string }
 
 export const api = {
   models: async () => (await apiRequest<ModelCatalog>('/models')).data,
+  /**
+   * Mints the browser's own anonymous workspace (SPEC-0002/FR-001, SPEC-0004/FR-001).
+   * The token is a sibling of the workspace, not a field on it, and is never returned
+   * again; folding it in here is the only chance to keep it.
+   */
+  createWorkspace: async (label?: string) => {
+    const { data } = await apiRequest<{ workspace: WorkspaceSession; token: string }>(
+      '/workspaces',
+      { method: 'POST', body: label === undefined ? {} : { label } }
+    )
+    return { ...data.workspace, token: data.token }
+  },
   workspace: async (token: string) =>
     (await apiRequest<WorkspaceSession>('/workspaces/me', { token })).data,
   workflows: async (token?: string | null) =>
@@ -277,13 +289,27 @@ export const api = {
         body: {}
       })
     ).data,
+  /** A copy of a workflow template in the caller's workspace (SPEC-0002/FR-003a). */
+  fromTemplate: async (token: string, templateSlug: string, name?: string) =>
+    (
+      await apiRequest<Workflow>('/workflows/from-template', {
+        method: 'POST',
+        token,
+        body: name === undefined ? { templateSlug } : { templateSlug, name }
+      })
+    ).data,
   /**
-   * The block library (SPEC-0022/FR-014). Workspace-scoped: a participant sends their
-   * token, an LTI editor is recognised by its launch cookie.
+   * Published templates, workspace-scoped: a participant sends their token, an LTI
+   * editor is recognised by its launch cookie. Without `kind` both the workflow gallery
+   * and the block library come back (SPEC-0022/FR-014).
    */
-  templates: async (token?: string | null) =>
-    (await apiRequest<{ templates: WorkflowTemplate[] }>('/templates', { token })).data
-      .templates,
+  templates: async (token?: string | null, kind?: TemplateKind) =>
+    (
+      await apiRequest<{ templates: WorkflowTemplate[] }>(
+        `/templates${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`,
+        { token }
+      )
+    ).data.templates,
   template: async (slug: string, token?: string | null) =>
     (
       await apiRequest<{ template: WorkflowTemplate; revision: TemplateRevision }>(
@@ -291,6 +317,13 @@ export const api = {
         { token }
       )
     ).data,
+  templateRevision: async (revisionId: string, token?: string | null) =>
+    (
+      await apiRequest<{ revision: TemplateRevision }>(
+        `/templates/revisions/${encodeURIComponent(revisionId)}`,
+        { token }
+      )
+    ).data.revision,
   workshop: async (code: string) =>
     (
       await apiRequest<{ workshop: { id: string; code: string; title: string } }>(

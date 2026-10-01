@@ -2,13 +2,15 @@
 
 ## Project
 
-NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
-`/admin`, compose a workshop from one or more workflow templates (each pinned to a
-revision or following the newest one), and hand out an eight-character code. The code is
-the only way in for participants — there are no anonymous workspaces outside a workshop
-(LTI launches aside). Each participant browser gets an isolated workshop workspace, starts
-the workshop's templates into its own workflow copies from the workshop overview, edits
-them in a LiteGraph editor, and runs them against LLM and NLP providers.
+NodeGrade automates short-answer grading with node graphs. A browser that opens the main
+URL gets its own isolated workspace and builds workflows from scratch or from the template
+gallery. Facilitators sign in at `/admin`, compose a workshop from one or more workflow
+templates (each pinned to a revision or following the newest one), and hand out an
+eight-character code; participants enter it on the `/workshop` hub reached from the
+titlebar, receive a workshop workspace, start the workshop's templates into their own
+workflow copies from the workshop overview, edit them in a LiteGraph editor, and run them
+against LLM and NLP providers. LTI 1.1 and LTI 1.3 launches from a learning platform open
+a course-bound workspace of their own.
 
 Yarn 4 workspaces monorepo, TypeScript throughout: NestJS 12 + Prisma 7 + PostgreSQL
 backend, React 19 + Vite 8 + MUI 7 + litegraph.js PWA frontend, a shared graph/event
@@ -37,10 +39,12 @@ things live).
 ## Where to start
 
 ```text
-UI page, route, editor panel      → packages/frontend/src/pages/, src/components/editor/
+UI page, route, editor panel      → packages/frontend/src/pages/, src/routes.tsx, src/components/editor/
+App shell, titlebar, navigation   → packages/frontend/src/components/AppShell.tsx (layout route in src/routes.tsx)
+Direct entry, gallery, workflows  → packages/frontend/src/pages/StartPage.tsx, TemplatesPage.tsx, WorkflowListPage.tsx
 Frontend server calls             → packages/frontend/src/api/http.ts
-Participant session / tokens      → packages/frontend/src/store/workspaceStore.ts
-Workshop join and overview (UI)   → packages/frontend/src/pages/WorkshopJoin.tsx, src/components/TemplateCard.tsx
+Participant session / tokens      → packages/frontend/src/store/workspaceStore.ts, src/store/workspaceSession.ts
+Workshop hub, join, overview (UI) → packages/frontend/src/pages/WorkshopPage.tsx, WorkshopJoin.tsx, src/components/TemplateCard.tsx
 Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionRegistry.ts)
 Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
@@ -58,7 +62,7 @@ Result cards, output display types→ packages/lib/src/nodes/OutputNode.ts, src/
 Participant preview strings       → packages/frontend/src/i18n/preview.ts
 Facilitator auth, CSRF, sessions  → packages/backend/src/auth/
 Providers, models, credentials    → packages/backend/src/provider/
-LTI launch and registration       → packages/backend/src/lti/, packages/lti/
+LTI launch and registration       → packages/backend/src/lti/ (lti-launch.service.ts, lti.service.ts), packages/lti/, docs/lti.md
 Specification consistency rules   → tools/spec-lint/
 Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
 Deployment, images, Portainer     → docker-compose.prod.yml, .github/workflows/deploy.yml, README "Deploying with Portainer"
@@ -99,12 +103,24 @@ a stale `dist` produces failures that look like code bugs.
 - Workspace authorization comes from the bearer access token only. No handler may take a
   workspace id from a path, query or body; `WorkspaceGuard` resolves it and handlers read
   `@CurrentWorkspace()` (ADR-0001).
-- Participant workspaces are created only by a workshop join
-  (`POST /api/workshops/by-code/:code/join`) or an LTI launch. `BROWSER` workspace tokens
-  are rejected (ADR-0010).
-- Workflow templates reach participants only through their workshop's entries
-  (`/api/workshops/current/**`). `/api/templates` is workspace-scoped and serves `BLOCK`
-  templates only, for the editor palette (SPEC-0022).
+- Participant workspaces come from three places: a browser's own `POST /api/workspaces`
+  (type `BROWSER`, throttled per address), a workshop join
+  (`POST /api/workshops/by-code/:code/join`) or an LTI launch (ADR-0011). All three resolve
+  through the bearer token or the launch cookie; a `BROWSER` workspace belongs to no
+  workshop.
+- `/api/templates` is workspace-scoped and serves published templates of both kinds; a
+  workshop participant's entries still resolve to the pinned or newest revision through
+  `/api/workshops/current/**` (SPEC-0022, ADR-0010).
+- LTI: the tool verifies, it never signs a launch. A 1.3 launch is accepted only when its
+  id_token verifies against the platform's JWKS, answers a login this server started
+  (state and nonce, used once; the per-login state cookie is required while cookies are
+  secure) and names a deployment of a platform in `LTI_PLATFORMS`; the 1.1 basic launch
+  is verified with OAuth 1.0a and refused while `LTI_CONSUMER_KEY`/`LTI_CONSUMER_SECRET`
+  are unset (`LTI_11_ALLOW_UNSIGNED` is for local testing only). Both end in the same
+  `lti_nodegrade_cookie` and `ltiKey` through `LtiService.establishLaunch`, with 1.3 keys
+  in the `lti13:` namespace (`ltiWorkspaceKey`) so no 1.1 post can address a 1.3
+  workspace. Launches open in a new window: the launch cookie is first-party only
+  (SPEC-0023).
 - A CLOSED or expired workshop is read-only for its participants: `WorkspaceGuard` rejects
   every non-GET/HEAD request with `workshop_closed`, and `GraphHandlerService` re-checks the
   workshop on every run rather than at socket connect.

@@ -23,7 +23,7 @@ flowchart LR
     Nest --> DB
     Nest -->|node execution| Worker
     Nest -->|ai SDK| LLM
-    Platform -->|"LTI 1.3 launch"| Nest
+    Platform -->|"LTI 1.1 / 1.3 launch"| Nest
     Nest --> LRS
 ```
 
@@ -49,19 +49,23 @@ and delegate to a service, which is the only layer that touches Prisma.
 
 | Surface | Caller | Credential | Guard |
 |---|---|---|---|
-| Participant (`/api/workspaces/me`, `/api/workflows/**`, `/api/templates` (blocks only), `/api/workshops/current/**`, Socket.IO) | workshop participant, LTI launch | `Authorization: Bearer <workspace token>`, or the LTI launch cookie | `WorkspaceGuard` |
+| Participant (`/api/workspaces/me`, `/api/workflows/**` incl. `from-template`, `/api/templates` (both kinds), `/api/workshops/current/**`, Socket.IO) | browser, workshop participant, LTI launch | `Authorization: Bearer <workspace token>`, or the LTI launch cookie | `WorkspaceGuard` |
+| Direct entry (`POST /api/workspaces`) | any browser | none; mints the browser's token | none — rate-limited per address |
 | Workshop entry (`/api/workshops/by-code/:code`, `.../preflight`, `.../join`) | anyone holding a code | none; `join` accepts the workshop's bearer token for a re-join | none — `join` is rate-limited per address |
+| LTI platform (`/lti/login`, `/lti/launch`, `/lti/basiclogin`; `/lti/config`, `/lti/jwks` public) | the LMS and the browser it sends | an id_token signed by a registered platform answering a login this server started, in the browser that started it (per-login state cookie), or an OAuth 1.0a signature over the configured consumer secret | none — the launch is the authentication and ends in the launch cookie; `/lti/login` is throttled per address |
 | Facilitator (`/api/admin/**`, `/api/providers`, `/api/benchmark/run`) | admin UI | session cookie + `X-CSRF-Token` | `AdminSessionGuard` |
 
 A bearer token cannot be set by a cross-site form post, which keeps CSRF handling off the
 participant surface entirely. Workspace ids appear in URLs and are never credentials
 (ADR-0001).
 
-Participant workspaces come from exactly two places: a workshop join (`WORKSHOP`) and an
-LTI launch (`LTI`). There is no anonymous workspace; `BROWSER` tokens issued before
-SPEC-0022 are rejected (ADR-0010). Workflow templates reach a participant only as entries
-of their own workshop; `/api/templates` serves the block library the editor palette
-inserts from.
+Participant workspaces come from three places: a browser's own request
+(`POST /api/workspaces`, type `BROWSER`, ADR-0011), a workshop join (`WORKSHOP`) and an
+LTI launch (`LTI`). All three resolve the same way. `/api/templates` serves published
+templates of both kinds to any workspace — workflow templates for the gallery's "Use
+template", block templates for the editor palette — and a workshop participant's entries
+resolve their pinned or newest revision through `/api/workshops/current/**` regardless of
+the gallery (ADR-0010).
 
 A workshop that is CLOSED or past its expiry is read-only for its participants.
 `WorkspaceService.resolveByToken` carries the workshop's `readOnly` state, `WorkspaceGuard`
@@ -131,11 +135,33 @@ may have in flight, and `ProviderRuntimeService` holds a deployment-wide permit 
 front of provider requests. Both limits live in the `ExecutionLimits` singleton row and are
 re-read per request, so a facilitator change applies without a restart.
 
-## Participant entry flow
+## Entry flows
+
+Three ways in, one workspace model.
+
+### Direct entry
 
 ```mermaid
 flowchart LR
-    Start["/ (code entry) → /workshop/CODE"] --> Stored{"token stored for CODE?"}
+    Home["/ (titlebar: Workflows, Templates, Workshop, Facilitator)"] --> Have{"browser token stored?"}
+    Have -->|"no, or rejected with 401"| Mint["POST /api/workspaces (throttled per address)"]
+    Mint --> Store["token + workspace in localStorage"]
+    Have -->|yes| Store
+    Store --> Gallery["/templates: GET /api/templates?kind=WORKFLOW"]
+    Gallery --> Use["POST /api/workflows/from-template"]
+    Store --> Mine["/workflows: GET /api/workflows"]
+    Use --> Editor["/editor/:workflowId"]
+    Mine --> Editor
+```
+
+A browser workspace is swept after 60 idle days; a token the server no longer honours
+falls through to a fresh mint.
+
+### Workshop entry
+
+```mermaid
+flowchart LR
+    Start["/workshop (code entry) → /workshop/CODE"] --> Stored{"token stored for CODE?"}
     Stored -->|yes| Overview["overview: GET /api/workshops/current + /api/workflows"]
     Stored -->|"no, or rejected with 401"| Preflight["GET /api/workshops/by-code/:code/preflight"]
     Preflight -->|fails| Blocked["failing checks shown, no workspace minted"]
@@ -166,6 +192,41 @@ share state. A participant with a stored token goes straight to the overview, wh
 answers read-only once the workshop has closed; a token the server no longer honours
 (retention sweep, reset database) falls through to a fresh join instead of stranding the
 participant.
+
+### LTI launch
+
+```mermaid
+sequenceDiagram
+    participant LMS as Platform
+    participant B as Browser
+    participant T as LtiController
+    participant L as LtiLaunchService
+    participant S as LtiService
+
+    LMS->>B: resource link
+    B->>T: GET|POST /lti/login (iss, login_hint, client_id?)
+    T->>L: login()
+    L->>L: registration from LTI_PLATFORMS, state + nonce recorded (10 min, once)
+    T-->>B: 302 platform authorization endpoint (+ state cookie)
+    B->>LMS: authentication request (scope=openid, response_type=id_token, form_post, prompt=none)
+    LMS-->>B: form post id_token + state
+    B->>T: POST /lti/launch
+    T->>L: launch()
+    L->>L: consume state, platform JWKS (cached), verify signature/iss/aud/exp/iat/nonce/type/version/deployment
+    L->>S: establishLaunch(issuer, context, resource link, role, person)
+    S->>S: LTI workspace by ltiKey, first workflow, launch cookie
+    T-->>B: 302 FRONTEND_URL/editor|student/:id?lti=1 (+ lti_nodegrade_cookie)
+```
+
+The LTI 1.1 basic launch (`POST /lti/basiclogin`, OAuth 1.0a, refused while the consumer
+credentials are unset) joins the same path at `establishLaunch`, where `ltiWorkspaceKey`
+keeps 1.1 keys as they were and puts 1.3 keys in the `lti13:` namespace with client and
+deployment id. Both set the launch cookie `WorkspaceGuard` and the socket adapter accept
+in place of a bearer token; it is `SameSite=Lax`, so a registration opens NodeGrade in a
+new window rather than inside the LMS page. Routes: `/lti/config` (registration JSON),
+`/lti/login`, `/lti/launch`, `/lti/jwks` (tool keys), `/lti/basiclogin`; all outside the
+`api` prefix, proxied whole by the frontend's nginx. `docs/lti.md` has the protocol, the
+registration steps and the roadmap.
 
 ## Persistence
 
@@ -198,24 +259,28 @@ PostgreSQL through Prisma 7; the client is generated into
 ## Boot lifecycle
 
 `main.ts` wires the cookie-forwarding WebSocket adapter, `trust proxy`, an 8 MB JSON body
-limit, the global `api` prefix (excluding `GET /health` and `POST /lti/basiclogin`), a
-whitelisting `ValidationPipe`, and CORS with credentials.
+limit, the global `api` prefix (excluding `GET /health` and the `/lti/*` routes platforms
+call), a whitelisting `ValidationPipe`, and CORS with credentials.
 
 `OnApplicationBootstrap` work, all idempotent: `ProviderService` loads provider runtime
 config and gives any policy-less provider the unchosen state, `ExecutionLimitsService`
 materializes the limits row, `TemplateSeedService` seeds bundled templates, `ContentMigrationService` backfills
 stored content to the current `contentSchema`, `RetentionService` starts its six-hour
 sweep. Prisma connects on module init; `XapiService` opens its client on module init.
+`LtiPlatformRegistry` and `LtiToolKeys` parse `LTI_PLATFORMS` and `LTI_TOOL_PRIVATE_KEY`
+while the module graph is built, so a bad value stops the boot with a line naming it.
 
 ## Configuration
 
 Backend reads the environment through `src/config/configuration.ts` (`@nestjs/config`,
 cached): port, CORS origins, frontend URL, cookie insecurity switch, node run timeout,
-worker URLs, xAPI credentials. Read directly from the environment elsewhere:
-`DATABASE_URL` (Prisma), `ADMIN_USERNAME`/`ADMIN_PASSWORD` (facilitator login),
-`KATALYST_API_KEY` (optional bundled KATALYST provider),
-`PROVIDER_ENCRYPTION_KEY` (credential cipher), `CONTENT_MIGRATION_ENABLED`. See
-`.env_template`.
+worker URLs, xAPI credentials, and the LTI platform registrations (`LTI_PLATFORMS`,
+parsed by `config/lti-platforms.ts`), tool key and tool URL. Read directly from the
+environment elsewhere: `DATABASE_URL` (Prisma), `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+(facilitator login), `KATALYST_API_KEY` (optional bundled KATALYST provider),
+`PROVIDER_ENCRYPTION_KEY` (credential cipher), `CONTENT_MIGRATION_ENABLED`,
+`LTI_CONSUMER_KEY`/`LTI_CONSUMER_SECRET` (the 1.1 launch). See `.env_template` and
+`docs/lti.md`.
 
 The frontend has no build-time API constant: `src/utils/config.ts` fetches
 `public/config/env.<mode>.json` at runtime, so one image serves several deployments. In

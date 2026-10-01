@@ -47,7 +47,7 @@ describe('WorkflowService', () => {
       count: jest.fn().mockResolvedValue(0),
     };
     const templates = {
-      findBySlug: jest.fn().mockResolvedValue({ id: 'tpl-1' }),
+      findBySlug: jest.fn().mockResolvedValue({ id: 'tpl-1', kind: 'WORKFLOW' }),
       getCurrentRevision: jest.fn().mockResolvedValue(revision()),
       getRevision: jest.fn().mockResolvedValue(revision()),
     };
@@ -349,6 +349,68 @@ describe('WorkflowService', () => {
       );
 
       expect(history.capture).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createFromTemplateSlug', () => {
+    it('resolves the published template and copies its current revision (FR-006)', async () => {
+      const { service, templates, workflow } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo-workflow');
+
+      expect(templates.findBySlug).toHaveBeenCalledWith('demo-workflow', true);
+      expect(templates.getCurrentRevision).toHaveBeenCalledWith('tpl-1');
+      expect(workflow.create.mock.calls[0][0].data).toMatchObject({
+        workspaceId: 'ws-a',
+        name: 'Demo workflow',
+        sourceTemplateId: 'tpl-1',
+        sourceTemplateRevisionId: 'rev-1',
+        contentSchema: 2,
+      });
+    });
+
+    it('lets the caller name their copy', async () => {
+      const { service, workflow } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo', 'My attempt');
+
+      expect(workflow.create.mock.calls[0][0].data.name).toBe('My attempt');
+    });
+
+    it('refuses a block template, which is not a workflow', async () => {
+      const { service, templates, workflow } = build();
+      templates.findBySlug.mockResolvedValue({ id: 'blk-1', kind: 'BLOCK' });
+
+      await expect(
+        service.createFromTemplateSlug(workspaceA, 'a-block'),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { code: 'template_not_workflow' },
+      });
+      expect(workflow.create).not.toHaveBeenCalled();
+    });
+
+    it('never writes to the template (FR-007)', async () => {
+      const { service, templates } = build();
+
+      await service.createFromTemplateSlug(workspaceA, 'demo');
+
+      // The service is read-only against templates by construction: it holds no write
+      // method for them at all.
+      expect(Object.keys(templates)).toEqual([
+        'findBySlug',
+        'getCurrentRevision',
+        'getRevision',
+      ]);
+    });
+
+    it('is still subject to the workspace cap', async () => {
+      const { service, workflow } = build();
+      workflow.count.mockResolvedValue(50);
+
+      await expect(
+        service.createFromTemplateSlug(workspaceA, 'demo'),
+      ).rejects.toMatchObject({ status: 403 });
     });
   });
 

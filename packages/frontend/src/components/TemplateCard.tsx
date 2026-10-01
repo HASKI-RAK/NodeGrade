@@ -1,9 +1,15 @@
 import {
   Box,
+  Button,
   Card,
   CardActions,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   List,
   ListItem,
   ListItemText,
@@ -13,6 +19,14 @@ import {
 import type { ReactNode } from 'react'
 
 type PreviewNode = { id: number; type: string; title?: string }
+
+/** What the structure preview shows; `content` is null while the graph still loads. */
+export type TemplatePreview = {
+  name: string
+  description: string | null
+  tags: string[]
+  content: string | null
+}
 
 /**
  * Method phrases highlighted inside workflow descriptions on the card.
@@ -128,7 +142,7 @@ export const TemplateCard = ({
   footer?: ReactNode
   actions: ReactNode
 }) => (
-  <Card>
+  <Card component="article" aria-label={name}>
     <CardContent>
       {labels && (
         <Stack direction="row" gap={1} mb={1} flexWrap="wrap">
@@ -142,4 +156,33 @@ export const TemplateCard = ({
     </CardContent>
     <CardActions>{actions}</CardActions>
   </Card>
+)
+
+/**
+ * The structure preview a gallery or a workshop overview opens before a template is
+ * used: description, tags and the node list. Closed while `preview` is null.
+ */
+export const TemplateStructureDialog = ({
+  preview,
+  onClose
+}: {
+  preview: TemplatePreview | null
+  onClose: () => void
+}) => (
+  <Dialog open={preview !== null} onClose={onClose}>
+    <DialogTitle>{preview?.name}</DialogTitle>
+    <DialogContent sx={{ minWidth: { sm: 480 } }}>
+      {preview && preview.content === null && <CircularProgress />}
+      {preview?.content && (
+        <Stack spacing={2}>
+          <TemplateDescription text={preview.description} />
+          <TemplateTags tags={preview.tags} />
+          <TemplateStructure content={preview.content} />
+        </Stack>
+      )}
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Close</Button>
+    </DialogActions>
+  </Dialog>
 )

@@ -4,10 +4,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   List,
   ListItem,
   ListItemButton,
@@ -28,9 +24,8 @@ import {
 } from '@/api/http'
 import {
   TemplateCard,
-  TemplateDescription,
-  TemplateStructure,
-  TemplateTags
+  type TemplatePreview,
+  TemplateStructureDialog
 } from '@/components/TemplateCard'
 import { workspaceStore } from '@/store/workspaceStore'
 import { normalizeWorkshopCode } from '@/utils/workshopCode'
@@ -152,8 +147,8 @@ export const WorkshopJoin = () => {
           <Button variant="contained" onClick={retry}>
             Try again
           </Button>
-          <Button component={Link} to="/">
-            Back to start
+          <Button component={Link} to="/workshop">
+            Back to workshop entry
           </Button>
         </Stack>
       </Box>
@@ -170,8 +165,8 @@ export const WorkshopJoin = () => {
           <Button variant="contained" onClick={retry}>
             Try again
           </Button>
-          <Button component={Link} to="/">
-            Back to start
+          <Button component={Link} to="/workshop">
+            Back to workshop entry
           </Button>
         </Stack>
       </Box>
@@ -194,10 +189,7 @@ const WorkshopOverview = ({ overview }: { overview: Overview }) => {
   const { workshop, entries, workflows, token } = overview
   const [starting, setStarting] = useState<string | null>(null)
   const [startError, setStartError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{
-    entry: WorkshopEntry
-    content: string | null
-  } | null>(null)
+  const [preview, setPreview] = useState<TemplatePreview | null>(null)
 
   const start = async (entry: WorkshopEntry) => {
     setStarting(entry.id)
@@ -216,10 +208,11 @@ const WorkshopOverview = ({ overview }: { overview: Overview }) => {
   }
 
   const showStructure = async (entry: WorkshopEntry) => {
-    setPreview({ entry, content: null })
+    const { name, description, tags } = entry
+    setPreview({ name, description, tags, content: null })
     try {
       const structure = await api.workshopEntryStructure(token, entry.id)
-      setPreview({ entry, content: structure.content })
+      setPreview({ name, description, tags, content: structure.content })
     } catch {
       setPreview(null)
       setStartError('The template structure could not be loaded.')
@@ -228,9 +221,6 @@ const WorkshopOverview = ({ overview }: { overview: Overview }) => {
 
   return (
     <Box maxWidth={1080} mx="auto" p={{ xs: 2, sm: 4 }}>
-      <Button component={Link} to="/">
-        Back to start
-      </Button>
       <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" mb={2}>
         <Typography variant="h4" component="h1">
           {workshop.title}
@@ -326,22 +316,7 @@ const WorkshopOverview = ({ overview }: { overview: Overview }) => {
           ))}
         </List>
       )}
-      <Dialog open={preview !== null} onClose={() => setPreview(null)}>
-        <DialogTitle>{preview?.entry.name}</DialogTitle>
-        <DialogContent sx={{ minWidth: { sm: 480 } }}>
-          {preview && preview.content === null && <CircularProgress />}
-          {preview?.content && (
-            <Stack spacing={2}>
-              <TemplateDescription text={preview.entry.description} />
-              <TemplateTags tags={preview.entry.tags} />
-              <TemplateStructure content={preview.content} />
-            </Stack>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreview(null)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <TemplateStructureDialog preview={preview} onClose={() => setPreview(null)} />
     </Box>
   )
 }

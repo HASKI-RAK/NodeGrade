@@ -6,7 +6,7 @@ status: implemented
 parent: SPEC-0001
 priority: P1
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-01
 depends_on:
   - SPEC-0003
   - SPEC-0004
@@ -43,9 +43,13 @@ workflow templates, each either pinned to one revision or following the template
 newest revision. A participant enters the code, lands on the workshop's overview with its
 templates and their own workflows — or, when the workshop offers a single template,
 directly in its copy — and sees nothing of NodeGrade's templates beyond what the workshop
-offers. There is no anonymous workspace outside a workshop. Once the facilitator closes
-the workshop or it expires, its participants can still read their work but can no longer
-change or run it.
+offers. Once the facilitator closes the workshop or it expires, its participants can still
+read their work but can no longer change or run it.
+
+Since ADR-0011 a browser may also open NodeGrade directly and work in a workspace of its
+own, with the template gallery instead of a workshop. The workshop remains the way into
+a workshop's templates, and everything this specification says about workshops holds
+unchanged; what it withdrew about anonymous access is restated in FR-013 and FR-014.
 
 ## Scope
 
@@ -55,7 +59,7 @@ change or run it.
 - Facilitator management of entries at creation and afterwards.
 - Participant workshop overview, auto-start of a single-entry workshop, idempotent start.
 - Read-only enforcement for closed and expired workshops over HTTP and at run time.
-- Removal of anonymous browser workspaces and of anonymous template access.
+- A workspace credential for every template read; anonymous template access is removed.
 - Per-entry workshop readiness.
 - Rate limiting of workspace creation through the join.
 
@@ -70,6 +74,8 @@ change or run it.
 
 - Facilitator: composes, publishes and closes workshops and edits their entries.
 - Participant (anonymous): joins by code and works only inside the workshop workspace.
+- Direct visitor: holds a browser workspace (SPEC-0004/FR-003) and sees the gallery, not a
+  workshop.
 - LTI learner or instructor: unchanged, enters through LTI (SPEC-0004/FR-001).
 
 ## User scenarios
@@ -100,9 +106,10 @@ Independent value: a workshop with several exercises is usable at all.
 ### US-003 — Templates stay inside the workshop
 
 As an operator,
-I want workflow templates and graph execution to be reachable only by workshop participants,
+I want workflow templates and graph execution to be reachable only with a workspace
+credential, minted behind a per-address throttle,
 so that neither the grading content nor the provider budget is open to anyone who finds the
-URL.
+URL without at least that.
 
 Priority: P1
 
@@ -196,16 +203,19 @@ WHEN a run is requested with a participant workspace of a CLOSED or expired work
 the system SHALL refuse the run with the code `workshop_closed`, evaluated at each run
 request rather than when the socket connected.
 
-### FR-013 — No anonymous workspaces
+### FR-013 — Participant workspaces come from three places
 
-The system SHALL NOT create a participant workspace other than by a workshop join or an
-LTI launch, and SHALL reject browser workspace credentials.
+The system SHALL create a participant workspace only through a browser's direct request
+(`POST /api/workspaces`, throttled per address, SPEC-0004/FR-003), a workshop join, or an
+LTI launch, and SHALL treat only a workshop join as entry into a workshop: a browser
+workspace holds no workshop entries.
 
-### FR-014 — Templates are reached through the workshop
+### FR-014 — Templates need a credential; entries decide the revision
 
-The system SHALL require a workspace credential to list or read templates, SHALL serve only
-block templates through those endpoints, and SHALL make workflow templates available to
-participants only as entries of their workshop.
+The system SHALL require a workspace credential to list or read templates, SHALL serve
+published workflow and block templates to any workspace, and SHALL resolve a workshop
+entry to its pinned revision or its template's newest revision when started, independent
+of the gallery.
 
 ### FR-015 — Join creation is rate limited
 
@@ -342,25 +352,27 @@ And a run requested on the already open socket is refused with workshop_closed
 And the participant can still open the overview, their workflows and their submissions
 ```
 
-### AC-010 — Anonymous access is gone
+### AC-010 — Credentials and throttles stand in front of templates
 
 Traces to: FR-013, FR-014
 
 ```gherkin
 Given no workspace credential
-When a client creates a workspace, lists templates or reads a template
-Then workspace creation does not exist and template reads are rejected as unauthenticated
-And a browser workspace token issued before this change is rejected as invalid
+When a client lists templates or reads a template
+Then the request is rejected as unauthenticated
+And creating a browser workspace from an address past the limit answers too_many_requests
+And a browser workspace token resolves to its workspace, which belongs to no workshop
 ```
 
-### AC-011 — Participants read blocks, not workflow templates
+### AC-011 — The gallery serves both kinds, entries decide the revision
 
 Traces to: FR-014
 
 ```gherkin
-Given a participant of a workshop
-When the participant lists templates or reads a workflow template by slug
-Then only block templates are listed and the workflow template is not found
+Given a workspace credential
+When the client lists templates with kind WORKFLOW, with kind BLOCK, or without a kind
+Then the published templates of that kind, or of both kinds, are returned
+And starting a workshop entry copies the entry's pinned or newest revision, whatever the gallery shows
 ```
 
 ### AC-012 — Joins are rate limited, re-joins are not
@@ -441,7 +453,8 @@ Then the deletion is rejected with revision_current_in_use
 ## Success criteria
 
 - A facilitator runs a three-exercise session with one code.
-- Without a workshop code, no request reaches a workflow template or a model provider.
+- Without a workspace credential, no request reaches a workflow template or a model
+  provider, and minting a credential is throttled per address.
 - After closing, no participant request of that workshop changes stored state or calls a
   model.
 
@@ -451,3 +464,4 @@ Then the deletion is rejected with revision_current_in_use
 | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-25 | Initial specification: workshop template sets, workshop overview, read-only closed workshops, no anonymous workspaces. |
 | 2026-09-25 | Implemented: `WorkshopTemplate` model and migration `20260925100000_workshop_template_entries` (legacy `Workshop.templateId`/`templateRevisionId` backfilled, nullable, unused); backend `workshop/workshop-entries.ts`, `workshop.service.ts` (entries on create, `PUT /api/admin/workshops/:id/templates`), `workshop-participant.service.ts` and `WorkshopParticipantController` (join, overview, structure, idempotent start), per-entry `workshop-readiness.service.ts`, read-only enforcement in `WorkspaceGuard` and `GraphHandlerService`, blocks-only workspace-scoped `template.controller.ts`, `revision_current_in_use` in `TemplateService`; `POST /api/workspaces`, `POST /api/workflows/from-template` and `GET /api/templates/revisions/:id` removed; frontend `WorkshopJoin.tsx` overview, `TemplateCard.tsx`, `admin/WorkshopAdmin.tsx`, code-only `StartPage.tsx`, `TemplatesPage`/`WorkflowListPage`/`workspaceSession` removed; tests `workshop-templates.int-spec.ts` and `e2e/workshop-templates.spec.ts`. |
+| 2026-10-01 | ADR-0011 restores direct browser access: FR-013 and FR-014 restated (browser workspaces exist again behind the join throttle; `/api/templates` serves both kinds, workspace-scoped; entries still resolve pinned or newest revisions), AC-010 and AC-011 reworded, intent, scope, actors and success criteria amended. Workshop behaviour unchanged. |
