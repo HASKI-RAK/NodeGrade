@@ -54,9 +54,9 @@ export class WorkshopController {
   }
 
   /**
-   * The only way a participant obtains a workspace (SPEC-0022/FR-013). Unauthenticated by
-   * necessity, so creating a workspace here is rate-limited per address (FR-015); a
-   * re-join with the workshop's token is not.
+   * The way into a workshop (SPEC-0022/FR-006, FR-013): the join mints the participant's
+   * workshop workspace. Unauthenticated by necessity, so creating a workspace here is
+   * rate-limited per address (FR-015); a re-join with the workshop's token is not.
    */
   @Post('by-code/:code/join')
   join(

@@ -35,3 +35,11 @@ paths:
 - Do not edit `src/generated/prisma`; regenerate with `yarn setup`.
 - Schema changes: edit `prisma/schema.prisma`, add a migration under `prisma/migrations/`,
   and prefer additive columns over destructive rewrites while `LegacyGraph` still exists.
+- LTI routes live outside the `api` prefix: list every new `/lti/*` route in the `exclude`
+  of `setGlobalPrefix` in `main.ts` (`packages/frontend/nginx.conf` already proxies `/lti/`
+  whole). Platform-facing handlers read `@Body()`/`@Query()` as `Record<string, unknown>`
+  and validate with the `@haski/lti` readers, because the whitelisting `ValidationPipe`
+  would reject the extra fields platforms send. Platform registrations come from
+  `LTI_PLATFORMS` through `config/lti-platforms.ts`, never from a request or the database.
+  Rebuild `@haski/lti` (`yarn workspace @haski/lti build`) before trusting a backend
+  typecheck or test after touching `packages/lti`.

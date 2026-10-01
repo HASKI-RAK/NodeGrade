@@ -38,7 +38,7 @@ Created and maintained by David Fischer.
 - **Providers:** `local` / `OpenAI` / `OpenRouter` / OpenAI-compatible endpoints,
   encrypted API keys, `DENY_ALL` / `ALLOWLIST` / `ALLOW_ALL` model policies enforced
   server-side on catalog and execution, deployment-wide execution limits.
-- **Integrations:** LTI basic launch to `LTI` workspaces, xAPI initial + completed
+- **Integrations:** LTI 1.1 basic launch and LTI 1.3 launch to `LTI` workspaces, xAPI initial + completed
   statements, 60-day workspace retention, room-tolerant creation throttling.
 
 **Who this is for:** facilitators and participants start at
@@ -169,17 +169,20 @@ events typed in `@haski/ta-lib`. Modules: `auth/` (facilitator sessions + CSRF),
 projection), `template/` (immutable revisions, block library, bundled seeding),
 `workshop/` (lifecycle, template entries, join codes, participant overview, readiness),
 `provider/` (credentials, catalog, model policy,
-execution limits), `migration/` (content backfills), `lti/`, `benchmark/`.
+execution limits), `migration/` (content backfills), `lti/` (LTI 1.1 basic launch, LTI 1.3
+login and launch, tool config and JWKS), `benchmark/`.
 Backend is ESM: relative imports carry a `.js` extension. Never edit
 `src/generated/prisma` or `dist/` by hand.
 
 ### Frontend PWA
 
 React 19 + Vite 8 + MUI 7 + litegraph.js in `packages/frontend/src/` (`main.tsx`,
-`routes.tsx`). Routes: `/` code entry, `/workshop/:code` join and workshop overview,
-`/editor/:workflowId` and `/student/:workflowId` editor,
-`/admin/workshops|providers|templates`, `/lti/register`; the former `/templates` and
-`/workflows` redirect to the active workshop's overview. The editor
+`routes.tsx`). Routes: `/` direct entry with the browser's own workspace, `/workflows`
+("My workflows"), `/templates` (the workflow-template gallery with "Use template"),
+`/workshop` (the workshop hub: code entry and the way back to the last joined workshop),
+`/workshop/:code` join and workshop overview, `/editor/:workflowId` and
+`/student/:workflowId` editor, `/admin/workshops|providers|templates`, `/lti/register`.
+A titlebar links them on every page but the editor. The editor
 (`pages/Editor.tsx`, `components/editor/`) offers palette, inspector, rail, and toolbar
 with autosave; Preview runs an assessment and Trace shows per-node steps. Server calls go
 only through `api/http.ts` and `utils/socket.ts`; workshop sessions live in
@@ -191,7 +194,8 @@ only through `api/http.ts` and `utils/socket.ts`; workshop sessions live in
   `NodeDefinitionRegistry.ts`), model refs, and the socket event contract
   (`events/ServerEvents.ts`). After editing it, run
   `yarn workspace @haski/ta-lib build` before trusting backend typecheck or tests.
-- `packages/lti/` (`@haski/lti`): LTI 1.3 launch handling used by the backend.
+- `packages/lti/` (`@haski/lti`): LTI 1.3 claims, OIDC login, id_token verification and
+  the service claims, used by the backend (`docs/lti.md`).
 - `models/`: Flask + sentence-transformers embedding/similarity worker
   (`models/Dockerfile` builds it).
 - `packages/backend/prisma/`: schema + migrations; `e2e/`: Playwright browser coverage;
@@ -262,24 +266,28 @@ change applies without a restart.
 
 ## LTI, xAPI, retention, and limits
 
-- **Workspaces:** `WORKSHOP` and `LTI` kinds, created only by a workshop join or an LTI
-  launch; the legacy `BROWSER` kind is no longer issued and its tokens are rejected.
+- **Workspaces:** `BROWSER`, `WORKSHOP` and `LTI` kinds, created by a browser's own
+  `POST /api/workspaces` (throttled per address), a workshop join, or an LTI launch.
   Participant authorization comes from the bearer access token only (`WorkspaceGuard` +
   `@CurrentWorkspace()`); no handler takes a workspace id from path, query, or body. The
   workspace of a closed or expired workshop is read-only: writes answer `workshop_closed`
   and runs are refused.
-- **LTI:** a basic launch maps to an `LTI` workspace (editor or published projection via
-  the launch cookie) and registration lives at `/lti/register`.
+- **LTI:** an LTI 1.3 launch (`/lti/login`, `/lti/launch`, verified against the
+  platform's JWKS) or the deprecated 1.1 basic launch (`/lti/basiclogin`, OAuth 1.0a) maps
+  to an `LTI` workspace (editor or published projection via the launch cookie). Register
+  the URLs `GET /lti/config` lists in Moodle or Canvas and put the platform's values into
+  `LTI_PLATFORMS`; `docs/lti.md` walks through it and names what comes next (grade
+  passback, roster, Deep Linking, Dynamic Registration at `/lti/register`).
 - **xAPI:** graph runs emit initial + completed statements when `XAPI_ENDPOINT`,
   `XAPI_USERNAME`, and `XAPI_PASSWORD` are set.
-- **Retention:** ended workshop workspaces (and any legacy browser workspaces) are
+- **Retention:** idle browser workspaces and ended workshop workspaces are
   deleted after 60 days of inactivity (sweep every 6h; `RETENTION_ENABLED=false` keeps
   everything). `LTI` workspaces are never swept.
 - **Abuse guards:** one workspace holds at most `WORKSPACE_MAX_WORKFLOWS` workflows
   (default 50, `LTI` exempt); workshop joins from one address may create at most
   `WORKSPACE_CREATE_MAX` workspaces (default 100) per `WORKSPACE_CREATE_WINDOW_MS`
-  (default one hour), sized so a whole room arriving at once still joins. Re-joins with a
-  stored token are not counted.
+  (default one hour), sized so a whole room arriving at once still joins; direct browser
+  workspaces count against the same limit. Re-joins with a stored token are not counted.
 
 ## Deployment
 
@@ -345,6 +353,10 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `TRUST_PROXY` | Reverse proxies in front of the backend (default 1: the frontend's nginx). `docker-compose.prod.yml` sets 2 for Traefik ahead of nginx. Login throttling and the join throttle key on the client address this resolves. |
 | `RETENTION_ENABLED` | Delete ended workshop workspaces (and legacy browser workspaces) after 60 days of inactivity (default true). |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
+| `LTI_PLATFORMS` | JSON array of LTI 1.3 platform registrations (`issuer`, `clientId`, `deploymentIds`, `authorizationEndpoint`, `tokenEndpoint`, `jwksUri`); validated at startup. See `docs/lti.md`. |
+| `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key; `/lti/jwks` serves its public half. |
+| `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin. |
+| `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | LTI 1.1 basic launch credentials (deprecated path); unset disables the signature check. |
 | `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
 | `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create through workshop joins per window (default 100 per hour; re-joins are not counted). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
