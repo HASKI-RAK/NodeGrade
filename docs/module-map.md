@@ -296,9 +296,12 @@ the gallery and the overview), `admin/AdminPage.tsx` (`/admin/workshops`,
 `lti/LtiRegister.tsx` (outside the shell), `NotFoundPage.tsx`.
 
 Session rule: `store/workspaceStore.ts` keeps the browser workspace, one session per
-joined workshop, the last joined workshop and the active session; the start page and its
-pages make the browser session active, a workshop route makes that workshop's session
-active, and the editor opens a workflow with the active session.
+joined workshop, the last joined workshop and the active session. `store/workspaceSession.ts`
+only remembers the browser workspace it bootstraps; `hooks/useWorkspaceSession.ts` makes
+it active on every mount of a direct-entry page, and the handlers that open the editor
+activate the session they used right before navigating. A workshop route makes that
+workshop's session active as it joins, and the editor opens a workflow with the active
+session.
 
 Server access: `api/http.ts` only. Runtime config: `utils/config.ts` +
 `public/config/env.*.json`.

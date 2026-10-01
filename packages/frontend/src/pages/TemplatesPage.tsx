@@ -9,6 +9,7 @@ import {
   TemplateStructureDialog
 } from '@/components/TemplateCard'
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
+import { workspaceStore } from '@/store/workspaceStore'
 
 const UNREACHABLE = 'Could not reach the server. Check your connection and try again.'
 
@@ -65,6 +66,8 @@ export const TemplatesPage = () => {
     setActionError(null)
     try {
       const workflow = await api.fromTemplate(session.token, template.slug)
+      // The copy belongs to this session; the editor opens it with the active one.
+      workspaceStore.activate(session)
       navigate(`/editor/${workflow.id}`)
     } catch (useError) {
       setActionError(

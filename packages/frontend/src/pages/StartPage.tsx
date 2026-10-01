@@ -14,6 +14,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/http'
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
 import { ensureWorkspaceSession } from '@/store/workspaceSession'
+import { workspaceStore } from '@/store/workspaceStore'
 
 const EMPTY_GRAPH =
   '{"last_node_id":0,"last_link_id":0,"nodes":[],"links":[],"groups":[],"config":{},"extra":{},"version":0.4}'
@@ -41,6 +42,9 @@ export const StartPage = () => {
         'Untitled workflow',
         EMPTY_GRAPH
       )
+      // The editor opens the workflow with the active session; make it the one that
+      // owns the workflow, whatever another tab or a workshop visit activated meanwhile.
+      workspaceStore.activate(active)
       navigate(`/editor/${workflow.id}`)
     } catch (createError) {
       setMessage(

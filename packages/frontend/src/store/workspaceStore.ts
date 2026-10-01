@@ -53,7 +53,9 @@ const writeSession = (key: string, session: StoredSession): void =>
  * direct entry (SPEC-0002/FR-001), and one workspace per joined workshop. The active
  * session is the one the editor uses. Every workflow belongs to exactly one workspace,
  * so the hub a participant last used — the start page or a workshop — decides which
- * session is active.
+ * session is active: a direct-entry page activates the browser session each time it is
+ * shown and again as it hands a workflow to the editor, a workshop route activates that
+ * workshop's session as it joins (SPEC-0002 business rules).
  */
 export const workspaceStore = {
   browser: () => read(BROWSER_KEY),
@@ -64,8 +66,16 @@ export const workspaceStore = {
     return code ? read(workshopKey(code)) : null
   },
   active: () => read(ACTIVE_KEY),
-  saveBrowser(session: StoredSession) {
+  /**
+   * Keeps the browser workspace for later page views without making it current. The
+   * bootstrap calls this and nothing else, so a mint that resolves after the participant
+   * moved on to a workshop leaves the workshop's session active.
+   */
+  rememberBrowser(session: StoredSession) {
     writeSession(BROWSER_KEY, session)
+  },
+  /** Makes `session` the one the editor opens workflows with. */
+  activate(session: StoredSession) {
     writeSession(ACTIVE_KEY, session)
   },
   saveWorkshop(code: string, session: StoredSession) {

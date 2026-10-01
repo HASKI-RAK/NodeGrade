@@ -101,7 +101,7 @@ describe('start page', () => {
   })
 
   it('reuses the workspace this browser already holds instead of minting another', async () => {
-    workspaceStore.saveBrowser({ ...workspace, token: 'stored' })
+    workspaceStore.rememberBrowser({ ...workspace, token: 'stored' })
     const fetchMock = stubApi((url, init) => {
       if (url.endsWith('/api/workspaces/me') && authorizationOf(init) === 'Bearer stored')
         return jsonResponse(workspace)
@@ -116,7 +116,7 @@ describe('start page', () => {
   })
 
   it('replaces a stored token the server no longer honours', async () => {
-    workspaceStore.saveBrowser({ ...workspace, id: 'ws-old', token: 'stale' })
+    workspaceStore.rememberBrowser({ ...workspace, id: 'ws-old', token: 'stale' })
     const fetchMock = stubApi((url) =>
       url.endsWith('/api/workspaces/me')
         ? jsonResponse({ code: 'workspace_token_invalid' }, { status: 401 })
@@ -130,7 +130,7 @@ describe('start page', () => {
   })
 
   it('keeps a stored token when the server fails transiently', async () => {
-    workspaceStore.saveBrowser({ ...workspace, id: 'ws-old', token: 'stored' })
+    workspaceStore.rememberBrowser({ ...workspace, id: 'ws-old', token: 'stored' })
     const fetchMock = stubApi((url) =>
       url.endsWith('/api/workspaces/me')
         ? jsonResponse(

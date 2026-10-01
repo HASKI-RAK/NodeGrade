@@ -82,7 +82,7 @@ describe('workshop hub', () => {
     joined('AAAA-1111', 'First workshop')
     joined('BBBB-2222', 'Three exercises')
     // The start page made the browser workspace active since; the way back survives it.
-    workspaceStore.saveBrowser({
+    workspaceStore.activate({
       id: 'ws-browser',
       type: 'BROWSER',
       label: null,

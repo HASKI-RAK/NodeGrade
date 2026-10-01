@@ -14,10 +14,14 @@ paths:
   session the editor uses. The browser workspace is bootstrapped only through
   `@/store/workspaceSession` (`ensureWorkspaceSession`, one shared promise per page view)
   and its hook `@/hooks/useWorkspaceSession`; a workshop workspace comes only from the
-  join in `pages/WorkshopJoin.tsx`; LTI launches use the cookie instead. A direct-entry
-  page makes the browser session active, a workshop route makes that workshop's session
-  active; never activate a session a page did not establish. `store/Zustand/Store.ts` is
-  an unused scaffold — do not put session or editor state there.
+  join in `pages/WorkshopJoin.tsx`; LTI launches use the cookie instead. Activation is
+  the page's job, never the bootstrap's: `ensureWorkspaceSession` only remembers the
+  browser workspace (`workspaceStore.rememberBrowser`), `useWorkspaceSession` activates
+  it on every mount while the page is still mounted (`workspaceStore.activate`), and a
+  handler that opens the editor activates the session it used right before navigating;
+  `workspaceStore.saveWorkshop` activates the workshop session as the join route runs.
+  Never activate a session a page did not establish. `store/Zustand/Store.ts` is an
+  unused scaffold — do not put session or editor state there.
 - Pages outside the editor render under the `AppShell` layout route in `src/routes.tsx`;
   they carry no Back buttons or appearance menus of their own, the title bar does that.
   The editor routes and `/lti/register` stay outside the shell.

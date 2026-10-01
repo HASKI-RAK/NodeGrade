@@ -350,7 +350,10 @@ Then the entry actions work
 - The start page, My workflows and the template gallery act on this browser's own
   workspace; a workshop route acts on that workshop's workspace. The editor opens a
   workflow with the session the hub used last made active, because every workflow
-  belongs to exactly one workspace.
+  belongs to exactly one workspace. A direct-entry page makes the browser session active
+  each time it is shown and again as it hands a workflow to the editor; a workshop route
+  makes that workshop's session active as it joins. A bootstrap that resolves after the
+  participant left the direct-entry page activates nothing.
 
 ## Constraints
 
@@ -382,3 +385,4 @@ Then the entry actions work
 | 2026-09-15 | Review revision: workshop code lifecycle FRs (FR-007..FR-009) removed — normatively defined by SPEC-0014 (avoids drift); AC-006 replaced with Start-workshop code-entry behavior (FR-001a), AC-007 now traces to SPEC-0014/FR-008; SPEC-0014 added to frontmatter depends_on |
 | 2026-09-25 | SPEC-0022 makes the workshop code the only entry: FR-001, FR-003, FR-004, US-002, US-003 and AC-003 superseded; AC-001 and AC-004 amended (code-only start page, "My workflows" on the workshop overview); intent, scope and actors amended |
 | 2026-10-01 | The workshop is over: direct use returns to the root. FR-001, FR-003, FR-004, US-002, US-003 and AC-003 are live again with the browser workspace; FR-003a and AC-003a (template gallery with Use template), FR-007 and AC-008 (title bar, editor way home), FR-008 and AC-009 (the `/workshop` hub with the code entry and the way back), AC-010 (retryable bootstrap) added; FR-001a and AC-006 moved to the hub; US-004 added |
+| 2026-10-01 | Business rules: activating a session is the page's job — a direct-entry page activates the browser session on every view and as it opens the editor, a workshop route as it joins; the bootstrap itself activates nothing |

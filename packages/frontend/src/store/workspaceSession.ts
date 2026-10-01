@@ -7,16 +7,16 @@ let pending: Promise<ActiveSession> | null = null
 
 /**
  * The browser's own workspace: the stored one when the server still honours its token,
- * a freshly minted one otherwise (SPEC-0002/FR-001, SPEC-0004/FR-001). Either way it
- * becomes the active session, so a workflow created from the start page opens in the
- * editor with the token that owns it.
+ * a freshly minted one otherwise (SPEC-0002/FR-001, SPEC-0004/FR-001). It is remembered
+ * here and activated by the page that shows it, because only the page knows whether the
+ * participant is still on a direct-entry route when the bootstrap resolves.
  */
 const establish = async (): Promise<ActiveSession> => {
   const stored = workspaceStore.browser()
   if (stored?.token) {
     try {
       const session = { ...(await api.workspace(stored.token)), token: stored.token }
-      workspaceStore.saveBrowser(session)
+      workspaceStore.rememberBrowser(session)
       return session
     } catch (error) {
       // A token the server no longer honours (retention sweep, reset database) answers
@@ -27,7 +27,7 @@ const establish = async (): Promise<ActiveSession> => {
     }
   }
   const created = await api.createWorkspace()
-  workspaceStore.saveBrowser(created)
+  workspaceStore.rememberBrowser(created)
   return created
 }
 
@@ -35,7 +35,9 @@ const establish = async (): Promise<ActiveSession> => {
  * One workspace bootstrap per page view, shared by every caller.
  *
  * Without the shared promise a start page that both renders the session and creates a
- * workflow on click would mint two workspaces for one participant.
+ * workflow on click would mint two workspaces for one participant. The promise resolves
+ * to the same session on every later call; making it active again is the caller's part,
+ * since a workshop route may have activated its own session in between.
  */
 export const ensureWorkspaceSession = (): Promise<ActiveSession> => {
   pending ??= establish().catch((error: unknown) => {

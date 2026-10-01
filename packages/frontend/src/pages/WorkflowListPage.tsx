@@ -14,6 +14,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { api, type Workflow } from '@/api/http'
 import { useWorkspaceSession } from '@/hooks/useWorkspaceSession'
+import { workspaceStore } from '@/store/workspaceStore'
 
 /**
  * `/workflows`: the workflows of this browser's workspace (SPEC-0002/FR-004). Scoping is
@@ -24,6 +25,13 @@ export const WorkflowListPage = () => {
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  // The list was read with this session; the editor opens the workflow with the active
+  // one, so the two are made the same right before the hand-over.
+  const open = (workflow: Workflow) => {
+    if (session) workspaceStore.activate(session)
+    navigate(`/editor/${workflow.id}`)
+  }
 
   useEffect(() => {
     if (!session) return
@@ -79,7 +87,7 @@ export const WorkflowListPage = () => {
           <List aria-label="My workflows">
             {workflows.map((workflow) => (
               <ListItem key={workflow.id} disablePadding>
-                <ListItemButton onClick={() => navigate(`/editor/${workflow.id}`)}>
+                <ListItemButton onClick={() => open(workflow)}>
                   <ListItemText
                     primary={workflow.name}
                     secondary={`Version ${workflow.version}`}
