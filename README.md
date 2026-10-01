@@ -2,11 +2,15 @@
 
 ## Overview
 
-NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
-`/admin`, compose a workshop from one or more workflow templates, and hand out an
-eight-character code. The code is the participants' only way in: each participant browser
-gets an isolated workshop workspace, starts the workshop's templates into its own workflow
-copies, edits them in a LiteGraph editor, and runs them against LLM and NLP providers.
+NodeGrade automates short-answer grading with node graphs. A browser that opens the main
+URL gets an isolated workspace of its own and builds workflows from scratch or from the
+template gallery. Facilitators sign in at `/admin`, compose a workshop from one or more
+workflow templates, and hand out an eight-character code; participants enter it on the
+Workshop page (`/workshop`, linked from the title bar) or open `/workshop/<code>`, receive
+a workshop workspace separate from the browser's own, start the workshop's templates into
+their own workflow copies, edit them in a LiteGraph editor, and run them against LLM and
+NLP providers. LTI 1.1 and LTI 1.3 launches from a learning platform open a course-bound
+workspace of their own.
 
 Following articles have been published concerning this project:
 
@@ -31,8 +35,8 @@ Created and maintained by David Fischer.
   readiness panel (backend, template, node types, models). A closed or expired workshop
   stays readable but no longer saves or runs.
 - **Templates:** `WORKFLOW` and `BLOCK` kinds, immutable revisions, workflow templates
-  offered to participants only through workshops, block insertion with boundary ports and
-  provenance, bundled seeding.
+  offered in the gallery at `/templates` and as workshop entries, block insertion with
+  boundary ports and provenance, bundled seeding.
 - **Editor:** node palette, inspector, autosave with `Saved` indicator, optimistic
   `ETag` / `If-Match` saves, Preview + Run assessment, per-node Trace.
 - **Providers:** `local` / `OpenAI` / `OpenRouter` / OpenAI-compatible endpoints,
@@ -114,18 +118,21 @@ model loads on the first `/entailment` request, not at startup. Then set
 Workshops move `DRAFT` → `PUBLISHED` → `CLOSED`. Facilitators sign in at `/admin`,
 create a workshop from one or more workflow templates — each pinned to one revision or
 following the template's newest revision — and publish its eight-character code.
-Participants enter the code at `/` or open `/workshop/<code>`; entry runs a preflight
-(backend, then template, node types and models per entry) and only then mints an isolated
+Participants enter the code on the Workshop page (`/workshop`, one title-bar link away
+from every page) or open `/workshop/<code>` directly; entry runs a preflight (backend,
+then template, node types and models per entry) and only then mints an isolated workshop
 workspace. A workshop with a single template opens its copy in the editor straight away;
 otherwise the participant lands on the workshop overview, starts a template there and
 finds their own workflows. Closing, or passing the expiry, stops new joins and makes the
 workshop read-only: participants can still open their work but no longer save or run it.
 Workspaces keep their content until retention removes them.
 
-There is no participant entry without a workshop: nothing outside a workshop creates a
-workspace or lists workflow templates, so a fresh deployment offers participants nothing
-until a facilitator publishes a workshop. For a standing public demo, publish a
-long-running demo workshop and share its code.
+The workshop is one of two ways in. The application root is the direct entry: a browser
+that opens `/` gets a workspace of its own (`POST /api/workspaces`), creates workflows
+from scratch or copies one from the template gallery at `/templates`, and finds them again
+under `/workflows`. A workshop workspace is separate from the browser's own, so a
+participant's workshop copies and their own workflows never mix; the editor's **Home**
+button leads back to the start page, **Workshop** back to the workshop overview.
 
 Workflow persistence uses REST with `If-Match` / `ETag` optimistic versions. Graph
 execution uses Socket.IO (`runGraph` / `cancelRun`, `runStateChanged` /
@@ -284,10 +291,11 @@ change applies without a restart.
   deleted after 60 days of inactivity (sweep every 6h; `RETENTION_ENABLED=false` keeps
   everything). `LTI` workspaces are never swept.
 - **Abuse guards:** one workspace holds at most `WORKSPACE_MAX_WORKFLOWS` workflows
-  (default 50, `LTI` exempt); workshop joins from one address may create at most
-  `WORKSPACE_CREATE_MAX` workspaces (default 100) per `WORKSPACE_CREATE_WINDOW_MS`
-  (default one hour), sized so a whole room arriving at once still joins; direct browser
-  workspaces count against the same limit. Re-joins with a stored token are not counted.
+  (default 50, `LTI` exempt); one address may create at most `WORKSPACE_CREATE_MAX`
+  workspaces (default 100) per `WORKSPACE_CREATE_WINDOW_MS` (default one hour) through
+  direct entry and workshop joins together, sized so a whole room arriving at once still
+  joins. A browser returning with a stored token, for its own workspace or a workshop's,
+  is not counted.
 
 ## Deployment
 
@@ -351,14 +359,14 @@ Configure the backend through the environment (`.env_template` lists every varia
 | `ADMIN_SESSION_TTL_HOURS` | Facilitator session lifetime in hours (default 8). |
 | `COOKIE_INSECURE` | Issue cookies without `Secure`. Needed for plain HTTP on localhost; must stay false anywhere reachable over a network. |
 | `TRUST_PROXY` | Reverse proxies in front of the backend (default 1: the frontend's nginx). `docker-compose.prod.yml` sets 2 for Traefik ahead of nginx. Login throttling and the join throttle key on the client address this resolves. |
-| `RETENTION_ENABLED` | Delete ended workshop workspaces (and legacy browser workspaces) after 60 days of inactivity (default true). |
+| `RETENTION_ENABLED` | Delete idle browser workspaces and ended workshop workspaces after 60 days of inactivity (default true); `LTI` workspaces are never swept. |
 | `WORKSPACE_MAX_WORKFLOWS` | Max workflows per participant workspace (default 50; LTI exempt). |
 | `LTI_PLATFORMS` | JSON array of LTI 1.3 platform registrations (`issuer`, `clientId`, `deploymentIds`, `authorizationEndpoint`, `tokenEndpoint`, `jwksUri`); validated at startup. See `docs/lti.md`. |
 | `LTI_TOOL_PRIVATE_KEY` | Optional PEM RSA private key; `/lti/jwks` serves its public half. |
 | `LTI_TOOL_URL` | Public base URL of the `/lti` routes when it differs from the request origin. |
 | `LTI_CONSUMER_KEY`, `LTI_CONSUMER_SECRET` | LTI 1.1 basic launch credentials (deprecated path); unset disables the signature check. |
 | `WORKFLOW_HISTORY_LIMIT`, `WORKFLOW_HISTORY_INTERVAL_MS` | Past states kept per workflow (default 20) and how long one covers the saves that follow it (default 2 min). |
-| `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create through workshop joins per window (default 100 per hour; re-joins are not counted). |
+| `WORKSPACE_CREATE_MAX`, `WORKSPACE_CREATE_WINDOW_MS` | Max workspaces one address may create per window, direct entry and workshop joins together (default 100 per hour; a browser returning with a stored token is not counted). |
 | `TEMPLATE_SEED_ENABLED` | Install bundled templates on startup; only appends, never overwrites facilitator edits. |
 | `XAPI_ENDPOINT`, `XAPI_USERNAME`, `XAPI_PASSWORD` | xAPI LRS receiving initial + completed run statements. |
 
@@ -533,12 +541,13 @@ Release checklist:
 
 Template revisions are immutable (ADR-0003): new content is always a new revision, never an
 edit of an existing one. Templates come in two kinds: `WORKFLOW` (a whole assessment) and
-`BLOCK` (a reusable capability with declared inputs/outputs). Participants never browse
-templates: a workflow template reaches them only as an entry of their workshop, where the
-overview shows its description and a structure preview, and published blocks appear in
-the editor's palette. Inserting a block remaps identities, places content near the
-viewport, suggests connections, records provenance, and undoes in one step. Subgraph-wrapper blocks are an expansion track; see
-`docs/subgraph-template-block-plan.md`. There are two ways in.
+`BLOCK` (a reusable capability with declared inputs/outputs). A published workflow
+template reaches participants in two places: the gallery at `/templates`, where a browser
+copies it into its own workspace, and the entries of a workshop, where the overview shows
+its description and a structure preview. Published blocks appear in the editor's palette.
+Inserting a block remaps identities, places content near the viewport, suggests
+connections, records provenance, and undoes in one step. Subgraph-wrapper blocks are an
+expansion track; see `docs/subgraph-template-block-plan.md`.
 
 **Ship it with the deployment.** Add a module to
 `packages/backend/src/template/bundled/` exporting a `BundledTemplate`, and list it in
@@ -584,8 +593,10 @@ Two rules are worth knowing before you author:
 
 Hand out the code and these five lines:
 
-1. Open **<https://your-deployment.example>** and type the code **`ABCD-EFGH`** into
-   *Workshop code*, then press **Join**. The dashes are optional.
+1. Open **<https://your-deployment.example/workshop>** — or open
+   **<https://your-deployment.example>** and press **Workshop** in the title bar — and
+   type the code **`ABCD-EFGH`** into *Workshop code*, then press **Join**. The dashes
+   are optional.
 2. If the workshop has several exercises, press **Start** on one; **Continue** returns
    to one you already started. You now have your own private copy of the workflow.
    Nobody else sees your edits, and nothing you do affects anyone else in the room.
