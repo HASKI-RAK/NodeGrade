@@ -2,13 +2,15 @@
 
 ## Project
 
-NodeGrade automates short-answer grading with node graphs. Facilitators sign in at
-`/admin`, compose a workshop from one or more workflow templates (each pinned to a
-revision or following the newest one), and hand out an eight-character code. The code is
-the only way in for participants — there are no anonymous workspaces outside a workshop
-(LTI launches aside). Each participant browser gets an isolated workshop workspace, starts
-the workshop's templates into its own workflow copies from the workshop overview, edits
-them in a LiteGraph editor, and runs them against LLM and NLP providers.
+NodeGrade automates short-answer grading with node graphs. A browser that opens the main
+URL gets its own isolated workspace and builds workflows from scratch or from the template
+gallery. Facilitators sign in at `/admin`, compose a workshop from one or more workflow
+templates (each pinned to a revision or following the newest one), and hand out an
+eight-character code; participants enter it on the `/workshop` hub reached from the
+titlebar, receive a workshop workspace, start the workshop's templates into their own
+workflow copies from the workshop overview, edit them in a LiteGraph editor, and run them
+against LLM and NLP providers. LTI 1.1 and LTI 1.3 launches from a learning platform open
+a course-bound workspace of their own.
 
 Yarn 4 workspaces monorepo, TypeScript throughout: NestJS 12 + Prisma 7 + PostgreSQL
 backend, React 19 + Vite 8 + MUI 7 + litegraph.js PWA frontend, a shared graph/event
