@@ -164,7 +164,7 @@ export function validateEvaluation(
     criterionResults,
     totalPoints,
     maxPoints,
-    classification: parsed.classification,
+    classification: derivedClassification,
     feedback: parsed.feedback,
     reviewFlag,
     reviewReason: reviewReasons.length

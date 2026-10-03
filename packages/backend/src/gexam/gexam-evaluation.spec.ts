@@ -132,6 +132,7 @@ describe('Gexam rubric integration', () => {
       'evaluation-classification',
     );
     expect(result.totalPoints).toBe(4);
+    expect(result.classification).toBe('partially_correct');
     expect(result.reviewFlag).toBe(true);
     expect(result.reviewReason).toContain('Classification conflicts');
   });
