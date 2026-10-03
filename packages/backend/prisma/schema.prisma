@@ -186,6 +186,34 @@ model Run {
   @@index([workspaceId])
 }
 
+// Gexam is a separate service caller. Its evaluations are deliberately outside
+// participant workspaces and retain the exact request/version used for a retry.
+enum GexamEvaluationStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model GexamEvaluation {
+  id                String                @id
+  idempotencyKey    String                @unique
+  requestHash       String
+  externalAttemptId String
+  taskVersionId     String
+  workflowRevision  String
+  request           Json
+  status            GexamEvaluationStatus @default(PENDING)
+  result            Json?
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  completedAt       DateTime?
+
+  @@index([status, createdAt])
+  @@index([externalAttemptId])
+}
+
 // ---------------------------------------------------------------------------
 // Templates (SPEC-0003)
 // ---------------------------------------------------------------------------

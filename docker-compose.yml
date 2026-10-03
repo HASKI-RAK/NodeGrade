@@ -74,6 +74,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       KATALYST_API_KEY: ${KATALYST_API_KEY:-}
+      GEXAM_VLLM_BASE_URL: ${GEXAM_VLLM_BASE_URL:-https://vllm.katalyst-education.de/v1}
+      GEXAM_VLLM_API_KEY: ${GEXAM_VLLM_API_KEY:-}
+      NODEGRADE_GEXAM_INTERNAL_API_KEY: ${NODEGRADE_GEXAM_INTERNAL_API_KEY:-}
       PROVIDER_ENCRYPTION_KEY: ${PROVIDER_ENCRYPTION_KEY:-}
       # Without both of these the admin area stays disabled, and nobody can create the
       # workshop this stack exists to serve.

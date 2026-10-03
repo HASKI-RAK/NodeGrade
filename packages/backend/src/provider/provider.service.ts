@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   KATALYST_MODEL_QWEN_FLASH,
+  PROVIDER_KEY_GEXAM,
   PROVIDER_KEY_KATALYST,
   PROVIDER_KEY_LOCAL,
   PROVIDER_KEY_OPENAI,
@@ -92,6 +93,10 @@ export class ProviderService implements OnApplicationBootstrap {
     const openAiKey = process.env.OPENAI_API_KEY?.trim();
     const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
     const katalystKey = process.env.KATALYST_API_KEY?.trim();
+    const gexamKey = process.env.GEXAM_VLLM_API_KEY?.trim() || katalystKey;
+    const gexamBaseUrl =
+      process.env.GEXAM_VLLM_BASE_URL?.trim() ||
+      'https://vllm.katalyst-education.de/v1';
     return [
       {
         key: PROVIDER_KEY_LOCAL,
@@ -128,6 +133,16 @@ export class ProviderService implements OnApplicationBootstrap {
           mode: 'ALLOWLIST',
           allowedModels: [KATALYST_MODEL_QWEN_FLASH],
         },
+      },
+      {
+        key: PROVIDER_KEY_GEXAM,
+        type: 'OPENAI_COMPATIBLE',
+        displayName: 'Gexam vLLM',
+        baseUrl: gexamBaseUrl,
+        enabled: Boolean(gexamKey),
+        apiKey: gexamKey || undefined,
+        // The integration resolves /models at run time and uses its first model.
+        policy: { mode: 'ALLOW_ALL', allowedModels: [] },
       },
     ];
   }

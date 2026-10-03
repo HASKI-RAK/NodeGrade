@@ -6,13 +6,16 @@ export const PROVIDER_KEY_LOCAL = 'local'
 export const PROVIDER_KEY_OPENAI = 'openai'
 export const PROVIDER_KEY_OPENROUTER = 'openrouter'
 export const PROVIDER_KEY_KATALYST = 'katalyst'
+/** Dedicated, locally configured provider for the Gexam service integration. */
+export const PROVIDER_KEY_GEXAM = 'gexam-vllm'
 export const KATALYST_MODEL_QWEN_FLASH = 'qwen3.8-flash-next'
 
 export const RESERVED_PROVIDER_KEYS = [
   PROVIDER_KEY_LOCAL,
   PROVIDER_KEY_OPENAI,
   PROVIDER_KEY_OPENROUTER,
-  PROVIDER_KEY_KATALYST
+  PROVIDER_KEY_KATALYST,
+  PROVIDER_KEY_GEXAM
 ] as const
 
 /**
@@ -79,6 +82,8 @@ export type ModelCompletionRequest = {
   messages: { role: string; content: string }[]
   parameters: Partial<Record<ModelParameter, number>>
   signal?: AbortSignal
+  /** Request no hidden reasoning tokens from compatible vLLM chat templates. */
+  disableThinking?: boolean
 }
 
 export type ModelCompletionResult = {

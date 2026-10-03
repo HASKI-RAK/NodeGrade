@@ -1,0 +1,45 @@
+# Minimal local runtime for Gexam's LLM-only rubric workflow. No embedding worker.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nodegrade
+      POSTGRES_PASSWORD: nodegrade
+      POSTGRES_DB: nodegrade
+    ports:
+      - '127.0.0.1:${NODEGRADE_DATABASE_PORT:-5432}:5432'
+    volumes:
+      - gexam_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nodegrade -d nodegrade']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: '5000'
+      DATABASE_URL: postgresql://nodegrade:nodegrade@db:5432/nodegrade?schema=public
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      COOKIE_INSECURE: 'true'
+      SIMILARITY_WORKER_URL: http://127.0.0.1:8002
+      GEXAM_VLLM_BASE_URL: ${GEXAM_VLLM_BASE_URL:-https://vllm.katalyst-education.de/v1}
+      GEXAM_VLLM_API_KEY: ${GEXAM_VLLM_API_KEY:-}
+      KATALYST_API_KEY: ${KATALYST_API_KEY:-}
+      NODEGRADE_GEXAM_INTERNAL_API_KEY: ${NODEGRADE_GEXAM_INTERNAL_API_KEY:-}
+      PROVIDER_ENCRYPTION_KEY: ${PROVIDER_ENCRYPTION_KEY:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    ports:
+      - '127.0.0.1:${NODEGRADE_BACKEND_PORT:-5000}:5000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  gexam_db_data:

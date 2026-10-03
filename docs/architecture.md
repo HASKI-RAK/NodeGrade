@@ -45,7 +45,7 @@ flowchart TD
 controllers hold no domain logic: they validate DTOs, resolve the caller through a guard,
 and delegate to a service, which is the only layer that touches Prisma.
 
-## Two authorization surfaces
+## Authorization surfaces
 
 | Surface | Caller | Credential | Guard |
 |---|---|---|---|
@@ -54,6 +54,7 @@ and delegate to a service, which is the only layer that touches Prisma.
 | Workshop entry (`/api/workshops/by-code/:code`, `.../preflight`, `.../join`) | anyone holding a code | none; `join` accepts the workshop's bearer token for a re-join | none — `join` is rate-limited per address |
 | LTI platform (`/lti/login`, `/lti/launch`, `/lti/basiclogin`; `/lti/config`, `/lti/jwks` public) | the LMS and the browser it sends | an id_token signed by a registered platform answering a login this server started, in the browser that started it (per-login state cookie), or an OAuth 1.0a signature over the configured consumer secret | none — the launch is the authentication and ends in the launch cookie; `/lti/login` is throttled per address |
 | Facilitator (`/api/admin/**`, `/api/providers`, `/api/benchmark/run`) | admin UI | session cookie + `X-CSRF-Token` | `AdminSessionGuard` |
+| Gexam integration (`/api/internal/evaluations/**`) | Gexam backend only | `X-Internal-Api-Key` shared secret | constant-time hash comparison in `GexamEvaluationService` |
 
 A bearer token cannot be set by a cross-site form post, which keeps CSRF handling off the
 participant surface entirely. Workspace ids appear in URLs and are never credentials
@@ -88,6 +89,14 @@ REST persists, Socket.IO executes (ADR-0002).
   completed or failed execution before it emits the terminal event, and REST
   (`GET /api/workflows/:id/runs`, `PATCH .../runs/:runId/review`) reads and marks those
   records for the Submissions inbox. The trace is never stored.
+
+The Gexam integration is a separate server-to-server REST execution path. It builds a
+versioned ephemeral rubric graph with existing NodeGrade nodes, runs it through
+`executeLgraph` and `ProviderRuntimeService`, and stores an idempotent evaluation record
+outside participant workspaces. POST returns a pending id; GET polls for validated
+criterion results. It does not call the facilitator benchmark endpoint or the Socket.IO
+participant path. Gexam retains the exam and learner submission as its own source of
+truth; NodeGrade retains the technical evaluation and request/version for retries.
 
 ## Execution flow
 
@@ -251,6 +260,8 @@ PostgreSQL through Prisma 7; the client is generated into
   outputs as `jsonb` (capped per value and per run), the derived review flag and the
   participant's review mark. Rows cascade with their workspace and workflow and are
   trimmed to the newest 200 per workflow (ADR-0009, SPEC-0020).
+- `GexamEvaluation` holds one idempotent server-to-server grading request, its status,
+  validated result or failure, independently from workspace `Run` retention.
 - `WorkflowVersion` holds the states a workflow has left: captured before the save that
   replaces them (coalesced to one per two minutes) and unconditionally before a reset or
   a restore. Rows cascade with their workflow and are trimmed to the newest 20 per
@@ -272,6 +283,12 @@ while the module graph is built, so a bad value stops the boot with a line namin
 
 ## Configuration
 
+The Gexam service surface uses `NODEGRADE_GEXAM_INTERNAL_API_KEY` and a dedicated
+`gexam-vllm` provider seeded from `GEXAM_VLLM_BASE_URL` / `GEXAM_VLLM_API_KEY` (or
+`KATALYST_API_KEY`). It selects the current first `/models` result for each run and
+disables hidden thinking for its structured grading prompt. See
+`docs/gexam-integration.md` for the contract and local setup.
+
 Backend reads the environment through `src/config/configuration.ts` (`@nestjs/config`,
 cached): port, CORS origins, frontend URL, cookie insecurity switch, node run timeout,
 worker URLs, xAPI credentials, and the LTI platform registrations (`LTI_PLATFORMS`,
@@ -287,6 +304,10 @@ The frontend has no build-time API constant: `src/utils/config.ts` fetches
 development Vite proxies `/api` to `http://localhost:5000`.
 
 ## Deployment topology
+
+`docker-compose.gexam.yml` starts only PostgreSQL and the backend for the Gexam
+rubric demonstration; the existing four-service stack remains the general NodeGrade
+runtime. The Gexam graph does not use the embedding worker.
 
 `docker-compose.yml` runs four services: Postgres, the sentence-transformer worker, the
 backend image (`node dist/src/main.js` after `prisma migrate deploy`), and an nginx image

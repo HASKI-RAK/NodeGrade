@@ -44,6 +44,8 @@ describe('ProviderService', () => {
     openAiKey: process.env.OPENAI_API_KEY,
     openRouterKey: process.env.OPENROUTER_API_KEY,
     katalystKey: process.env.KATALYST_API_KEY,
+    gexamKey: process.env.GEXAM_VLLM_API_KEY,
+    gexamBaseUrl: process.env.GEXAM_VLLM_BASE_URL,
     bearerToken: process.env.BEARER_TOKEN,
   };
   const findUnique = jest.fn();
@@ -61,6 +63,8 @@ describe('ProviderService', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.KATALYST_API_KEY;
+    delete process.env.GEXAM_VLLM_API_KEY;
+    delete process.env.GEXAM_VLLM_BASE_URL;
     delete process.env.BEARER_TOKEN;
     findUnique.mockReset();
     findUniqueOrThrow.mockReset();
@@ -101,6 +105,8 @@ describe('ProviderService', () => {
     restore('OPENAI_API_KEY', originalEnvironment.openAiKey);
     restore('OPENROUTER_API_KEY', originalEnvironment.openRouterKey);
     restore('KATALYST_API_KEY', originalEnvironment.katalystKey);
+    restore('GEXAM_VLLM_API_KEY', originalEnvironment.gexamKey);
+    restore('GEXAM_VLLM_BASE_URL', originalEnvironment.gexamBaseUrl);
     restore('BEARER_TOKEN', originalEnvironment.bearerToken);
   });
 
@@ -111,7 +117,7 @@ describe('ProviderService', () => {
 
     await service.ensureInitialized();
 
-    expect(findUnique).toHaveBeenCalledTimes(4);
+    expect(findUnique).toHaveBeenCalledTimes(5);
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -129,6 +135,10 @@ describe('ProviderService', () => {
       })
       .mockResolvedValueOnce({
         id: 'katalyst-id',
+        baseUrl: 'https://vllm.katalyst-education.de/v1',
+      })
+      .mockResolvedValueOnce({
+        id: 'gexam-id',
         baseUrl: 'https://vllm.katalyst-education.de/v1',
       });
     findMany.mockResolvedValue([]);
@@ -268,6 +278,7 @@ describe('ProviderService', () => {
       openai: 'DENY_ALL',
       openrouter: 'DENY_ALL',
       katalyst: 'ALLOWLIST',
+      'gexam-vllm': 'ALLOW_ALL',
     });
     const katalyst = create.mock.calls.find(
       ([call]) => call.data.key === 'katalyst',
@@ -287,6 +298,16 @@ describe('ProviderService', () => {
       }),
     );
     expect(cipher.decrypt(katalyst!.apiKeyEnc)).toBe('seeded-katalyst-key');
+    const gexam = create.mock.calls.find(
+      ([call]) => call.data.key === 'gexam-vllm',
+    )?.[0].data;
+    expect(gexam).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        modelPolicy: { create: { mode: 'ALLOW_ALL', allowedModels: [] } },
+      }),
+    );
+    expect(cipher.decrypt(gexam!.apiKeyEnc)).toBe('seeded-katalyst-key');
   });
 
   it('refuses to enable a cloud provider before a policy mode is chosen', async () => {

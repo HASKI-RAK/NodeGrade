@@ -17,6 +17,7 @@ import { LtiModule } from '../lti/lti.module.js';
 import { XapiService } from '../xapi.service.js';
 import { HealthController } from '../health/health.controller.js';
 import { HealthService } from '../health/health.service.js';
+import { GexamEvaluationModule } from '../gexam/gexam-evaluation.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { HealthService } from '../health/health.service.js';
     WorkshopModule,
     RunModule,
     LtiModule,
+    GexamEvaluationModule,
   ],
   controllers: [BenchmarkController, HealthController],
   providers: [BenchmarkService, XapiService, HealthService],

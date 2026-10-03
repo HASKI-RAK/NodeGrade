@@ -49,6 +49,7 @@ Graph node behaviour or new node  → packages/lib/src/nodes/ (+ NodeDefinitionR
 Embedding, similarity, entailment → models/model_worker.py, packages/lib/src/nodes/utils/
 Socket event contract             → packages/lib/src/events/ServerEvents.ts
 Graph execution (server)          → packages/backend/src/graphgateway/, src/core/Graph.ts
+Gexam service evaluation          → packages/backend/src/gexam/, docs/gexam-integration.md
 Workflow persistence, ETags       → packages/backend/src/workflow/
 Version history, restore          → packages/backend/src/workflow/workflow-history.service.ts
 Workspace access, retention       → packages/backend/src/workspace/
@@ -66,6 +67,7 @@ LTI launch and registration       → packages/backend/src/lti/ (lti-launch.serv
 Specification consistency rules   → tools/spec-lint/
 Browser smoke test, CI gating     → e2e/, .github/workflows/pr.yml, .github/rulesets/
 Deployment, images, Portainer     → docker-compose.prod.yml, .github/workflows/deploy.yml, README "Deploying with Portainer"
+Minimal Gexam local runtime       → docker-compose.gexam.yml
 Schema change                     → packages/backend/prisma/schema.prisma + migrations/
 Content schema backfill           → packages/backend/src/migration/
 ```

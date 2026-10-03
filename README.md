@@ -227,6 +227,13 @@ same on every run and no API key is needed.
 
 ## Docker
 
+For the Gexam integration prototype, use
+`docker compose -f docker-compose.gexam.yml up --build --detach --wait` to start only
+PostgreSQL and the NodeGrade backend. It avoids
+the embedding model download because the Gexam rubric graph only uses text generation.
+See [the Gexam integration contract](docs/gexam-integration.md) for local configuration,
+API behavior and status polling.
+
 Two stacks, and which one you want depends on whether you need real model output.
 
 `yarn debug:up` starts PostgreSQL, the backend, frontend, and deterministic

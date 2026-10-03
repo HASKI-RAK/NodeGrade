@@ -170,6 +170,38 @@ describe('ProviderRuntimeService', () => {
     });
   });
 
+  it('selects exactly the first live Gexam model and rejects an empty catalog', async () => {
+    runtimeByKey.mockResolvedValue(provider('gexam-vllm'));
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: [{ id: 'first' }, { id: 'second' }] }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    await expect(
+      service.firstModelForIntegration('gexam-vllm'),
+    ).resolves.toEqual({
+      providerKey: 'gexam-vllm',
+      modelId: 'first',
+    });
+    await expect(
+      service.firstModelForIntegration('gexam-vllm'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'GEXAM_MODEL_UNAVAILABLE' }),
+    });
+  });
+
   it('rejects a policy-excluded model without contacting the provider', async () => {
     runtimeByKey.mockResolvedValue(
       provider('curated', {
@@ -417,6 +449,50 @@ describe('ProviderRuntimeService', () => {
         },
       ],
     });
+  });
+
+  it('disables hidden thinking only for opted-in compatible graph calls', async () => {
+    const gexam = provider('gexam-vllm', { apiKey: 'test-key' });
+    runtimeByKey.mockResolvedValue(gexam);
+    enabledRuntimeProviders.mockResolvedValue([gexam]);
+    global.fetch = jest.fn(async (input, init) => {
+      if (input.toString().endsWith('/models'))
+        return new Response(JSON.stringify({ data: [{ id: 'first' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      const body: unknown = JSON.parse(String(init?.body));
+      expect(body).toEqual(
+        expect.objectContaining({
+          chat_template_kwargs: { enable_thinking: false },
+        }),
+      );
+      return new Response(
+        JSON.stringify({
+          id: 'completion-gexam',
+          object: 'chat.completion',
+          created: 1,
+          model: 'first',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'structured response' },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    await expect(
+      service.complete({
+        modelRef: { providerKey: 'gexam-vllm', modelId: 'first' },
+        messages: [{ role: 'user', content: 'Assess' }],
+        parameters: {},
+        disableThinking: true,
+      }),
+    ).resolves.toMatchObject({ text: 'structured response' });
   });
 
   it('exposes the stored default in the catalog only when it is runnable', async () => {

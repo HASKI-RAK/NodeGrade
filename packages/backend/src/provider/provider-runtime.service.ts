@@ -3,6 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createOpenAI } from '@ai-sdk/openai';
 import {
@@ -139,6 +140,33 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The Gexam integration uses the provider's current first /models entry, not a
+   * model id compiled into a workflow. The provider's policy still applies.
+   */
+  async firstModelForIntegration(providerKey: string): Promise<ModelRef> {
+    const provider = await this.providers.runtimeByKey(providerKey);
+    if (!provider.enabled)
+      throw new ServiceUnavailableException({
+        code: 'GEXAM_PROVIDER_DISABLED',
+        message: 'The Gexam model provider is disabled.',
+      });
+    const probe = await this.probe(provider);
+    const first = probe.models[0];
+    if (!first)
+      throw new ServiceUnavailableException({
+        code: 'GEXAM_MODEL_UNAVAILABLE',
+        message: `The Gexam provider /models endpoint returned no usable model (${probe.status}).`,
+      });
+    if (!permitsModel(provider.policy, first.ref.modelId))
+      throw new ServiceUnavailableException({
+        code: 'GEXAM_MODEL_NOT_PERMITTED',
+        message:
+          'The first Gexam provider model is blocked by its model policy.',
+      });
+    return first.ref;
   }
 
   /**
@@ -324,19 +352,36 @@ export class ProviderRuntimeService implements ModelCompletionRuntime {
         ? request.parameters[parameter]
         : undefined;
 
-    const credentialFreeFetch = async (
+    const providerFetch = async (
       input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> => {
       const headers = new Headers(init?.headers);
-      headers.delete('authorization');
-      return fetch(input, { ...init, headers });
+      if (!provider.apiKey) headers.delete('authorization');
+      let body = init?.body;
+      if (request.disableThinking && provider.type === 'OPENAI_COMPATIBLE') {
+        if (typeof body !== 'string')
+          throw new Error('The Gexam model request body is unavailable.');
+        const decoded: unknown = JSON.parse(body);
+        if (
+          typeof decoded !== 'object' ||
+          decoded === null ||
+          Array.isArray(decoded)
+        )
+          throw new Error('The Gexam model request body is invalid.');
+        body = JSON.stringify({
+          ...decoded,
+          chat_template_kwargs: { enable_thinking: false },
+        });
+      }
+      return fetch(input, { ...init, headers, body });
     };
     const openai = createOpenAI({
       name: `nodegrade-${provider.key}`,
       baseURL: providerApiBaseUrl(provider),
       apiKey: provider.apiKey ?? 'credential-free',
-      fetch: provider.apiKey ? undefined : credentialFreeFetch,
+      fetch:
+        request.disableThinking || !provider.apiKey ? providerFetch : undefined,
     });
     const messages: ModelMessage[] = request.messages.map((message) => ({
       role:

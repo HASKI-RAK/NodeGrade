@@ -218,6 +218,25 @@ tab in the preview rail (reads).
 
 Tests: `packages/backend/src/run/*.spec.ts`, `packages/backend/test/run-records.int-spec.ts`
 
+## Gexam service integration
+
+Location: `packages/backend/src/gexam/`, `packages/backend/prisma/schema.prisma`
+
+Responsibilities:
+
+- authenticated server-to-server evaluation requests and idempotent status reads
+- versioned ephemeral rubric graph executed through the shared LiteGraph and provider runtime
+- validated criterion points, answer evidence, feedback, review flags and durable evaluation records
+- pending-job recovery on process restart for the single-instance local prototype
+
+Primary entry points: `gexam-evaluation.controller.ts` (`/api/internal/evaluations`),
+`gexam-evaluation.service.ts`, `gexam-evaluation.graph.ts`. Operational contract and
+minimal local stack: `docs/gexam-integration.md`, `docker-compose.gexam.yml`.
+
+Depends on: Prisma, provider runtime, GraphBuilder, `core/Graph.ts`, `@haski/ta-lib`.
+
+Tests: `packages/backend/src/gexam/*.spec.ts`
+
 ## Shared graph library (`@haski/ta-lib`)
 
 Location: `packages/lib/src/`

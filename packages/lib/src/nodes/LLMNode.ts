@@ -26,12 +26,7 @@ const MESSAGE_PORT: readonly InOut[] = ['message', 'string', '[message]']
  * all — stay connectable, because LiteGraph treats a wildcard output as
  * compatible with every input.
  */
-const MESSAGES_PORT: readonly InOut[] = [
-  'message',
-  '[message]',
-  '[string]',
-  'string'
-]
+const MESSAGES_PORT: readonly InOut[] = ['message', '[message]', '[string]', 'string']
 
 const MESSAGE_INPUT_LABEL = 'message | string'
 const MESSAGES_INPUT_LABEL = 'messages | strings'
@@ -208,7 +203,8 @@ export class LLMNode extends LGraphNode {
       modelRef,
       messages,
       parameters: this.parameters(),
-      signal: this.executionSignal
+      signal: this.executionSignal,
+      disableThinking: this.properties.disable_thinking === true
     })
     this.executionWarnings = result.warnings
     this.properties.value = result.text
