@@ -629,7 +629,7 @@ repository setting rather than a file; see `.github/rulesets/`.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
-If you use this work, pleace cite the corresponding paper:
+If you use this work, please cite the corresponding paper:
 ```bib
 @inproceedings{10.1145/3723010.3723021,
 author = {Fischer, David Vincent and Haug, Jim and Schoppel, Paul and Abke, J\"{o}rg and Becker, Matthias and Hagel, Georg},
